@@ -72,9 +72,10 @@
         <p class="owner-deck-sub">Direct hardware and model control, group management, live broadcast telemetry, and moderation workflows.</p>
       </div>
 
-      <!-- Owner Navigation Tabs (6 Tabs) -->
+      <!-- Owner Navigation Tabs (7 Tabs with 50+ Command Center) -->
       <div class="owner-nav-tabs">
-        <button class="owner-nav-btn active" data-owner-tab="tab-owner-services">🛠️ Service Controls</button>
+        <button class="owner-nav-btn active" data-owner-tab="tab-owner-command-center">⚡ 50+ Command Hub</button>
+        <button class="owner-nav-btn" data-owner-tab="tab-owner-services">🛠️ Service Controls</button>
         <button class="owner-nav-btn" data-owner-tab="tab-owner-models">⚡ Models &amp; Routing</button>
         <button class="owner-nav-btn" data-owner-tab="tab-owner-broadcast">📢 Groups &amp; Broadcast</button>
         <button class="owner-nav-btn" data-owner-tab="tab-owner-moderation">🛡️ Moderation Queue</button>
@@ -82,8 +83,71 @@
         <button class="owner-nav-btn" data-owner-tab="tab-owner-devops">💻 Verification &amp; Tests</button>
       </div>
 
+      <!-- TAB 0: 50+ COMMAND & TOOL CENTER (PRIMARY) -->
+      <section id="tab-owner-command-center" class="owner-tab-pane active">
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="command-hub-header">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <h2 class="card-title" style="margin: 0;">⚡ 50+ PLATFORM TOOLS &amp; COMMAND HUB</h2>
+                <p class="card-desc" style="margin: 4px 0 0 0;">One-click interactive buttons for every single bot command, intelligence tool, Minecraft trigger, and system action.</p>
+              </div>
+              <span id="cmdCountBadge" class="status-pill status-red" style="font-weight: 800;">57 TOOLS ONLINE</span>
+            </div>
+
+            <!-- Search Bar -->
+            <div style="position: relative; width: 100%;">
+              <input type="text" id="cmdSearchInput" placeholder="🔍 Search any command or tool (e.g. ping, backup, search, mc, antiraid)..." class="text-input" style="padding-left: 14px;" />
+            </div>
+
+            <!-- Filter Categories -->
+            <div class="cmd-filter-bar">
+              <button class="cmd-filter-pill active" data-cmd-filter="all">All (57)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="services">🛠️ Services (8)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="models">⚡ Models (6)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="intelligence">🔍 Intelligence (12)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="moderation">🛡️ Moderation (8)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="minecraft">⛏️ Minecraft (8)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="storage">☁️ Storage &amp; Backup (4)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="memories">🧠 Memories (5)</button>
+              <button class="cmd-filter-pill" data-cmd-filter="devops">💻 DevOps (6)</button>
+            </div>
+          </div>
+
+          <!-- Dynamic 50+ Commands Grid -->
+          <div class="commands-grid-hub" id="commandsGridHub">
+            <!-- Populated dynamically via JS -->
+          </div>
+
+          <!-- Interactive Parameter Drawer / Modal for input-requiring commands -->
+          <div id="cmdParamModal" style="display: none; background: #fff8f8; border: 1px solid rgba(255,59,48,0.3); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span id="cmdModalTitle" style="font-weight: 800; font-size: 13px; color: #0a0d14;">Execute Parameterized Tool</span>
+              <button id="cmdModalCloseBtn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #8894a6;">✕</button>
+            </div>
+            <p id="cmdModalDesc" style="font-size: 12px; color: #4b5565; margin: 0 0 8px 0;"></p>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="cmdModalInput" placeholder="Enter parameters..." class="text-input" style="flex: 1;" />
+              <button id="cmdModalRunBtn" class="btn-primary-red" style="padding: 0 18px; white-space: nowrap;">⚡ Run Command</button>
+            </div>
+          </div>
+
+          <!-- Live Execution Terminal Console -->
+          <div class="terminal-card">
+            <div class="terminal-header">
+              <span style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                <span class="status-dot" style="background-color: #00ff88;"></span>
+                LIVE EXECUTION LOGS &amp; TELEMETRY CONSOLE
+              </span>
+              <button id="clearTerminalBtn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 3px 10px; border-radius: 9999px; font-size: 10px; cursor: pointer;">Clear Console</button>
+            </div>
+            <div id="ownerTerminalOutput" class="terminal-body">&gt; [Nero Labs System] 50+ Command Hub online. Tap any command button above to execute in real-time.</div>
+          </div>
+        </div>
+      </section>
+
       <!-- TAB 1: SERVICE CONTROLS & MAINTENANCE -->
-      <section id="tab-owner-services" class="owner-tab-pane active">
+      <section id="tab-owner-services" class="owner-tab-pane" style="display: none;">
         <div class="owner-switches-grid">
           <!-- Maintenance & Edit Mode -->
           <div class="owner-switch-card" style="border: 1px solid rgba(255, 59, 48, 0.35); background: #fff8f8;">

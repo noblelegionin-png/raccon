@@ -156,6 +156,17 @@ function setupNavigation() {
       }
     });
   });
+
+  // Tapping role badge in chat header navigates directly to 20 Roles tab
+  const chatRoleBadge = document.getElementById('chatActiveRoleBadge');
+  if (chatRoleBadge) {
+    chatRoleBadge.style.cursor = 'pointer';
+    chatRoleBadge.title = 'Click to change relationship persona';
+    chatRoleBadge.addEventListener('click', () => {
+      const rolesBtn = document.querySelector('[data-tab="tab-roles"]');
+      rolesBtn?.click();
+    });
+  }
 }
 
 // Verify User Authentication & Reveal Owner Portal Link if Authorized
@@ -768,6 +779,7 @@ async function initUserApp() {
 
   await checkAuthAndMaintenance();
   await loadUserProfile();
+  await loadRoles();
 }
 
 window.addEventListener('DOMContentLoaded', initUserApp);

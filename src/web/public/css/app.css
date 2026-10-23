@@ -981,6 +981,113 @@ body {
 }
 
 /* =====================================================================
+   20 RELATIONSHIP ROLES GRID & V2 CARDS
+   ===================================================================== */
+.roles-grid-v2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .roles-grid-v2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.role-v2-card {
+  background-color: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  cursor: pointer;
+  box-shadow: var(--shadow-subtle);
+  transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: none;
+  position: relative;
+}
+
+.role-v2-card:hover {
+  background-color: var(--bg-card-hover);
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+
+.role-v2-card:active {
+  transform: scale(0.98);
+}
+
+.role-v2-card.active {
+  border: 1.5px solid var(--accent-red);
+  background-color: #fff9f9;
+  box-shadow: 0 8px 24px -4px rgba(255, 59, 48, 0.18);
+}
+
+.role-v2-card.active::after {
+  content: "ACTIVE";
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ff3b30;
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.25);
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.role-v2-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.role-v2-emoji {
+  font-size: 24px;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.role-v2-card.active .role-v2-emoji {
+  background-color: rgba(255, 59, 48, 0.08);
+  border-color: rgba(255, 59, 48, 0.3);
+}
+
+.role-v2-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.role-v2-alias {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.role-v2-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+/* =====================================================================
    11. TAB 4 & 5: DURABLE MEMORY & FILE SANDBOX
    ===================================================================== */
 .memory-item, .file-item {
@@ -1325,4 +1432,181 @@ body {
   color: var(--accent-red);
   font-size: 12px;
   font-weight: 600;
+}
+
+/* =========================================================================
+   50+ COMMAND & TOOL HUB STYLES (NERO LABS DESIGN SYSTEM)
+   ========================================================================= */
+.command-hub-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.cmd-filter-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+.cmd-filter-pill {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border-card);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+.cmd-filter-pill.active, .cmd-filter-pill:hover {
+  background: var(--accent-black);
+  color: #FFFFFF;
+  border-color: var(--accent-black);
+}
+.commands-grid-hub {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.cmd-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: var(--shadow-subtle);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+.cmd-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+  border-color: rgba(10, 13, 20, 0.15);
+}
+.cmd-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.cmd-card-icon {
+  font-size: 20px;
+}
+.cmd-card-cat {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-subtle);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cmd-card-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 4px;
+}
+.cmd-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  flex: 1;
+}
+.cmd-card-footer {
+  margin-top: 8px;
+}
+.cmd-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cmd-icon {
+  font-size: 18px;
+}
+.cmd-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.cmd-cat-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-subtle);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cmd-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.cmd-action-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #0a0d14;
+  color: #FFFFFF;
+  border: none;
+  transition: background var(--transition-fast);
+}
+.cmd-action-btn:hover {
+  background: #1c2230;
+}
+.cmd-action-btn.btn-red {
+  background: var(--accent-red);
+}
+.cmd-action-btn.btn-red:hover {
+  background: var(--accent-red-hover);
+}
+.cmd-inline-input {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.terminal-card {
+  background: #0a0d14;
+  color: #00ff88;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  margin-top: 24px;
+}
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  color: #FFFFFF;
+}
+.terminal-body {
+  max-height: 240px;
+  overflow-y: auto;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

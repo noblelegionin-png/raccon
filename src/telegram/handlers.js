@@ -2946,7 +2946,7 @@ export function registerBotHandlers(bot) {
         const chatRouting = getAgentRouting('chat');
         const modelToUse = activeModel || chatRouting.model;
 
-        const aiResponse = await scaleMaxAdapter.chatCompletion({
+        const aiResponse = await scaleMaxAdapter.createChatCompletion({
           model: modelToUse,
           messages: [
             {
@@ -2955,10 +2955,11 @@ export function registerBotHandlers(bot) {
             },
             { role: 'user', content: text || 'Hello' },
           ],
+          chatId: String(targetChatId),
           reasoningEffort: 'low',
         });
 
-        const replyContent = aiResponse.content || 'Nero Labs system active. Direct owner connection established. ✨';
+        const replyContent = aiResponse.text || 'Nero Labs system active. Direct owner connection established. ✨';
 
         await ctx.api.sendMessage(targetChatId, replyContent, {
           business_connection_id: connectionId,

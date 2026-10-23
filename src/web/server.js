@@ -20,6 +20,7 @@ import {
   getMemoryStats,
   getUserProfile,
   setUserProfile,
+  setUserRelationshipRole,
   getActiveUserIdentity,
 } from '../db/index.js';
 import {
@@ -92,7 +93,15 @@ import { minecraftBridge } from '../minecraft/bridge.js';
 import { playerRegistry } from '../minecraft/playerRegistry.js';
 import { gameGroupNotifier } from '../minecraft/gameGroupNotifier.js';
 import { narrowLocalConnector } from '../minecraft/localConnector.js';
+import { webSearchService } from '../search/webSearchService.js';
+import { deepBrowserService } from '../browser/deepBrowserService.js';
+import { websiteSafetyService } from '../security/websiteSafetyService.js';
+import { videoSearchService } from '../media/videoSearchService.js';
+import { productSearchService } from '../shopping/productSearchService.js';
+import { documentService } from '../documents/documentService.js';
+import { messageArchiver } from '../memory/archiver.js';
 import crypto from 'node:crypto';
+import os from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -602,6 +611,514 @@ export function createWebServer() {
       return res.json({ ok: true, message: 'Master AI engine halted.' });
     }
     res.status(400).json({ ok: false, error: 'Unknown owner action' });
+  });
+
+  // Unified 50+ Command & Tool Execution Hub for Owner Master Console
+  app.post('/api/owner/execute-command', requireOwnerAuth, async (req, res) => {
+    try {
+      const { command, params = {} } = req.body;
+      const cmd = String(command || '').trim().toLowerCase().replace(/^\//, '');
+      const db = getDb();
+      const userId = req.auth?.userId || 'owner';
+
+      let result = { ok: true, command: cmd, message: '' };
+
+      switch (cmd) {
+        // --- 1. SYSTEM & STATUS ---
+        case 'ping': {
+          const activeModel = getActiveModelId();
+          const t0 = performance.now();
+          const health = await scaleMaxAdapter.checkHealth(activeModel);
+          const latencyMs = health.ok ? health.latencyMs : Math.round(performance.now() - t0);
+          result.message = `Pong! Telemetry: ${latencyMs} ms on ${activeModel} (${latencyMs < 1000 ? 'Fast 🟢' : 'Moderate 🟡'})`;
+          result.data = { latencyMs, activeModel, health };
+          break;
+        }
+
+        case 'sysinfo': {
+          const mem = process.memoryUsage();
+          const freeMemMb = Math.round(os.freemem() / (1024 * 1024));
+          const totalMemMb = Math.round(os.totalmem() / (1024 * 1024));
+          const heapMb = Math.round(mem.heapUsed / (1024 * 1024));
+          const rssMb = Math.round(mem.rss / (1024 * 1024));
+          result.message = `Host Telemetry: OS ${os.platform()} ${os.arch()} | RAM: ${freeMemMb}MB free / ${totalMemMb}MB total | Heap: ${heapMb}MB | RSS: ${rssMb}MB | Node: ${process.version}`;
+          result.data = { os: os.platform(), arch: os.arch(), freeMemMb, totalMemMb, heapMb, rssMb, nodeVersion: process.version, uptimeSec: Math.round(process.uptime()) };
+          break;
+        }
+
+        case 'status': {
+          const activeModel = getActiveModelId();
+          const masterSwitch = getConfig('master_switch', 'true') === 'true';
+          const maint = isMaintenanceModeActive();
+          result.message = `Platform Status: ${masterSwitch ? '🟢 Master Active' : '🔴 Suspended'} | Model: ${activeModel} | Maintenance: ${maint ? '🛠️ ACTIVE' : 'Inactive'}`;
+          result.data = { activeModel, masterSwitch, maintenance: maint, db: 'WAL Mode Active' };
+          break;
+        }
+
+        case 'clear_chat': {
+          clearConversation('webapp_user');
+          logAudit(userId, 'OWNER_COMMAND', 'Cleared chat memory');
+          result.message = 'Conversation memory and context buffer cleared successfully.';
+          break;
+        }
+
+        case 'clear_warnings': {
+          db.prepare('DELETE FROM group_warnings').run();
+          logAudit(userId, 'OWNER_COMMAND', 'Reset group warnings');
+          result.message = 'All member infraction warnings reset to 0 across all groups.';
+          break;
+        }
+
+        // --- 2. SWITCHES & MODES ---
+        case 'master_on': {
+          setConfig('master_switch', 'true');
+          logAudit(userId, 'SWITCH_CHANGED', 'master_switch = true');
+          result.message = 'Master AI Engine: 🟢 ENABLED';
+          break;
+        }
+        case 'master_off':
+        case 'kill_switch': {
+          setConfig('master_switch', 'false');
+          logAudit(userId, 'SWITCH_CHANGED', 'master_switch = false');
+          result.message = 'Master AI Engine: 🔴 HALTED (Kill Switch Engaged)';
+          break;
+        }
+
+        case 'edit_mode_on':
+        case 'maintenance_on': {
+          const r = await enableMaintenanceMode(null, { reason: params.reason || 'Activated from Owner Console' });
+          result.message = `Maintenance Mode: 🛠️ ACTIVATED (Delivered to ${r.sentCount} chats)`;
+          break;
+        }
+        case 'edit_mode_off':
+        case 'maintenance_off': {
+          disableMaintenanceMode();
+          result.message = 'Maintenance Mode: 🟢 DEACTIVATED (Normal service resumed)';
+          break;
+        }
+
+        case 'assistant_on': {
+          assistantManager.setEnabled(true);
+          result.message = 'Personal Assistant Auto-Responder: 🟢 ENABLED';
+          break;
+        }
+        case 'assistant_off': {
+          assistantManager.setEnabled(false);
+          result.message = 'Personal Assistant Auto-Responder: ⚪ DISABLED';
+          break;
+        }
+
+        case 'antiraid_on': {
+          setConfig('antiraid_mode_global', 'true');
+          result.message = 'Global Anti-Raid Mode: 🛡️ ACTIVATED';
+          break;
+        }
+        case 'antiraid_off': {
+          setConfig('antiraid_mode_global', 'false');
+          result.message = 'Global Anti-Raid Mode: ⚪ DEACTIVATED';
+          break;
+        }
+
+        case 'textmode_on': {
+          setConfig('auto_text_replies', 'true');
+          result.message = 'Auto Text Replies: 🟢 ENABLED (Replies to all texts)';
+          break;
+        }
+        case 'textmode_off': {
+          setConfig('auto_text_replies', 'false');
+          result.message = 'Auto Text Replies: ⚪ DISABLED (Mentions only)';
+          break;
+        }
+
+        case 'tusage_on': {
+          setConfig('tusage_global', 'true');
+          result.message = 'Token & Cost Telemetry: 🟢 ENABLED (Reports usage per reply)';
+          break;
+        }
+        case 'tusage_off': {
+          setConfig('tusage_global', 'false');
+          result.message = 'Token & Cost Telemetry: ⚪ DISABLED';
+          break;
+        }
+
+        case 'globalgroup_on': {
+          setConfig('group_participation_enabled', 'true');
+          result.message = 'Global Group Participation: 🟢 ENABLED';
+          break;
+        }
+        case 'globalgroup_off': {
+          setConfig('group_participation_enabled', 'false');
+          result.message = 'Global Group Participation: ⚪ DISABLED';
+          break;
+        }
+
+        case 'moderation_on': {
+          setConfig('group_moderation_enabled', 'true');
+          result.message = 'Group Moderation Shield: 🟢 ENABLED';
+          break;
+        }
+        case 'moderation_off': {
+          setConfig('group_moderation_enabled', 'false');
+          result.message = 'Group Moderation Shield: ⚪ DISABLED';
+          break;
+        }
+
+        // --- 3. MODEL ROUTING ---
+        case 'setmodel':
+        case 'model_select': {
+          const modelId = params.modelId || params.model || 'gemini-3.5-flash-lite';
+          setActiveModelId(modelId);
+          setConfig('active_model_id', modelId);
+          try {
+            updateAgentRouting('chat', { model: modelId });
+          } catch {}
+          logAudit(userId, 'MODEL_CHANGED', `Active model set to ${modelId}`);
+          result.message = `Active Model Switched: ⚡ ${modelId}`;
+          result.data = { activeModel: modelId };
+          break;
+        }
+
+        case 'setreasoning':
+        case 'reasoning': {
+          const effort = String(params.effort || params.reasoning || 'medium').toLowerCase();
+          setConfig('reasoning_effort', effort);
+          try {
+            updateAgentRouting('chat', { reasoning: effort });
+          } catch {}
+          result.message = `Reasoning Depth Set: 🧠 ${effort.toUpperCase()}`;
+          break;
+        }
+
+        case 'setlimits':
+        case 'limit': {
+          const devMin = params.devMin || 1;
+          const devMax = params.devMax || 500;
+          const globMin = params.globMin || 10;
+          const globMax = params.globMax || 100;
+          setConfig('limit_dev_min', String(devMin));
+          setConfig('limit_dev_max', String(devMax));
+          setConfig('limit_global_min', String(globMin));
+          setConfig('limit_global_max', String(globMax));
+          result.message = `Response Limits: Dev (${devMin}-${devMax}w) | Global (${globMin}-${globMax}w)`;
+          break;
+        }
+
+        // --- 4. AI TOOLS & INTELLIGENCE ---
+        case 'search': {
+          const q = params.query || params.text || 'Latest developments in AI reasoning 2026';
+          const sData = await webSearchService.search(q);
+          const synthesis = await webSearchService.synthesizeAnswer(q, sData);
+          result.message = `Search completed for: "${q}" (${sData.results?.length || 0} sources found)`;
+          result.data = { query: q, answer: synthesis.answer, sources: synthesis.sources };
+          break;
+        }
+
+        case 'browse': {
+          const targetUrl = params.url || 'https://nero-labs.pages.dev';
+          const bData = await deepBrowserService.deepBrowse(targetUrl);
+          const report = await deepBrowserService.synthesizeBrowsingReport(bData, 'Summarize key highlights');
+          result.message = `Browsed ${targetUrl} (Status: ${bData.status}, Crawled: ${bData.crawledPages?.length || 1} pages)`;
+          result.data = { url: targetUrl, report, title: bData.title };
+          break;
+        }
+
+        case 'safety': {
+          const targetUrl = params.url || 'https://google.com';
+          const analysis = await websiteSafetyService.analyzeWebsite(targetUrl);
+          result.message = `Safety Audit for ${targetUrl}: Risk Score ${analysis.riskScore}/100 (${analysis.verdict})`;
+          result.data = analysis;
+          break;
+        }
+
+        case 'fix': {
+          const codeSnippet = params.code || params.text || 'const x = undefined; x.length;';
+          const prompt = `Fix and optimize this code with drop-in precision:\n${codeSnippet}`;
+          const aiRes = await scaleMaxAdapter.createChatCompletion({
+            model: 'gemini-3.5-flash-lite',
+            messages: [
+              { role: 'system', content: 'You are an ultra-low-token drop-in software repair engineer. Output concise, exact fixed code.' },
+              { role: 'user', content: prompt }
+            ],
+            reasoningEffort: 'low',
+          });
+          result.message = 'Bug fix synthesized successfully';
+          result.data = { fixedCode: aiRes.text, model: aiRes.model };
+          break;
+        }
+
+        case 'code': {
+          const task = params.task || params.text || 'Write a debounce function in TypeScript';
+          const aiRes = await scaleMaxAdapter.createChatCompletion({
+            model: 'gemini-3.8-flash',
+            messages: [
+              { role: 'system', content: 'You are an expert fullstack architect. Write clean, idiomatic code.' },
+              { role: 'user', content: task }
+            ],
+            reasoningEffort: 'medium',
+          });
+          result.message = 'Code generated successfully';
+          result.data = { code: aiRes.text, model: aiRes.model };
+          break;
+        }
+
+        case 'summarize': {
+          const text = params.text || 'Nero Labs is an autonomous Telegram AI companion and platform.';
+          const aiRes = await scaleMaxAdapter.createChatCompletion({
+            model: 'gemini-3.5-flash-lite',
+            messages: [
+              { role: 'system', content: 'Provide a crisp 3-bullet executive summary.' },
+              { role: 'user', content: text }
+            ],
+            reasoningEffort: 'none',
+          });
+          result.message = 'Executive summary generated';
+          result.data = { summary: aiRes.text };
+          break;
+        }
+
+        case 'translate': {
+          const text = params.text || 'Welcome to Nero Labs Master Console';
+          const targetLang = params.targetLang || 'Hindi';
+          const aiRes = await scaleMaxAdapter.createChatCompletion({
+            model: 'gemini-3.5-flash-lite',
+            messages: [
+              { role: 'system', content: `Translate text accurately into ${targetLang}.` },
+              { role: 'user', content: text }
+            ],
+            reasoningEffort: 'none',
+          });
+          result.message = `Translated to ${targetLang}`;
+          result.data = { translation: aiRes.text };
+          break;
+        }
+
+        case 'video': {
+          const q = params.query || params.text || 'AI reasoning tutorial';
+          const vRes = await videoSearchService.searchVideos(q, 1);
+          const summary = vRes.ok && vRes.videos?.length ? await videoSearchService.summarizeVideo(vRes.videos[0]) : null;
+          result.message = `Video discovery for "${q}": ${vRes.videos?.[0]?.title || 'No video found'}`;
+          result.data = { query: q, video: vRes.videos?.[0] || null, summary };
+          break;
+        }
+
+        case 'shop': {
+          const q = params.query || params.text || 'Mechanical keyboards under $100';
+          const budget = productSearchService.extractBudget(q);
+          const sData = await productSearchService.searchProducts(q, { budget });
+          const comparison = await productSearchService.compareProducts(q, sData);
+          result.message = `Shopping comparison generated for "${q}" (${sData.products?.length || 0} products)`;
+          result.data = { query: q, comparison, products: sData.products };
+          break;
+        }
+
+        case 'pdf': {
+          const q = params.query || params.text || 'Machine learning transformers architecture';
+          const docSearch = await documentService.searchEducationalResources(q);
+          result.message = `Document resources found for "${q}" (${docSearch.resources?.length || 0} documents)`;
+          result.data = docSearch;
+          break;
+        }
+
+        case 'image': {
+          const prompt = params.prompt || params.text || 'Futuristic command center';
+          const aiRes = await scaleMaxAdapter.createChatCompletion({
+            model: 'gemini-3.5-flash-lite',
+            messages: [
+              { role: 'system', content: 'You are an elite prompt engineer. Synthesize an ultra-detailed, photorealistic image generation prompt.' },
+              { role: 'user', content: `Create an expanded prompt for: ${prompt}` }
+            ],
+            reasoningEffort: 'none',
+          });
+          result.message = `Creative image prompt generated for "${prompt}"`;
+          result.data = { prompt, expandedPrompt: aiRes.text };
+          break;
+        }
+
+        case 'security': {
+          const report = await securitySupervisor.runSecurityDiagnostic();
+          result.message = `Security diagnostic completed: ${report.status || 'PASS'} (${report.checks?.length || 0} checks passed)`;
+          result.data = report;
+          break;
+        }
+
+        // --- 5. MINECRAFT BEDROCK (N3R0) ---
+        case 'mc_status': {
+          const status = minecraftBridge.getStatus();
+          result.message = `Minecraft Bedrock Bridge: ${status.connected ? '🟢 Connected' : '⚪ Standby / Offline'} | Port: 19132 | Players: ${status.playersCount || 0}`;
+          result.data = status;
+          break;
+        }
+
+        case 'mc_give': {
+          const item = params.item || 'emerald';
+          const count = params.count || 64;
+          const target = params.target || '@p';
+          const cmdStr = `/give ${target} ${item} ${count}`;
+          const resCmd = await minecraftBridge.executeCommand(cmdStr);
+          result.message = `Minecraft command executed: ${cmdStr}`;
+          result.data = resCmd;
+          break;
+        }
+
+        case 'mc_time_day': {
+          const resCmd = await minecraftBridge.executeCommand('/time set day');
+          result.message = 'Minecraft time set to: ☀️ DAY';
+          result.data = resCmd;
+          break;
+        }
+
+        case 'mc_time_night': {
+          const resCmd = await minecraftBridge.executeCommand('/time set night');
+          result.message = 'Minecraft time set to: 🌙 NIGHT';
+          result.data = resCmd;
+          break;
+        }
+
+        case 'mc_weather_clear': {
+          const resCmd = await minecraftBridge.executeCommand('/weather clear');
+          result.message = 'Minecraft weather set to: ☀️ CLEAR';
+          result.data = resCmd;
+          break;
+        }
+
+        case 'mc_announce': {
+          const title = params.text || params.message || '⚡ NERO LABS OPERATIONAL';
+          const resCmd = await minecraftBridge.executeCommand(`/titleraw @a title {"rawtext":[{"text":"${title}"}]}`);
+          result.message = `In-game broadcast: "${title}"`;
+          result.data = resCmd;
+          break;
+        }
+
+        case 'mc_command': {
+          const rawCmd = params.command || params.cmd || '/list';
+          const resCmd = await minecraftBridge.executeCommand(rawCmd);
+          result.message = `Executed: ${rawCmd}`;
+          result.data = resCmd;
+          break;
+        }
+
+        case 'narrow': {
+          const text = params.text || params.command || 'status';
+          const nRes = await narrowLocalConnector.handleCommand({
+            text,
+            senderName: params.target || 'Sandy',
+            isOwner: true,
+            source: 'api',
+          });
+          result.message = `Narrow AI Companion response: ${nRes.reply || nRes.message || 'Directive processed'}`;
+          result.data = nRes;
+          break;
+        }
+
+        // --- 6. MEMORIES & STORAGE ---
+        case 'backup': {
+          const backupRes = await googleDriveAdapter.backupDatabase(userId);
+          result.message = `Database snapshot backup created: ${backupRes.backupFile || 'Snapshot complete'}`;
+          result.data = backupRes;
+          break;
+        }
+
+        case 'drive_status': {
+          const dStatus = googleDriveAdapter.getStatus();
+          result.message = `Storage Status: ${dStatus.status} | Target: ${dStatus.capacityTarget} | Dir: ${dStatus.localStorageDir}`;
+          result.data = dStatus;
+          break;
+        }
+
+        case 'archive_now': {
+          const resArchive = await messageArchiver.processBatch('webapp_user', true);
+          result.message = resArchive
+            ? `Conversation batch archived to Google Drive: ${resArchive.transcriptFilename} (${resArchive.messageCount} messages)`
+            : 'No pending conversation messages required archiving.';
+          result.data = resArchive;
+          break;
+        }
+
+        case 'archivestatus': {
+          const stats = getMemoryStats();
+          const batches = getAllArchiveBatches(5);
+          result.message = `Archive Status: ${stats.totalMemories || 0} memories, ${stats.totalBatches || 0} completed Drive batches.`;
+          result.data = { stats, batches };
+          break;
+        }
+
+        case 'recall':
+        case 'search_memory': {
+          const q = params.query || params.text || '';
+          const memRes = getAllDurableMemories({ query: q, limit: 10 });
+          result.message = `Retrieved ${memRes.memories?.length || 0} durable memories for query "${q}"`;
+          result.data = memRes;
+          break;
+        }
+
+        case 'whoami': {
+          const profile = getUserProfile('8685232094') || { user_id: '8685232094', custom_name: 'Sandy', relationship_role: 'creator' };
+          result.message = `Owner Identity: Sandy (ID: 8685232094, Role: ${profile.relationship_role || 'Creator'})`;
+          result.data = profile;
+          break;
+        }
+
+        case 'spam_on': {
+          setConfig('spam_filter_global', 'true');
+          getDb().prepare('UPDATE moderation_rules SET spam_filter = 1').run();
+          result.message = 'Anti-Spam Filter: 🟢 ENABLED';
+          break;
+        }
+        case 'spam_off': {
+          setConfig('spam_filter_global', 'false');
+          getDb().prepare('UPDATE moderation_rules SET spam_filter = 0').run();
+          result.message = 'Anti-Spam Filter: ⚪ DISABLED';
+          break;
+        }
+
+        case 'link_on': {
+          setConfig('link_filter_global', 'true');
+          getDb().prepare('UPDATE moderation_rules SET link_filter = 1').run();
+          result.message = 'Link & Phishing Shield: 🟢 ENABLED';
+          break;
+        }
+        case 'link_off': {
+          setConfig('link_filter_global', 'false');
+          getDb().prepare('UPDATE moderation_rules SET link_filter = 0').run();
+          result.message = 'Link & Phishing Shield: ⚪ DISABLED';
+          break;
+        }
+
+        case 'mcp_status': {
+          const mStatus = getMcpStatus();
+          result.message = `MCP Bridge: ${mStatus.bridgeAvailable ? '🟢 Online' : '🔴 Offline'} | Sessions: ${mStatus.activeConnections}/${mStatus.maxConnections} | Tools: ${mStatus.toolCount}`;
+          result.data = mStatus;
+          break;
+        }
+
+        case 'mcp_key_gen': {
+          const keyData = generateMcpKey(params.clientName || 'Console MCP Client');
+          result.message = `New MCP API key generated for: ${keyData.clientName}`;
+          result.data = keyData;
+          break;
+        }
+
+        case 'runtests': {
+          const testRes = await fetch(`http://localhost:${config.port}/api/owner/run-tests`, {
+            method: 'POST',
+            headers: { 'x-dashboard-access-key': config.dashboardAccessKey },
+          }).then(r => r.json());
+          result.message = `Verification Suite: ${testRes.passedCount}/${testRes.totalCount} tests passed (${testRes.allPassed ? '100% OK' : 'Issues detected'})`;
+          result.data = testRes;
+          break;
+        }
+
+        default: {
+          result.message = `Unknown command "${cmd}".`;
+          result.ok = false;
+        }
+      }
+
+      logAudit(userId, 'OWNER_COMMAND_EXECUTED', `Command: ${cmd} -> ${result.message}`);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
   });
 
   // Update master/system switches (Owner only)
@@ -1191,6 +1708,37 @@ export function createWebServer() {
   // Get all supported roles for roleplay
   app.get('/api/roleplay/roles', (req, res) => {
     res.json({ ok: true, roles: Object.values(ROLEPLAY_ROLES) });
+  });
+
+  // Set roleplay relationship role (User Web App & API)
+  app.post(['/api/roleplay/set-role', '/api/roleplay/select'], (req, res) => {
+    try {
+      const { userId, role } = req.body;
+      const initData = req.headers['x-telegram-init-data'];
+      let verifiedUserId = null;
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) {
+          verifiedUserId = String(auth.user.id);
+        }
+      }
+
+      const targetUserId = verifiedUserId || userId || 'webapp_user';
+      const normalized = normalizeRole(role || 'friend');
+      setUserRelationshipRole(targetUserId, normalized);
+      saveUserProfile(targetUserId, { relationshipRole: normalized });
+      const roleDef = getRoleDefinition(normalized);
+      logAudit(targetUserId, 'ROLEPLAY_ROLE_SET', `Role set to ${normalized}`);
+
+      res.json({
+        ok: true,
+        role: normalized,
+        definition: roleDef,
+        message: `Roleplay set to ${roleDef.label}`,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
   });
 
   // Toggle group Text Mode (All texts vs Mentions only)

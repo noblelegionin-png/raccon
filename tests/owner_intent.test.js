@@ -162,4 +162,21 @@ test('👑 Root Owner Universal Knowledge & Natural Language Action Suite', asyn
     assert.ok(resSlow?.handled);
     assert.equal(slowmodeSecs, 15);
   });
+
+  await t.test('9. Natural Language Low-Token Bug Fix Execution', async () => {
+    let replyText = '';
+    const mockCtx = {
+      from: { id: ownerId, first_name: 'Sandy' },
+      chat: { id: testChatId, type: 'private' },
+      message: { message_id: 106, text: 'fix this: function add(a, b) { return a - b; }' },
+      reply: async (msg) => { replyText = msg; },
+      replyWithChatAction: async () => {},
+    };
+
+    const res = await tryExecuteOwnerIntent(mockCtx, 'fix this: function add(a, b) { return a - b; }', true);
+    assert.ok(res?.handled);
+    assert.equal(res.actionName, 'code_fix');
+    assert.ok(replyText.includes('a + b'));
+    assert.ok(replyText.includes('Gemini 3.5 Flash Lite'));
+  });
 });

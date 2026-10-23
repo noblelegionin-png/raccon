@@ -33,6 +33,7 @@ import { addWarning, resetWarnings } from '../groups/moderation.js';
 import { minecraftBridge } from '../minecraft/bridge.js';
 import { minecraftCommandExecutor } from '../minecraft/commandExecutor.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
+import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 
 /**
  * Helper to resolve target user from context or text
@@ -758,6 +759,41 @@ export async function tryExecuteOwnerIntent(ctx, text, isPrivate = false) {
       { parse_mode: 'Markdown' }
     ).catch(() => {});
     return { handled: true, actionName: 'ping' };
+  }
+
+  // =========================================================================
+  // 6. LOW-TOKEN CODER & DROP-IN BUG FIXER
+  // =========================================================================
+
+  // FIX CODE / BUG: "fix this: <code>", "fix bug <code>", "fix it", "fix this code"
+  const fixMatch = clean.match(/^(?:fix\s+(?:this\s+code|this\s+bug|code|bug|error|it)|fix)\b(?:\s*[:=])?\s*(.*)/is);
+  if (fixMatch) {
+    const directCode = fixMatch[1]?.trim();
+    const replyCode = ctx.message.reply_to_message?.text;
+    const targetCode = directCode || replyCode;
+    if (targetCode && targetCode.length > 3) {
+      await ctx.replyWithChatAction('typing').catch(() => {});
+      const prompt = `You are a Principal Software Engineer. Fix this code with minimal tokens. Provide only the clean drop-in fixed code block and a 1-sentence explanation of what was fixed:\n\n${targetCode}`;
+      try {
+        const completion = await scaleMaxAdapter.createChatCompletion({
+          model: 'gemini-3.5-flash-lite',
+          messages: [{ role: 'user', content: prompt }],
+          chatId: 'owner_fix_coder',
+          temperature: 0.1,
+          maxTokens: 350,
+        });
+        const fixedText = completion?.text || 'Could not generate fix.';
+        const tokInfo = completion.usage ? `\n\n⚡ _Fixed in ${completion.usage.completion_tokens || 0} tokens via Gemini 3.5 Flash Lite_` : '';
+        await ctx.reply(fixedText + tokInfo, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        }).catch(() => ctx.reply(fixedText + tokInfo));
+        return { handled: true, actionName: 'code_fix' };
+      } catch (err) {
+        await ctx.reply(`⚠️ Coder engine error: ${err.message}`);
+        return { handled: true, actionName: 'code_fix_error' };
+      }
+    }
   }
 
   // Not an explicit administrative / tool action — let the conversational LLM fulfill it

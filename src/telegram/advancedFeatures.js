@@ -241,6 +241,16 @@ export function registerAdvancedFeatures(bot) {
     ctx.reply(res, { parse_mode: 'Markdown' }).catch(() => ctx.reply(res));
   });
 
+  // /fix [code/error] - Low Token Coder & Bug Fixer
+  bot.command('fix', async (ctx) => {
+    const textToFix = ctx.match?.trim() || ctx.message.reply_to_message?.text;
+    if (!textToFix) return ctx.reply('Usage: Reply to a broken code snippet with `/fix` or send `/fix <code with bug>`.', { parse_mode: 'Markdown' });
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const prompt = `You are a Principal Software Engineer. Fix this code with minimal tokens. Provide only the clean drop-in fixed code block and a 1-sentence explanation of what was fixed:\n\n${textToFix}`;
+    const res = await runSmartCompletion(prompt);
+    ctx.reply(res, { parse_mode: 'Markdown' }).catch(() => ctx.reply(res));
+  });
+
   // 13. /summarize
   bot.command('summarize', async (ctx) => {
     const target = ctx.match?.trim() || ctx.message.reply_to_message?.text;

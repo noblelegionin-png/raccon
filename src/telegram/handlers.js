@@ -194,23 +194,34 @@ export function registerBotHandlers(bot) {
       greeting += `Nero Labs AI operates in authorized community groups. Use this bot in a group or contact the administrator for group activation.`;
     }
 
-    // Web App button ONLY in private chats
+    // Web App buttons in private chats
     const keyboard = new InlineKeyboard();
-    if (config.webAppPublicUrl) {
-      keyboard.webApp('🚀 Open Nero Labs Mini App', config.webAppPublicUrl);
+    const publicUrl = (config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app').replace(/\/+$/, '');
+    if (userIsOwner) {
+      keyboard.webApp('👑 Open Owner Console (Direct Access)', `${publicUrl}/owner.html`).row();
+      keyboard.webApp('⚡ Open User Mini App', `${publicUrl}/`);
     } else {
-      keyboard.url('🌐 Open Dashboard', `http://localhost:${config.port}`);
+      keyboard.webApp('🚀 Open Nero Labs Mini App', `${publicUrl}/`);
     }
 
-    // Set menu button for private chat if supported
+    // Set menu button for private chat
     try {
-      if (config.webAppPublicUrl) {
+      if (userIsOwner) {
         await ctx.api.setChatMenuButton({
           chat_id: ctx.chat.id,
           menu_button: {
             type: 'web_app',
-            text: '⚡ Settings',
-            web_app: { url: config.webAppPublicUrl },
+            text: '👑 Owner Deck',
+            web_app: { url: `${publicUrl}/owner.html` },
+          },
+        });
+      } else {
+        await ctx.api.setChatMenuButton({
+          chat_id: ctx.chat.id,
+          menu_button: {
+            type: 'web_app',
+            text: '⚡ Nero App',
+            web_app: { url: `${publicUrl}/` },
           },
         });
       }
@@ -681,12 +692,23 @@ export function registerBotHandlers(bot) {
     return ctx.reply('Usage: `/globalgroup on` or `/globalgroup off`', { parse_mode: 'Markdown' });
   });
 
-  // /app, /webapp, /dashboard: Launch 24/7 Mobile Mini App in any chat
-  bot.command(['app', 'webapp', 'dashboard'], async (ctx) => {
-    const webAppUrl = config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
-    const keyboard = new InlineKeyboard().webApp('🚀 Open Nero Labs Mini App', webAppUrl);
+  // /app, /webapp, /dashboard, /owner, /console: Launch 24/7 Mobile Mini App & Owner Console
+  bot.command(['app', 'webapp', 'dashboard', 'owner', 'console', 'admin'], async (ctx) => {
+    const webAppUrl = (config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app').replace(/\/+$/, '');
+    const userIsOwner = isOwner(ctx.from?.id);
+    const keyboard = new InlineKeyboard();
+
+    if (userIsOwner) {
+      keyboard.webApp('👑 Open Owner Console (Direct Access)', `${webAppUrl}/owner.html`).row();
+      keyboard.webApp('⚡ Open User Mini App', `${webAppUrl}/`);
+    } else {
+      keyboard.webApp('⚡ Open Nero Labs Mini App', `${webAppUrl}/`);
+    }
+
     return ctx.reply(
-      `⚡ *NERO LABS — 24/7 CLOUD MINI APP*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Status*: 🟢 *Online 24/7*\n• *Dashboard*: Real-time model switcher, 5 TB Google Drive file manager, telemetry latency monitor, and group controls.\n\nTap the button below to launch:`,
+      userIsOwner
+        ? `👑 *NERO LABS — CONTROL DECK*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Owner Console*: Direct passwordless root access active\n• *Theme*: Modern Nero Labs design system\n\nChoose viewport below:`
+        : `⚡ *NERO LABS — 24/7 CLOUD MINI APP*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Status*: 🟢 *Online 24/7*\n• *Dashboard*: Real-time model switcher, telemetry latency monitor, and group controls.\n\nTap the button below to launch:`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
@@ -2885,6 +2907,85 @@ export function registerBotHandlers(bot) {
       await ctx.answerInlineQuery(results, { cache_time: 5 });
     } catch (err) {
       console.warn('[TelegramBot] Inline query error:', err.message);
+    }
+  });
+
+  // ==========================================
+  // TELEGRAM BUSINESS CONNECTION & BUSINESS MESSAGES
+  // ==========================================
+  bot.on('business_connection', async (ctx) => {
+    try {
+      const conn = ctx.businessConnection;
+      console.log(`[TelegramBot] Business connection update: id=${conn.id}, user=${conn.user_id}, can_reply=${conn.can_reply}, is_enabled=${conn.is_enabled}`);
+      logAudit(conn.user_id, 'BUSINESS_CONNECTION_UPDATED', `Business connection ${conn.id} enabled=${conn.is_enabled}`);
+    } catch (err) {
+      console.warn('[TelegramBot] business_connection handler error:', err.message);
+    }
+  });
+
+  bot.on(['business_message:text', 'business_message'], async (ctx) => {
+    try {
+      const bMsg = ctx.businessMessage;
+      if (!bMsg) return;
+      const text = (bMsg.text || bMsg.caption || '').trim();
+      const senderId = bMsg.from?.id;
+      const isSenderOwner = isOwner(senderId);
+      const connectionId = bMsg.business_connection_id;
+      const targetChatId = bMsg.chat.id;
+
+      console.log(`[TelegramBot] Business message from ${senderId} in chat ${targetChatId} (owner=${isSenderOwner}): "${text.slice(0, 50)}"`);
+
+      // 1. If sent by Owner Sandy: execute owner intents or conversational reply
+      if (isSenderOwner) {
+        if (text) {
+          const dispatched = await tryExecuteOwnerIntent(ctx, text, true);
+          if (dispatched) return;
+        }
+
+        const activeModel = getActiveModelId();
+        const chatRouting = getAgentRouting('chat');
+        const modelToUse = activeModel || chatRouting.model;
+
+        const aiResponse = await scaleMaxAdapter.chatCompletion({
+          model: modelToUse,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are Nero Labs AI platform assistant talking with your verified creator Sandy (Owner). Be direct, loyal, efficient, respectful, and sharp.',
+            },
+            { role: 'user', content: text || 'Hello' },
+          ],
+          reasoningEffort: 'low',
+        });
+
+        const replyContent = aiResponse.content || 'Nero Labs system active. Direct owner connection established. ✨';
+
+        await ctx.api.sendMessage(targetChatId, replyContent, {
+          business_connection_id: connectionId,
+          reply_parameters: { message_id: bMsg.message_id },
+        });
+        return;
+      }
+
+      // 2. If sent by external user to Sandy's business account
+      if (assistantManager.isEnabled() && text) {
+        const inboxRes = await assistantManager.processIncomingMessage({
+          senderId,
+          senderName: [bMsg.from?.first_name, bMsg.from?.last_name].filter(Boolean).join(' '),
+          senderUsername: bMsg.from?.username,
+          messageText: text,
+          botApi: ctx.api,
+        });
+
+        if (inboxRes.autoReplyText) {
+          await ctx.api.sendMessage(targetChatId, inboxRes.autoReplyText, {
+            business_connection_id: connectionId,
+            reply_parameters: { message_id: bMsg.message_id },
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[TelegramBot] business_message handler error:', err);
     }
   });
 

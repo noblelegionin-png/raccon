@@ -46,18 +46,30 @@ export async function startBot() {
     // bot.start() is non-blocking in grammy
     botInstance.start({
       drop_pending_updates: false,
+      allowed_updates: [
+        'message',
+        'edited_message',
+        'channel_post',
+        'edited_channel_post',
+        'business_connection',
+        'business_message',
+        'edited_business_message',
+        'callback_query',
+        'inline_query',
+      ],
       onStart: async (botInfo) => {
         isBotRunning = true;
         console.log(`[TelegramBot] Successfully connected as @${botInfo.username} (${botInfo.id})`);
 
-        // Automatically set the 24/7 Global Telegram Mini App Menu Button for all users
         const webAppUrl = config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
+
+        // 1. Automatically set the 24/7 Global Telegram Mini App Menu Button for all users
         try {
           await botInstance.api.setChatMenuButton({
             menu_button: {
               type: 'web_app',
               text: '⚡ Nero App',
-              web_app: { url: webAppUrl },
+              web_app: { url: `${webAppUrl.replace(/\/+$/, '')}/` },
             },
           });
           console.log(`[TelegramBot] 24/7 Global Mini App Menu Button configured: ${webAppUrl}`);
@@ -65,15 +77,33 @@ export async function startBot() {
           console.warn('[TelegramBot] Could not set global menu button:', err.message);
         }
 
+        // 2. Set Dedicated Direct Passwordless Owner Deck Menu Button for Sandy
+        if (config.telegramOwnerId) {
+          try {
+            await botInstance.api.setChatMenuButton({
+              chat_id: Number(config.telegramOwnerId),
+              menu_button: {
+                type: 'web_app',
+                text: '👑 Owner Deck',
+                web_app: { url: `${webAppUrl.replace(/\/+$/, '')}/owner.html` },
+              },
+            });
+            console.log(`[TelegramBot] Dedicated Owner Deck menu button set for Sandy (${config.telegramOwnerId})`);
+          } catch (err) {
+            console.warn('[TelegramBot] Could not set owner menu button:', err.message);
+          }
+        }
+
         // Automatically register Telegram bot commands menu (Retaining /start as primary)
         try {
           await botInstance.api.setMyCommands([
             { command: 'start', description: '🚀 Open Nero AI Mini App & group controls' },
-            { command: 'help', description: '📖 Commands & Mini App features guide' },
-            { command: 'edit_mode', description: '🛠️ Owner-only maintenance & management' },
+            { command: 'owner', description: '👑 Open Owner Console (Direct Root Access)' },
             { command: 'app', description: '📱 Open Mobile Mini App dashboard' },
+            { command: 'edit_mode', description: '🛠️ Owner-only maintenance & management' },
             { command: 'role', description: '🎭 20 relationship personality roles' },
             { command: 'status', description: '📊 Bot health & active model telemetry' },
+            { command: 'help', description: '📖 Commands & Mini App features guide' },
             { command: 'clear', description: '🧹 Clear conversation memory' },
           ]);
           console.log('[TelegramBot] Official Telegram commands menu registered successfully.');

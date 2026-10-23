@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: nero-labs-telegram-bot
+    env: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: 8283843309:AAECXqKTNz1PdTgsJULDwie8mBrjwZep8Cg
+      - key: TELEGRAM_OWNER_ID
+        value: "8685232094"
+      - key: SCALEMAX_API_KEY
+        value: sm_live_c8c0b3957660ecbda0af7e884d7695e7
+      - key: SCALEMAX_BASE_URL
+        value: https://api.scalemax.pro/token/v1
+      - key: SCALEMAX_DEFAULT_MODEL
+        value: gpt-6-luna
+      - key: DASHBOARD_ACCESS_KEY
+        value: nero_labs_secret_key_2026
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_PATH
+        value: ./data/nerolabs.db

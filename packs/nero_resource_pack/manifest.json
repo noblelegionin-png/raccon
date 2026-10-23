@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Nero Labs N3R0 Companion RP",
+    "description": "Visual textures and models for N3R0 AI Companion and Nero Phone",
+    "uuid": "415cfb09-0c66-45b5-9172-a22255dede6f",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 20, 0]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "2fc73e91-2c6c-4192-be01-8e9efa8c587e",
+      "version": [1, 0, 0]
+    }
+  ]
+}

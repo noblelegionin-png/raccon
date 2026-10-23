@@ -1,0 +1,16 @@
+services:
+  nero-bot:
+    build: .
+    container_name: nero-labs-ai
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_OWNER_ID=${TELEGRAM_OWNER_ID}
+      - SCALEMAX_API_KEY=${SCALEMAX_API_KEY}
+      - SCALEMAX_BASE_URL=${SCALEMAX_BASE_URL}
+      - DASHBOARD_ACCESS_KEY=${DASHBOARD_ACCESS_KEY}
+      - WEBAPP_PUBLIC_URL=${WEBAPP_PUBLIC_URL}
+    volumes:
+      - ./data:/app/data

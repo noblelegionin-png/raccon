@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">N3R0 Companion</string>
+    <string name="title_dashboard">N3R0 Minecraft AI Companion</string>
+    <string name="status_disconnected">Status: Disconnected</string>
+    <string name="status_connected">Status: Connected to N3R0 Bridge</string>
+    <string name="backend_url_label">Nero Labs Backend URL / Host:</string>
+    <string name="btn_connect">Connect</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_summon">Summon N3R0</string>
+    <string name="btn_clean_mobs">Clear Hostile Mobs</string>
+    <string name="btn_toggle_gamemode">Toggle Game Mode</string>
+    <string name="log_header">Event &amp; Diagnostics Log</string>
+</resources>

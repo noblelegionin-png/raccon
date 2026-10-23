@@ -1,0 +1,38 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Nero Labs N3R0 Companion BP",
+    "description": "AI Minecraft Companion Behavior Pack for Bedrock / Pocket Edition",
+    "uuid": "8646e2da-a7d6-4051-8a4b-6e051a753242",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 20, 0]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "a567fbc5-07fd-473f-aa8f-45b9b34b426a",
+      "version": [1, 0, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "31a914cc-a32d-4935-a2ea-1b7bad5d4ad8",
+      "version": [1, 0, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "1.13.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "1.3.0"
+    },
+    {
+      "uuid": "415cfb09-0c66-45b5-9172-a22255dede6f",
+      "version": [1, 0, 0]
+    }
+  ]
+}

@@ -5,6 +5,20 @@ export const SUPPORTED_REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhi
 
 export const DEFAULT_ROUTING = {
   chat: {
+    model: 'gemini-3.1-flash-lite-preview',
+    reasoning: 'low',
+    targetTokens: 2000,
+    maxInputTokens: 16000,
+    maxOutputTokens: 8000,
+  },
+  management: {
+    model: 'gemini-3.5-flash-lite',
+    reasoning: 'high',
+    targetTokens: 4000,
+    maxInputTokens: 16000,
+    maxOutputTokens: 8000,
+  },
+  coding: {
     model: 'gemini-3.5-flash-lite',
     reasoning: 'high',
     targetTokens: 4000,
@@ -23,6 +37,20 @@ export const DEFAULT_ROUTING = {
     reasoning: 'high',
     targetTokens: 4000,
     maxInputTokens: 16000,
+    maxOutputTokens: 8000,
+  },
+  research: {
+    model: 'gemini-3.8-flash',
+    reasoning: 'high',
+    targetTokens: 4000,
+    maxInputTokens: 32000,
+    maxOutputTokens: 8000,
+  },
+  browsing: {
+    model: 'gemini-3.8-flash',
+    reasoning: 'high',
+    targetTokens: 4000,
+    maxInputTokens: 32000,
     maxOutputTokens: 8000,
   },
 };

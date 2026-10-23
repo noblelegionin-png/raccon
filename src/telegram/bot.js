@@ -5,6 +5,14 @@ import { registerBotHandlers } from './handlers.js';
 let botInstance = null;
 let isBotRunning = false;
 
+export function getBotInstance() {
+  return botInstance;
+}
+
+export function getBotApi() {
+  return botInstance ? botInstance.api : null;
+}
+
 export function createBot() {
   if (!config.telegramBotToken) {
     console.warn('[TelegramBot] TELEGRAM_BOT_TOKEN is not configured. Telegram bot transport will remain offline.');
@@ -57,34 +65,15 @@ export async function startBot() {
           console.warn('[TelegramBot] Could not set global menu button:', err.message);
         }
 
-        // Automatically register Telegram bot commands menu
+        // Automatically register Telegram bot commands menu (Retaining /start as primary)
         try {
           await botInstance.api.setMyCommands([
-            { command: 'start', description: '🚀 Open Nero control panel & chat' },
-            { command: 'help', description: '📖 View all commands, roles & features' },
-            { command: 'code', description: '💻 Write, architect & debug production code' },
-            { command: 'summarize', description: '📝 Executive summary & key takeaways' },
-            { command: 'translate', description: '🌐 High-accuracy language translation' },
-            { command: 'explain', description: '🔬 Feynman 3-tier deep explanation' },
-            { command: 'math', description: '🧮 Step-by-step mathematical & logic solver' },
-            { command: 'brainstorm', description: '💡 10 creative innovation ideas' },
-            { command: 'remember', description: '🧠 Save custom durable chat memory' },
-            { command: 'recall', description: '💡 Instant lookup of saved memory' },
-            { command: 'memories', description: '📚 View all knowledge archive stats' },
-            { command: 'note', description: '📝 Save to your personal notepad' },
-            { command: 'notes', description: '📋 View your saved personal notes' },
-            { command: 'poll', description: '📊 Create instant interactive Telegram poll' },
-            { command: 'rules', description: '📜 View community guidelines' },
-            { command: 'antiraid', description: '🛡️ Toggle emergency group raid lock' },
-            { command: 'slowmode', description: '⏱️ Set group message cooldown delay' },
-            { command: 'purge', description: '🧹 Batch delete recent spam messages' },
-            { command: 'blacklist', description: '🚫 Word filter & prohibited terms' },
-            { command: 'mc', description: '⛏️ Minecraft Bedrock companion commands' },
-            { command: 'ping', description: '🏓 Real-time latency measurement' },
-            { command: 'sysinfo', description: '🖥️ Host system CPU, RAM & Node telemetry' },
-            { command: 'mcptools', description: '🔌 Inspect live Model Context Protocol tools' },
-            { command: 'status', description: '📊 Bot health, provider & active model' },
-            { command: 'role', description: '🎭 Choose relationship role with Nero' },
+            { command: 'start', description: '🚀 Open Nero AI Mini App & group controls' },
+            { command: 'help', description: '📖 Commands & Mini App features guide' },
+            { command: 'edit_mode', description: '🛠️ Owner-only maintenance & management' },
+            { command: 'app', description: '📱 Open Mobile Mini App dashboard' },
+            { command: 'role', description: '🎭 20 relationship personality roles' },
+            { command: 'status', description: '📊 Bot health & active model telemetry' },
             { command: 'clear', description: '🧹 Clear conversation memory' },
           ]);
           console.log('[TelegramBot] Official Telegram commands menu registered successfully.');

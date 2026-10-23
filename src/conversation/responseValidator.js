@@ -177,9 +177,9 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     modified = true;
   }
 
-  // 5. Strict Word Count Boundaries (Configurable dev vs global)
+  // 5. Strict Word Count Boundaries (Configurable dev vs global or explicit limit)
   const countBefore = text.split(/\s+/).filter(Boolean).length;
-  text = enforceWordCountLimits(text, minWords, maxWords);
+  text = enforceWordCountLimits(text, minWords, maxWords, options);
   const countAfter = text.split(/\s+/).filter(Boolean).length;
   if (countBefore !== countAfter) {
     modified = true;
@@ -199,7 +199,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
  * @param {number} maxWords - Maximum allowed words (default: 100)
  * @returns {string} Enforced text meeting the constraint
  */
-export function enforceWordCountLimits(text, minWords = 1, maxWords = 4000) {
+export function enforceWordCountLimits(text, minWords = 1, maxWords = 4000, options = {}) {
   if (!text || typeof text !== 'string') return text;
 
   let words = text.trim().split(/\s+/).filter(Boolean);
@@ -217,8 +217,10 @@ export function enforceWordCountLimits(text, minWords = 1, maxWords = 4000) {
   }
 
   // Maximum word limit enforcement (if configured > 0)
-  if (maxWords > 0 && words.length > maxWords) {
-    const truncatedWords = words.slice(0, maxWords);
+  // If user requested an explicit word limit, allow a 15% buffer so natural conclusions aren't severed
+  const effectiveMax = options.explicitLimit ? Math.round(maxWords * 1.15) : maxWords;
+  if (effectiveMax > 0 && words.length > effectiveMax) {
+    const truncatedWords = words.slice(0, effectiveMax);
     return truncatedWords.join(' ') + '...';
   }
 

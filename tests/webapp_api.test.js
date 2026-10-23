@@ -16,11 +16,11 @@ test('Web App Endpoints & Mobile API Contracts', async (t) => {
     server.close();
   });
 
-  await t.test('GET /api/roleplay/roles returns all 10 core roles', async () => {
+  await t.test('GET /api/roleplay/roles returns all 20 personality roles', async () => {
     const res = await fetch(`${baseUrl}/api/roleplay/roles`);
     const data = await res.json();
     assert.equal(data.ok, true);
-    assert.equal(data.roles.length, 10);
+    assert.equal(data.roles.length, 20);
     const ids = data.roles.map((r) => r.id);
     assert.ok(ids.includes('brother'));
     assert.ok(ids.includes('sister'));
@@ -32,6 +32,16 @@ test('Web App Endpoints & Mobile API Contracts', async (t) => {
     assert.ok(ids.includes('son'));
     assert.ok(ids.includes('mentor'));
     assert.ok(ids.includes('partner'));
+    assert.ok(ids.includes('coach'));
+    assert.ok(ids.includes('study_partner'));
+    assert.ok(ids.includes('creative_collaborator'));
+    assert.ok(ids.includes('productivity_assistant'));
+    assert.ok(ids.includes('tech_mentor'));
+    assert.ok(ids.includes('philosopher'));
+    assert.ok(ids.includes('comedian'));
+    assert.ok(ids.includes('debater'));
+    assert.ok(ids.includes('storyteller'));
+    assert.ok(ids.includes('zen_guide'));
   });
 
   await t.test('GET and POST /api/user/profile updates custom name and role', async () => {

@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Nero Labs — Control Panel</title>
-  <meta name="theme-color" content="#000000" />
+  <title>Nero Labs — AI Companion & Workspace</title>
+  <meta name="theme-color" content="#F7F8FA" />
+  <!-- Fonts matching nero-labs.pages.dev -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
   <div id="app" class="mobile-container">
-    <!-- Header (Solid, Clean, Sticky) -->
+    <!-- Header (Solid, Clean, Sticky, Strict Black/Grey/Red/White) -->
     <header class="app-header">
       <div class="brand-group">
         <div class="brand-badge" aria-hidden="true">
@@ -21,11 +23,18 @@
         </div>
         <div class="brand-text">
           <span class="brand-title">NERO LABS</span>
-          <span class="brand-subtitle">AI PLATFORM</span>
+          <span class="brand-subtitle">AI COMPANION</span>
         </div>
       </div>
 
       <div class="header-right">
+        <!-- Owner Link (Visible only to authenticated owner Sandy) -->
+        <div id="ownerPortalLinkContainer" style="display: none;">
+          <a href="/owner.html" class="owner-portal-btn" id="ownerPortalLink">
+            <span>👑 OWNER PORTAL</span>
+          </a>
+        </div>
+
         <div id="fpsPill" class="status-pill status-fps" title="Dynamic Refresh Rate">
           <span class="fps-dot"></span>
           <span id="fpsCounter" class="fps-value">-- FPS</span>
@@ -37,12 +46,12 @@
       </div>
     </header>
 
-    <!-- Master Switch Alert Banner (shown when Master Switch is OFF) -->
-    <div id="masterWarningBanner" class="alert-banner alert-red" style="display: none;">
-      <span class="alert-icon">⚠️</span>
+    <!-- Maintenance Notice Banner (Shown when maintenance mode is active) -->
+    <div id="userMaintenanceBanner" class="alert-banner alert-red" style="display: none;">
+      <span class="alert-icon">🛠️</span>
       <div class="alert-content">
-        <strong>MASTER AI CONNECTION HALTED</strong>
-        <p>All automated bot replies and AI requests are immediately suspended.</p>
+        <strong>MAINTENANCE MODE ACTIVE</strong>
+        <p>The bot is temporarily in maintenance mode while we fix a few bugs. Normal replies are paused.</p>
       </div>
     </div>
 
@@ -52,31 +61,27 @@
       <span id="toastText" class="toast-text">Settings saved</span>
     </div>
 
-    <!-- Navigation Tabs (5 Tabs: Chat, Memory, Models, Groups, Settings) -->
+    <!-- User Navigation Tabs (5 Tabs: Chat, Profile & Context, 20 Roles, Memories, Files) -->
     <nav class="tab-nav">
       <button class="nav-btn active" data-tab="tab-chat">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span>Chat</span>
       </button>
-      <button class="nav-btn" data-tab="tab-memory">
+      <button class="nav-btn" data-tab="tab-profile">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+        <span>Context</span>
+      </button>
+      <button class="nav-btn" data-tab="tab-roles">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <span>20 Roles</span>
+      </button>
+      <button class="nav-btn" data-tab="tab-memories">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Memory</span>
       </button>
-      <button class="nav-btn" data-tab="tab-personal">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        <span>Models</span>
-      </button>
-      <button class="nav-btn" data-tab="tab-groups">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Groups</span>
-      </button>
-      <button class="nav-btn" data-tab="tab-settings">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
-        <span>Settings</span>
-      </button>
-      <button class="nav-btn" data-tab="tab-owner" id="navOwnerBtn">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        <span>Owner</span>
+      <button class="nav-btn" data-tab="tab-files">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+        <span>Files</span>
       </button>
     </nav>
 
@@ -96,7 +101,7 @@
             </div>
           </div>
           <div class="banner-right">
-            <span id="chatModelBadge" class="chat-model-pill">GPT-6 Luna</span>
+            <span id="chatModelBadge" class="chat-model-pill">Gemini 3.1 Flash</span>
             <button id="clearChatBtn" class="btn-chat-action" title="Clear chat history">Clear</button>
           </div>
         </div>
@@ -106,10 +111,10 @@
           <div class="chat-bubble chat-bubble-assistant">
             <div class="bubble-header">
               <span class="bubble-sender">Nero</span>
-              <span class="bubble-model">GPT-6 Luna</span>
+              <span class="bubble-model">Gemini 3.1 Flash</span>
             </div>
             <div class="bubble-text">
-              Hey! I'm Nero, your AI assistant. You can chat with me directly right here, search our persistent memory, customize how I roleplay with you, or switch AI models! How can I help you today? 💖
+              Hey! I'm Nero, your personal AI companion. You can chat with me, customize your 1,000-word personal context, choose among our 20 personality roles, manage private memories, and upload documents to your isolated storage sandbox!
             </div>
           </div>
         </div>
@@ -124,10 +129,10 @@
 
         <!-- Quick Prompt Chips -->
         <div class="chat-suggestions-bar">
-          <button class="chip-prompt" data-prompt="What are people talking about in the group?">What's in group?</button>
-          <button class="chip-prompt" data-prompt="Who is your creator Sandy?">Who is Sandy?</button>
-          <button class="chip-prompt" data-prompt="What decisions are saved in persistent memory?">Check memory</button>
-          <button class="chip-prompt" data-prompt="Tell me a witty joke!">Tell me a joke</button>
+          <button class="chip-prompt" data-prompt="Summarize my personal context and preferences">My Profile</button>
+          <button class="chip-prompt" data-prompt="Help me review and debug this code in 200 words">Review Code</button>
+          <button class="chip-prompt" data-prompt="What decisions are saved in our persistent memory?">Check memory</button>
+          <button class="chip-prompt" data-prompt="Tell me a witty joke!">Tell a joke</button>
         </div>
 
         <!-- Chat Input Bar -->
@@ -143,687 +148,165 @@
       </section>
 
       <!-- ============================================== -->
-      <!-- TAB 2: VISUAL MEMORY & ARCHIVE EXPLORER        -->
+      <!-- TAB 2: PROFILE & 1,000-WORD PERSONAL CONTEXT   -->
       <!-- ============================================== -->
-      <section id="tab-memory" class="tab-pane">
-        <!-- Memory Statistics Box -->
-        <div class="card memory-stats-card">
+      <section id="tab-profile" class="tab-pane">
+        <div class="card">
           <div class="card-header">
-            <h2 class="card-title">PERSISTENT MEMORY INDEX</h2>
-            <button id="refreshMemoryBtn" class="btn btn-icon" title="Refresh memories">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            </button>
+            <h2 class="card-title">PERSONAL IDENTITY PROFILE</h2>
+            <span id="userProfileBadge" class="badge badge-white">ACTIVE</span>
           </div>
-          <p class="card-desc">Real-time searchable archive of decisions, plans, facts, and conversation batch summaries stored in Google Drive and database.</p>
+          <p class="card-desc">Customize how Nero addresses you, your communication preferences, and reasoning depth.</p>
 
-          <div class="memory-stats-grid">
-            <div class="mem-stat-box">
-              <span id="memStatDurable" class="mem-stat-num">0</span>
-              <span class="mem-stat-label">Durable Facts</span>
+          <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+            <div class="input-group">
+              <label class="input-label" for="profileRealNameInput">Real Name:</label>
+              <input type="text" id="profileRealNameInput" placeholder="e.g. Alexander Vance" class="text-input" maxlength="100" />
             </div>
-            <div class="mem-stat-box">
-              <span id="memStatBatches" class="mem-stat-num">0</span>
-              <span class="mem-stat-label">50-Msg Batches</span>
+
+            <div class="input-group">
+              <label class="input-label" for="profileNicknameInput">Nickname / Calling Name:</label>
+              <input type="text" id="profileNicknameInput" placeholder="e.g. Sandy or Alex" class="text-input" maxlength="50" />
             </div>
-            <div class="mem-stat-box">
-              <span id="memStatMessages" class="mem-stat-num">0</span>
-              <span class="mem-stat-label">Total Messages</span>
+
+            <div class="input-group">
+              <label class="input-label" for="profileCommStyleSelect">Preferred Communication Style:</label>
+              <select id="profileCommStyleSelect" class="select-dropdown">
+                <option value="natural" selected>Natural &amp; Conversational</option>
+                <option value="concise">Concise &amp; Bullet Points</option>
+                <option value="technical">Technical &amp; Deep Systems</option>
+                <option value="formal">Polite &amp; Formal</option>
+              </select>
             </div>
-          </div>
-        </div>
 
-        <!-- Search Bar & Category Filters -->
-        <div class="card memory-filter-card">
-          <div class="memory-search-box">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="memorySearchInput" placeholder="Search memories, topics, keywords..." class="memory-search-field" />
-          </div>
-
-          <div class="memory-category-chips" id="memoryCategoryChips">
-            <button class="mem-chip active" data-category="all">All</button>
-            <button class="mem-chip" data-category="decision">Decisions</button>
-            <button class="mem-chip" data-category="plan">Plans</button>
-            <button class="mem-chip" data-category="rule">Rules</button>
-            <button class="mem-chip" data-category="fact">Facts</button>
-            <button class="mem-chip" data-category="batches">Batch Summaries</button>
-          </div>
-        </div>
-
-        <!-- Memory Items Container -->
-        <div id="memoryListContainer" class="memory-cards-list">
-          <div class="loading-placeholder">Loading persistent memories...</div>
-        </div>
-      </section>
-
-      <!-- ============================================== -->
-      <!-- TAB 3: MODEL & AI CONTROLS                     -->
-      <!-- ============================================== -->
-      <section id="tab-personal" class="tab-pane">
-        <!-- Master Authorization Box -->
-        <div class="card master-card">
-          <div class="card-header">
-            <h2 class="card-title">MASTER AUTHORIZATION</h2>
-            <span id="authBadge" class="badge badge-grey">GUEST</span>
-          </div>
-
-          <!-- Switch 1: Master AI Connection -->
-          <div class="switch-row">
-            <div class="switch-meta">
-              <span class="switch-label">Master AI Connection</span>
-              <span class="switch-desc">Instant kill switch. Halts all automated AI responses.</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="masterSwitchToggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <!-- Switch 2: Global Group Participation -->
-          <div class="switch-row">
-            <div class="switch-meta">
-              <span class="switch-label">Global Group Participation</span>
-              <span class="switch-desc">Permits bot activity across all authorized community groups.</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="globalGroupToggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <!-- Setting: Model Reasoning Effort -->
-          <div class="switch-row">
-            <div class="switch-meta">
-              <span class="switch-label">Reasoning Effort</span>
-              <span class="switch-desc">Controls reasoning depth for supported models. None for ultra-low latency.</span>
-            </div>
-            <div class="select-wrapper">
-              <select id="reasoningEffortSelect" class="select-dropdown">
-                <option value="none" selected>None (Fastest: ~1.2s)</option>
-                <option value="low">Low (~5s)</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="xhigh">XHigh</option>
-                <option value="max">Max</option>
+            <div class="input-group">
+              <label class="input-label" for="profileReasoningSelect">Reasoning Preference:</label>
+              <select id="profileReasoningSelect" class="select-dropdown">
+                <option value="speed">Ultra-Fast (~1s)</option>
+                <option value="balanced" selected>Balanced (~3s)</option>
+                <option value="deep">Deep Chain-of-Thought (~8s)</option>
               </select>
             </div>
           </div>
         </div>
 
-        <!-- Active Model Spotlight Card -->
-        <div class="card active-model-card">
+        <!-- 1,000-Word Personal Context Editor Card -->
+        <div class="context-editor-card">
           <div class="card-header">
-            <h2 class="card-title">SELECTED AI MODEL</h2>
-            <button id="pingLatencyBtn" class="btn btn-secondary btn-sm">
-              <span class="btn-text">Test Latency</span>
-            </button>
-          </div>
-
-          <div class="spotlight-body">
-            <div class="spotlight-main">
-              <div class="spotlight-icon">⚡</div>
-              <div class="spotlight-info">
-                <span id="activeModelName" class="spotlight-name">GPT-6 Luna</span>
-                <span id="activeModelProvider" class="spotlight-provider">OpenAI / ScaleMax</span>
-              </div>
-            </div>
-
-            <div class="spotlight-metrics">
-              <div class="metric-box">
-                <span class="metric-label">STATUS</span>
-                <div class="metric-value">
-                  <span id="spotlightStatusDot" class="status-dot dot-green"></span>
-                  <span id="spotlightStatusText">Operational</span>
-                </div>
-              </div>
-
-              <div class="metric-box">
-                <span class="metric-label">MEASURED LATENCY</span>
-                <div class="metric-value">
-                  <span id="spotlightLatency" class="latency-low">-- ms</span>
-                </div>
-                <span id="spotlightAge" class="metric-age">Never checked</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Cost & Token Estimation Calculator Card -->
-        <div class="card cost-card">
-          <div class="card-header">
-            <h3 class="card-title">COST &amp; TOKEN ESTIMATOR</h3>
-            <span class="badge badge-white">ESTIMATE</span>
+            <h2 class="card-title">PERSONAL CONTEXT DOCUMENT</h2>
+            <span id="contextBadge" class="badge badge-red">MAX 1,000 WORDS</span>
           </div>
           <p class="card-desc">
-            Standard test prompt and token estimation. Rate pricing reflects token-pack quota deductions.
+            Provide background details, active projects, workflow conventions, or rules you want Nero to always keep in mind. Nero injects this context automatically into every conversation.
           </p>
 
-          <div class="calculator-controls">
-            <div class="calc-row">
-              <label for="promptWordSlider" class="calc-label">Test Prompt Length:</label>
-              <div class="calc-input-group">
-                <input type="range" id="promptWordSlider" min="5" max="500" value="10" step="5" class="slider-input" />
-                <span id="promptWordDisplay" class="calc-val">10 words</span>
-              </div>
+          <div class="context-box">
+            <textarea
+              id="personalContextTextarea"
+              class="context-textarea"
+              placeholder="Write your background, project context, coding preferences, or personal guidelines here (up to 1,000 words)..."
+              rows="8"
+            ></textarea>
+
+            <div class="context-counter-bar">
+              <span class="status-subtext">Strict server-side validation applied</span>
+              <span id="contextWordCountDisplay" class="word-counter">0 / 1,000 words</span>
             </div>
           </div>
 
-          <div class="token-breakdown-box">
-            <div class="token-grid">
-              <div class="token-cell">
-                <span class="token-num" id="estInputTokens">--</span>
-                <span class="token-lbl">Est. Input Tokens</span>
-              </div>
-              <div class="token-cell">
-                <span class="token-num" id="estOutputTokens">--</span>
-                <span class="token-lbl">Est. Output Tokens</span>
-              </div>
-              <div class="token-cell">
-                <span class="token-num" id="estReasoningTokens">--</span>
-                <span class="token-lbl">Reasoning Tokens</span>
-              </div>
-              <div class="token-cell highlight-cell">
-                <span class="token-num" id="estTotalTokens">--</span>
-                <span class="token-lbl">Total Est. Tokens</span>
-              </div>
-            </div>
-
-            <div class="pricing-status-row">
-              <div class="pricing-meta">
-                <span class="pricing-label">Provider Unit Cost:</span>
-                <span id="pricingRateText" class="pricing-unknown">Unknown — verify provider pricing</span>
-              </div>
-              <small class="pricing-subtext">ScaleMax token-pack billing units deducted per request.</small>
-            </div>
-          </div>
-        </div>
-
-        <!-- Model Catalogue Header & Filter Bar -->
-        <div class="catalogue-section">
-          <div class="catalogue-header">
-            <div>
-              <h3 class="section-title">Model Catalogue</h3>
-              <span id="catalogueSourceLabel" class="section-subtitle">Synced via ScaleMax Account (46 Models)</span>
-            </div>
-            <button id="refreshModelsBtn" class="btn btn-icon" title="Refresh catalogue">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            </button>
-          </div>
-
-          <!-- Category Filters -->
-          <div class="filter-bar" id="categoryFilters">
-            <button class="filter-chip active" data-category="all">All (46)</button>
-            <button class="filter-chip" data-category="General Reasoning & Text">Reasoning &amp; Text</button>
-            <button class="filter-chip" data-category="High-Speed Flash Models">Flash Models</button>
-            <button class="filter-chip" data-category="Coding & Development">Coding</button>
-            <button class="filter-chip" data-category="Image Generation (Phase 2)">Image (Phase 2)</button>
-            <button class="filter-chip" data-category="Video Generation (Phase 2)">Video (Phase 2)</button>
-          </div>
-
-          <!-- Model List -->
-          <div id="modelListContainer" class="model-list">
-            <div class="loading-placeholder">Loading model catalogue...</div>
-          </div>
-        </div>
-
-        <!-- Measured Token Usage & Audit Metrics -->
-        <div class="card usage-card">
-          <div class="card-header">
-            <h3 class="card-title">MEASURED USAGE &amp; TELEMETRY</h3>
-            <span class="badge badge-white">MEASURED</span>
-          </div>
-          <div class="usage-grid">
-            <div class="usage-stat">
-              <span class="stat-number" id="statTotalRequests">0</span>
-              <span class="stat-label">Total Requests</span>
-            </div>
-            <div class="usage-stat">
-              <span class="stat-number" id="statTotalTokens">0</span>
-              <span class="stat-label">Measured Tokens</span>
-            </div>
-            <div class="usage-stat">
-              <span class="stat-number" id="statAvgLatency">0 ms</span>
-              <span class="stat-label">Avg Real Latency</span>
-            </div>
-          </div>
-          <p class="usage-notice">Provider balance &amp; token quota: <em>Unknown — verify provider pricing on ScaleMax dashboard</em></p>
-        </div>
-      </section>
-
-      <!-- ============================================== -->
-      <!-- TAB 4: COMMUNITY & GROUPS                      -->
-      <!-- ============================================== -->
-      <section id="tab-groups" class="tab-pane">
-        <!-- Moderation Engine Card -->
-        <div class="card moderation-card">
-          <div class="card-header">
-            <h2 class="card-title">GROUP MODERATION POLICY</h2>
-            <span id="modBadge" class="badge badge-grey">SAFE</span>
-          </div>
-          <p class="card-desc">
-            Automated moderation follows owner-defined rules. Automatic kicking, banning, or message deletion remains disabled until explicitly configured.
-          </p>
-
-          <div class="switch-row">
-            <div class="switch-meta">
-              <span class="switch-label">Automated Group Moderation</span>
-              <span class="switch-desc">Enables spam and link inspection across participating groups.</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="groupModerationToggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <!-- Registered Telegram Groups Card -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">REGISTERED TELEGRAM GROUPS</h3>
-            <span id="groupCountBadge" class="badge badge-white">0 Groups</span>
-          </div>
-          <p class="card-desc">
-            Toggle group participation and Text Mode (read &amp; reply to all messages vs mention only) for each group.
-          </p>
-
-          <div id="groupsListContainer" class="groups-list">
-            <div class="empty-state">
-              <p>No groups registered yet.</p>
-              <small>Add the bot to a Telegram group and run <code>/start</code> or <code>/chat</code> to register it.</small>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================================== -->
-      <!-- TAB 5: SETTINGS & ROLEPLAY IDENTITY PROFILE    -->
-      <!-- ============================================== -->
-      <section id="tab-settings" class="tab-pane">
-        <!-- User Custom Identity & Roleplay Settings Card -->
-        <div class="card profile-card">
-          <div class="card-header">
-            <h2 class="card-title">YOUR ROLEPLAY RELATIONSHIP</h2>
-            <span id="userRoleBadge" class="badge badge-green">FRIEND</span>
-          </div>
-          <p class="card-desc">Choose how Nero treats you and what name she calls you in every group and conversation.</p>
-
-          <div class="profile-input-group">
-            <label for="profileCustomNameInput" class="input-label">Your Custom Calling Name:</label>
-            <div class="input-with-button">
-              <input type="text" id="profileCustomNameInput" placeholder="Enter custom name (e.g. Sandy, Alex)" class="text-input" maxlength="50" autocomplete="off" />
-              <button id="saveProfileNameBtn" type="button" class="btn btn-secondary">Save Name</button>
-            </div>
-          </div>
-
-          <div class="role-selection-section">
-            <label class="input-label">Select Relationship Role:</label>
-            <div class="roles-grid" id="rolesSelectionGrid">
-              <!-- Dynamically populated from /api/roleplay/roles -->
-            </div>
-          </div>
-        </div>
-
-        <!-- System Configuration Card -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">SYSTEM CONFIGURATION</h2>
-          </div>
-
-          <div class="settings-list">
-            <div class="setting-item">
-              <span class="setting-name">Provider Gateway</span>
-              <span id="settingBaseUrl" class="setting-value">api.scalemax.pro/token/v1</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Default Active Model</span>
-              <span id="settingDefaultModel" class="setting-value">gpt-6-luna</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Owner Verification ID</span>
-              <span id="settingOwnerId" class="setting-value">8685232094</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Latency Threshold</span>
-              <span class="setting-value">1,000 ms</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live MCP Bridge & Agent Diagnostics Card -->
-        <div class="card mcp-card">
-          <div class="card-header">
-            <h2 class="card-title">LIVE MCP BRIDGE (MODEL CONTEXT PROTOCOL)</h2>
-            <span id="mcpBadge" class="badge badge-green">ACTIVE (0/10)</span>
-          </div>
-          <p class="card-desc">
-            Direct authenticated Model Context Protocol (MCP) bridge over JSON-RPC 2.0 &amp; SSE for local PC agents, IDEs, and authorized remote devices.
-          </p>
-
-          <div class="settings-list">
-            <div class="setting-item">
-              <span class="setting-name">Bridge Endpoint</span>
-              <span id="mcpEndpointUrl" class="setting-value">/mcp</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">SSE Stream Transport</span>
-              <span id="mcpSseUrl" class="setting-value">/mcp/sse</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Active Connections</span>
-              <span id="mcpActiveCount" class="setting-value">0 / 10 Max</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Registered Tools</span>
-              <span id="mcpToolsCount" class="setting-value">6 Tools</span>
-            </div>
-          </div>
-
-          <div class="storage-actions">
-            <button id="copyMcpConfigBtn" class="btn btn-secondary btn-sm">Copy MCP Config JSON</button>
-            <button id="testMcpHealthBtn" class="btn btn-secondary btn-sm">Check MCP Status</button>
-          </div>
-        </div>
-
-        <!-- Model Routing & Token Budget Card -->
-        <div class="card routing-card">
-          <div class="card-header">
-            <h2 class="card-title">MODEL ROUTING &amp; REASONING TIERS</h2>
-            <span class="badge badge-white">1,500 TOK CEILING</span>
-          </div>
-          <p class="card-desc">
-            Autonomous multi-agent routing with hard ceilings of 1,500 input / 1,500 output tokens and specialized reasoning tiers.
-          </p>
-
-          <div class="settings-list">
-            <div class="setting-item">
-              <span class="setting-name">Luna-Chat (Conversational)</span>
-              <span class="setting-value">gpt-6-luna · Medium</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Luna-Security (Supervisor)</span>
-              <span class="setting-value">gpt-6-luna · Max</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Luna-Media (Vision &amp; Files)</span>
-              <span class="setting-value">gemini-3.8-flash · High</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Target Token Budget</span>
-              <span class="setting-value">~1,000 tok / action</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Personal Assistant Mode Policy Card -->
-        <div class="card assistant-card">
-          <div class="card-header">
-            <h2 class="card-title">PERSONAL ASSISTANT MODE (/assistant)</h2>
-            <span id="assistantPolicyBadge" class="badge badge-grey">MANUAL</span>
-          </div>
-          <p class="card-desc">
-            Incoming direct message management on Telegram with strict user isolation and automated owner notification.
-          </p>
-
-          <div class="switch-row">
-            <div class="switch-meta">
-              <span class="switch-label">Reply Policy</span>
-              <span class="switch-desc">Manual (log &amp; alert), Auto (courteous reply), or Restricted (VIPs).</span>
-            </div>
-            <div class="select-wrapper">
-              <select id="assistantPolicySelect" class="select-dropdown">
-                <option value="manual" selected>Manual (Alert owner only)</option>
-                <option value="auto">Auto (Courteous Luna reply)</option>
-                <option value="restricted">Restricted (VIP contacts)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Cloud Storage & Google Drive Integration -->
-        <div class="card storage-card">
-          <div class="card-header">
-            <h3 class="card-title">STORAGE &amp; GOOGLE DRIVE</h3>
-            <span id="storageBadge" class="badge badge-grey">LOCAL SNAPSHOTS</span>
-          </div>
-          <p class="card-desc">
-            Automated database snapshots and 5 TB cloud archive adapter. Secret credentials are kept secure and redacted.
-          </p>
-
-          <div class="storage-meta-box">
-            <div class="setting-item">
-              <span class="setting-name">Storage Tier Target</span>
-              <span class="setting-value">5 TB Google Drive / Cloud</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Connected Account</span>
-              <span id="storageAccount" class="setting-value">Configurable</span>
-            </div>
-            <div class="setting-item">
-              <span class="setting-name">Snapshot Directory</span>
-              <span class="setting-value">data/backups/</span>
-            </div>
-          </div>
-
-          <div class="storage-actions">
-            <button id="createBackupBtn" class="btn btn-secondary btn-sm">
-              <span class="btn-text">Create Database Snapshot</span>
-            </button>
-            <span id="backupStatusText" class="status-subtext"></span>
-          </div>
-        </div>
-
-        <!-- Standalone Access Key Login (for browser testing) -->
-        <div id="accessKeyBox" class="card">
-          <div class="card-header">
-            <h3 class="card-title">BROWSER ACCESS KEY</h3>
-          </div>
-          <p class="card-desc">If testing from a desktop browser outside of Telegram, enter your dashboard access key.</p>
-          <div class="input-group">
-            <input type="password" id="manualAccessKeyInput" placeholder="Enter DASHBOARD_ACCESS_KEY" class="text-input" />
-            <button id="saveAccessKeyBtn" class="btn btn-secondary">Authorize</button>
-          </div>
-          <span id="accessKeyStatus" class="input-status"></span>
-        </div>
-
-        <!-- Owner Revocation & Data Wipe -->
-        <div class="card danger-card">
-          <div class="card-header">
-            <h3 class="card-title text-red">OWNER SECURITY &amp; REVOCATION</h3>
-          </div>
-          <p class="card-desc">
-            Instantly wipe all local conversation memory, update tracking, and token logs, and disable the master AI switch.
-          </p>
-          <button id="revokeDataBtn" class="btn btn-danger">
-            Wipe Local Data &amp; Revoke Access
+          <button id="saveContextProfileBtn" class="btn-primary-red" style="width: 100%; margin-top: 14px;">
+            SAVE PROFILE &amp; CONTEXT
           </button>
         </div>
       </section>
 
       <!-- ============================================== -->
-      <!-- TAB 6: EXCLUSIVE OWNER CONTROL DECK (TURN ON/OFF)-->
+      <!-- TAB 3: 20 PERSONALITY ROLES                    -->
       <!-- ============================================== -->
-      <section id="tab-owner" class="tab-pane">
-        <!-- Auth Gate Lock Screen (shown if not authenticated as owner) -->
-        <div id="ownerLockScreen" class="owner-lock-card">
-          <div class="lock-icon">🔒</div>
-          <h2 style="color: #FFFFFF; font-size: 18px; font-weight: 800;">OWNER MASTER CONSOLE</h2>
-          <p style="color: #A3A3A3; font-size: 13px; line-height: 1.4;">
-            This control deck is strictly restricted to Sandy (ID: <code>8685232094</code>).<br>
-            Please enter your master access key or open from your verified Telegram account.
-          </p>
-          <div class="lock-auth-box">
-            <input type="password" id="ownerKeyInput" placeholder="Enter DASHBOARD_ACCESS_KEY..." class="text-input" style="background:#0D0D0D; color:#FFF; border:1px solid #333;" />
-            <button id="ownerUnlockBtn" class="btn-primary-red">UNLOCK CONSOLE</button>
+      <section id="tab-roles" class="tab-pane">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">RELATIONSHIP PERSONA MODES</h2>
+            <span id="activeRoleNameBadge" class="badge badge-red">FRIEND</span>
           </div>
-          <p id="ownerLockMsg" class="lock-error" style="display: none;"></p>
+          <p class="card-desc">Select how Nero relates to you. Each mode features tailored conversational dynamics.</p>
+
+          <!-- Anti-Repetition & Boundary Alert Notice -->
+          <div style="background:#0A0A0A; border:1px solid #262626; border-left:3px solid #EF4444; border-radius:6px; padding:10px 12px; margin-top:10px; font-size:12px; color:#A3A3A3; line-height:1.4;">
+            <strong style="color:#FFF;">🛡️ Anti-Repetition Engine Active:</strong>
+            Nero embodies your chosen relationship dynamic naturally and maturely without repetitive verbal pet-names (e.g. no repetitive "Papa" or "bhaiya" in every message). Personas are conversational and do not confer administrative system privileges.
+          </div>
+
+          <!-- 20 Roles Grid -->
+          <div class="roles-grid-v2" id="rolesGridV2">
+            <!-- Dynamically populated from /api/roleplay/roles -->
+          </div>
         </div>
+      </section>
 
-        <!-- Master Owner Control Console (shown when authenticated) -->
-        <div id="ownerConsoleScreen" class="owner-console-wrapper" style="display: none;">
-          <!-- Owner Header Banner -->
-          <div class="owner-header-card">
-            <div class="owner-badge-row">
-              <span class="owner-crown-tag">👑 ROOT ACCESS</span>
-              <span id="ownerLiveBadge" class="status-pill status-red">OWNER ONLINE</span>
-            </div>
-            <h1 class="owner-deck-title">MASTER CONTROL DECK</h1>
-            <p class="owner-deck-sub">Instant visual ON / OFF toggles for all bot intelligence, group shields, and runtime systems.</p>
+      <!-- ============================================== -->
+      <!-- TAB 4: PERSONAL MEMORIES & CORRECTIONS         -->
+      <!-- ============================================== -->
+      <section id="tab-memories" class="tab-pane">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">MY PERSONAL MEMORIES</h2>
+            <button id="openAddMemoryBtn" class="btn btn-secondary btn-sm">+ Add Memory</button>
           </div>
+          <p class="card-desc">Private facts, preferences, and corrections stored exclusively for your user account.</p>
 
-          <!-- Master Switches Grid -->
-          <div class="owner-switches-grid">
-            <!-- 1. Master AI Engine -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Master AI Engine</span>
-                <span class="switch-desc">Primary neural response pipeline &amp; AI completions</span>
+          <!-- Add Memory Inline Form (Toggled) -->
+          <div id="addMemoryFormBox" style="display: none; background: #0A0A0A; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-top: 12px;">
+            <div style="font-weight: 700; font-size: 13px; color: #FFF; margin-bottom: 8px;">Record New Memory</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <select id="newMemCategory" class="select-dropdown">
+                <option value="preference">Preference</option>
+                <option value="correction">Correction / Rule</option>
+                <option value="fact">Personal Fact</option>
+                <option value="project">Project Note</option>
+              </select>
+              <input type="text" id="newMemTitle" placeholder="Memory Title (e.g. Code Formatting)" class="text-input" />
+              <textarea id="newMemContent" placeholder="What should Nero remember about this?" rows="3" class="text-input" style="resize: vertical;"></textarea>
+              <div style="display: flex; gap: 8px;">
+                <button id="saveNewMemoryBtn" class="btn-primary-red" style="flex: 1; padding: 8px;">Save Memory</button>
+                <button id="cancelNewMemoryBtn" class="btn btn-secondary" style="padding: 8px 14px;">Cancel</button>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_master_switch" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 2. Auto Text Replies -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Auto Text Replies</span>
-                <span class="switch-desc">Reads and replies automatically without needing @mention</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_auto_text_replies" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 3. Group Participation -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Group Participation</span>
-                <span class="switch-desc">Allows bot to converse in community Telegram groups</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_group_participation_enabled" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 4. Group Moderation Engine -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Group Moderation Engine</span>
-                <span class="switch-desc">Enforce auto-rules, deletes, warnings and sanctions</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_group_moderation_enabled" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 5. Anti-Spam Repetition Shield -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Anti-Spam Filter</span>
-                <span class="switch-desc">Blocks flood text and 8+ character repetition</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_spam_filter_global" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 6. Link & Phishing Filter -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Link &amp; Phishing Shield</span>
-                <span class="switch-desc">Blocks unauthorized external links &amp; invite drops</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_link_filter_global" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 7. Capslock Filter -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Capslock Shouting Filter</span>
-                <span class="switch-desc">Flags messages with &gt;75% uppercase shouting</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_capslock_filter_global" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 8. Anti-Raid Mode -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Anti-Raid Emergency Mode</span>
-                <span class="switch-desc">Tightened security protocol for group raid defenses</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_antiraid_mode_global" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 9. Auto-Mute on Max Warnings -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Auto-Mute at 3 Strikes</span>
-                <span class="switch-desc">Automatically silences spammers for 1 hour</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_auto_mute_global" checked />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- 10. Minecraft Bedrock Bridge -->
-            <div class="owner-switch-card">
-              <div class="switch-card-info">
-                <span class="switch-name">Minecraft Bedrock Bridge</span>
-                <span class="switch-desc">WebSocket companion server on port 3001</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sw_minecraft_bridge_enabled" checked />
-                <span class="toggle-slider"></span>
-              </label>
             </div>
           </div>
 
-          <!-- Foundation Model Selector Card -->
-          <div class="owner-section-card">
-            <h3 class="card-heading">ACTIVE FOUNDATION MODEL</h3>
-            <p class="card-subheading">One-tap switch between high-speed and deep-thought models</p>
-            <div class="model-buttons-deck">
-              <button class="btn-model-choice active" data-model="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</button>
-              <button class="btn-model-choice" data-model="gemini-3.8-flash">Gemini 3.8 Flash</button>
-              <button class="btn-model-choice" data-model="deepseek-v4-pro">DeepSeek V4 Pro</button>
-              <button class="btn-model-choice" data-model="claude-sonnet-4-6[1m]">Claude Sonnet 4.6</button>
-            </div>
+          <!-- User Memories List -->
+          <div class="user-memories-container" id="userMemoriesList">
+            <div class="loading-placeholder">Loading your personal memories...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB 5: USER FILES & DOCUMENTS SANDBOX          -->
+      <!-- ============================================== -->
+      <section id="tab-files" class="tab-pane">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">MY FILES &amp; DOCUMENTS</h2>
+            <span class="badge badge-white">ISOLATED SANDBOX</span>
+          </div>
+          <p class="card-desc">Securely upload personal documents, code files, or references (up to 20 MB). Nero can read and consult your files.</p>
+
+          <!-- File Upload Dropzone -->
+          <div class="file-dropzone" id="fileDropzone" style="margin-top: 12px;">
+            <input type="file" id="userFileInput" style="display: none;" />
+            <div style="font-size: 28px; margin-bottom: 6px;">📂</div>
+            <div style="font-weight: 700; color: #FFF; font-size: 13px;">Tap to Choose File to Upload</div>
+            <div style="font-size: 11px; color: #737373; margin-top: 4px;">Supports images, text, markdown, PDF, code up to 20 MB</div>
           </div>
 
-          <!-- Reasoning Effort Card -->
-          <div class="owner-section-card">
-            <h3 class="card-heading">NEURAL REASONING DEPTH</h3>
-            <p class="card-subheading">Control how intensely Nero analyzes and decomposes questions</p>
-            <div class="reasoning-buttons-deck">
-              <button class="btn-reasoning-choice" data-reasoning="low">Low</button>
-              <button class="btn-reasoning-choice" data-reasoning="medium">Medium</button>
-              <button class="btn-reasoning-choice active" data-reasoning="high">High</button>
-              <button class="btn-reasoning-choice" data-reasoning="max">Max</button>
-            </div>
+          <div id="fileUploadProgressBox" style="display: none; margin-top: 10px; font-size: 12px; color: #EF4444;">
+            Uploading file to secure sandbox...
           </div>
 
-          <!-- 1-Click Power Actions -->
-          <div class="owner-section-card">
-            <h3 class="card-heading">1-CLICK POWER ACTIONS</h3>
-            <div class="owner-actions-grid">
-              <button id="ownerActionClearChat" class="btn-action-grey">🧹 Clear Chat History</button>
-              <button id="ownerActionClearWarns" class="btn-action-grey">⚠️ Reset All Group Strikes</button>
-              <button id="ownerActionKillSwitch" class="btn-action-red">🚨 Master Kill Switch (Halt AI)</button>
-            </div>
+          <!-- User Files List -->
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 16px;" id="userFilesList">
+            <div class="loading-placeholder">Loading stored files...</div>
           </div>
         </div>
       </section>

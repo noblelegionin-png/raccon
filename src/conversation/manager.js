@@ -12,6 +12,12 @@ import {
 } from '../db/index.js';
 import { NERO_SYSTEM_DIRECTIVE, OWNER_ROOT_DIRECTIVE } from './identityRulebook.js';
 import { formatRoleplayDirective } from './roleplayManager.js';
+import {
+  detectUserIntent,
+  extractExplicitWordLimit,
+  formatIntentDirective,
+} from './intentDetector.js';
+import { formatPersonalMemoryDirective } from '../memory/personalMemoryService.js';
 
 /**
  * Message-Processing Pipeline (Rule 61)
@@ -159,6 +165,24 @@ export function buildChatContext(chatId, latestUserPrompt, options = {}) {
   }
   if (groupMemoryContext) {
     fullSystemDirective += `\n\n${groupMemoryContext}`;
+  }
+
+  // 2b. Isolated Personal Memory & Context (up to 1,000 words)
+  if (options.senderId) {
+    const personalDirective = formatPersonalMemoryDirective(options.senderId, chatId);
+    if (personalDirective) {
+      fullSystemDirective += `\n\n${personalDirective}`;
+    }
+  }
+
+  // 3. User Intent & Explicit Word Limit Constraints
+  const explicitWordLimit = options.explicitWordLimit !== undefined
+    ? options.explicitWordLimit
+    : extractExplicitWordLimit(latestUserPrompt);
+  const detectedIntent = options.intent || detectUserIntent(latestUserPrompt);
+  const intentDirective = formatIntentDirective(detectedIntent, explicitWordLimit);
+  if (intentDirective) {
+    fullSystemDirective += `\n\n${intentDirective}`;
   }
 
   const messages = [{ role: 'system', content: fullSystemDirective }];

@@ -27,11 +27,14 @@ test('Advanced Ultra-Intelligence & Command Suite Verification', async (t) => {
   const testChatId = 'test_chat_888';
 
   await t.test('Uncapped Token Routing & Reasoning', () => {
-    const routing = getAgentRouting('chat');
-    assert.equal(routing.model, 'gemini-3.5-flash-lite');
-    assert.equal(routing.reasoning, 'high');
-    assert.ok(routing.maxInputTokens >= 16000);
-    assert.ok(routing.maxOutputTokens >= 8000);
+    const chatRouting = getAgentRouting('chat');
+    assert.equal(chatRouting.model, 'gemini-3.1-flash-lite-preview');
+    assert.ok(chatRouting.maxInputTokens >= 16000);
+    assert.ok(chatRouting.maxOutputTokens >= 8000);
+
+    const codingRouting = getAgentRouting('coding');
+    assert.equal(codingRouting.model, 'gemini-3.5-flash-lite');
+    assert.equal(codingRouting.reasoning, 'high');
   });
 
   await t.test('Ultra-Intelligence System Directive', () => {

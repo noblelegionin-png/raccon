@@ -196,18 +196,110 @@ export function initDatabase() {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (group_id, setting_key)
     );
+
+    CREATE TABLE IF NOT EXISTS maintenance_broadcast_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      chat_title TEXT,
+      status TEXT NOT NULL,
+      error_message TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      source TEXT NOT NULL,
+      version INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_memories_user ON user_memories(user_id, category);
+
+    CREATE TABLE IF NOT EXISTS user_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      storage_type TEXT NOT NULL,
+      drive_file_id TEXT,
+      local_path TEXT,
+      ai_description TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_files_user ON user_files(user_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS skills_registry (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_name TEXT UNIQUE NOT NULL,
+      description TEXT NOT NULL,
+      instructions TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      permitted_tools TEXT DEFAULT '[]',
+      required_permissions TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'pending',
+      version TEXT DEFAULT '1.0.0',
+      execution_count INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS moderation_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      details TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      reviewer_id TEXT,
+      review_notes TEXT,
+      created_at TEXT NOT NULL,
+      reviewed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS multi_bot_registry (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bot_id TEXT UNIQUE NOT NULL,
+      username TEXT NOT NULL,
+      role_designation TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
   `);
+
+  // Migrate user_profiles schema columns if missing
+  const profileColumns = [
+    { name: 'real_name', type: 'TEXT' },
+    { name: 'nickname', type: 'TEXT' },
+    { name: 'personal_context', type: 'TEXT' },
+    { name: 'reasoning_preference', type: 'TEXT DEFAULT "balanced"' },
+    { name: 'communication_style', type: 'TEXT DEFAULT "natural"' },
+  ];
+  for (const col of profileColumns) {
+    try {
+      db.exec(`ALTER TABLE user_profiles ADD COLUMN ${col.name} ${col.type};`);
+    } catch {
+      // Column already exists
+    }
+  }
 
   // Initialize default configuration rows if missing
   const defaults = {
     master_switch: 'true',
     private_chat_enabled: 'true',
     group_participation_enabled: 'false', // Group participation disabled by default
-    active_model_id: 'gemini-3.5-flash-lite',
+    active_model_id: 'gemini-3.1-flash-lite-preview',
     group_moderation_enabled: 'false',
     future_media_enabled: 'false',
     latency_threshold_ms: '1000',
-    reasoning_effort: 'none'
+    reasoning_effort: 'none',
+    maintenance_mode: 'false',
+    maintenance_announcement_sent: 'false',
   };
 
   const getStmt = db.prepare('SELECT value FROM app_config WHERE key = ?');
@@ -772,33 +864,224 @@ export function getGroupParticipants(chatId) {
   `).all(String(chatId));
 }
 
-// User Profiles & Custom Identity (Roles & Custom Names)
-export function setUserProfile(userId, { customName, relationshipRole, customTitle } = {}) {
+// User Profiles & Custom Identity (Roles, Names & 1,000-Word Personal Context)
+export function setUserProfile(userId, data = {}) {
   const now = new Date().toISOString();
   const existing = getUserProfile(userId);
-  const finalName = customName !== undefined ? customName : (existing?.custom_name || null);
-  const finalRole = relationshipRole !== undefined ? relationshipRole.toLowerCase() : (existing?.relationship_role || 'friend');
-  const finalTitle = customTitle !== undefined ? customTitle : (existing?.custom_title || null);
+
+  const finalName = data.customName !== undefined ? data.customName : (existing?.custom_name || null);
+  const finalRole = data.relationshipRole !== undefined ? data.relationshipRole.toLowerCase() : (existing?.relationship_role || 'friend');
+  const finalTitle = data.customTitle !== undefined ? data.customTitle : (existing?.custom_title || null);
+  const finalRealName = data.realName !== undefined ? data.realName : (existing?.real_name || null);
+  const finalNickname = data.nickname !== undefined ? data.nickname : (existing?.nickname || null);
+  const finalContext = data.personalContext !== undefined ? data.personalContext : (existing?.personal_context || null);
+  const finalReasoning = data.reasoningPreference !== undefined ? data.reasoningPreference : (existing?.reasoning_preference || 'balanced');
+  const finalStyle = data.communicationStyle !== undefined ? data.communicationStyle : (existing?.communication_style || 'natural');
 
   getDb().prepare(`
-    INSERT INTO user_profiles (user_id, custom_name, relationship_role, custom_title, updated_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO user_profiles (
+      user_id, custom_name, relationship_role, custom_title,
+      real_name, nickname, personal_context, reasoning_preference, communication_style,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       custom_name = excluded.custom_name,
       relationship_role = excluded.relationship_role,
       custom_title = excluded.custom_title,
+      real_name = excluded.real_name,
+      nickname = excluded.nickname,
+      personal_context = excluded.personal_context,
+      reasoning_preference = excluded.reasoning_preference,
+      communication_style = excluded.communication_style,
       updated_at = excluded.updated_at
-  `).run(String(userId), finalName, finalRole, finalTitle, now);
+  `).run(
+    String(userId), finalName, finalRole, finalTitle,
+    finalRealName, finalNickname, finalContext, finalReasoning, finalStyle,
+    now
+  );
 
   return getUserProfile(userId);
 }
 
 export function getUserProfile(userId) {
   return getDb().prepare(`
-    SELECT user_id, custom_name, relationship_role, custom_title, updated_at
+    SELECT user_id, custom_name, relationship_role, custom_title,
+           real_name, nickname, personal_context, reasoning_preference, communication_style,
+           updated_at
     FROM user_profiles
     WHERE user_id = ?
   `).get(String(userId));
+}
+
+// -------------------------------------------------------------
+// USER PERSONAL MEMORY NAMESPACE
+// -------------------------------------------------------------
+export function addUserMemory(userId, { category = 'fact', key, value, source = 'user_input' }) {
+  const now = new Date().toISOString();
+  const d = getDb();
+  const cleanKey = (key || 'note').trim();
+  const cleanVal = (value || '').trim();
+
+  // Check existing memory for this key
+  const existing = d.prepare(`
+    SELECT id, version FROM user_memories
+    WHERE user_id = ? AND category = ? AND LOWER(key) = LOWER(?)
+  `).get(String(userId), category, cleanKey);
+
+  if (existing) {
+    const nextVer = (existing.version || 1) + 1;
+    d.prepare(`
+      UPDATE user_memories
+      SET value = ?, source = ?, version = ?, updated_at = ?
+      WHERE id = ?
+    `).run(cleanVal, source, nextVer, now, existing.id);
+    return { id: existing.id, updated: true, version: nextVer };
+  }
+
+  const info = d.prepare(`
+    INSERT INTO user_memories (user_id, category, key, value, source, version, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+  `).run(String(userId), category, cleanKey, cleanVal, source, now, now);
+
+  return { id: Number(info.lastInsertRowid), updated: false, version: 1 };
+}
+
+export function getUserMemories(userId, category = null) {
+  if (category) {
+    return getDb().prepare(`
+      SELECT * FROM user_memories
+      WHERE user_id = ? AND category = ?
+      ORDER BY updated_at DESC
+    `).all(String(userId), category);
+  }
+  return getDb().prepare(`
+    SELECT * FROM user_memories
+    WHERE user_id = ?
+    ORDER BY updated_at DESC
+  `).all(String(userId));
+}
+
+export function updateUserMemory(memoryId, userId, value) {
+  const now = new Date().toISOString();
+  return getDb().prepare(`
+    UPDATE user_memories
+    SET value = ?, updated_at = ?, version = version + 1
+    WHERE id = ? AND user_id = ?
+  `).run(value.trim(), now, memoryId, String(userId));
+}
+
+export function deleteUserMemory(memoryId, userId) {
+  return getDb().prepare(`
+    DELETE FROM user_memories
+    WHERE id = ? AND user_id = ?
+  `).run(memoryId, String(userId));
+}
+
+// -------------------------------------------------------------
+// USER ISOLATED FILES & ATTACHMENTS
+// -------------------------------------------------------------
+export function addUserFile(userId, { filename, mimeType = 'application/octet-stream', fileSize = 0, storageType = 'local', driveFileId = null, localPath = null, aiDescription = null }) {
+  const now = new Date().toISOString();
+  const info = getDb().prepare(`
+    INSERT INTO user_files (user_id, filename, mime_type, file_size, storage_type, drive_file_id, local_path, ai_description, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(String(userId), filename, mimeType, fileSize, storageType, driveFileId, localPath, aiDescription, now);
+  return { id: Number(info.lastInsertRowid), filename };
+}
+
+export function getUserFiles(userId) {
+  return getDb().prepare(`
+    SELECT * FROM user_files
+    WHERE user_id = ?
+    ORDER BY id DESC
+  `).all(String(userId));
+}
+
+export function deleteUserFile(fileId, userId) {
+  return getDb().prepare(`
+    DELETE FROM user_files
+    WHERE id = ? AND user_id = ?
+  `).run(fileId, String(userId));
+}
+
+// -------------------------------------------------------------
+// SKILLS REGISTRY & MODERATION QUEUE
+// -------------------------------------------------------------
+export function registerSkill({ skillName, description, instructions, authorId, permittedTools = [], requiredPermissions = [], status = 'pending', version = '1.0.0' }) {
+  const now = new Date().toISOString();
+  const toolsStr = JSON.stringify(permittedTools);
+  const permsStr = JSON.stringify(requiredPermissions);
+  const info = getDb().prepare(`
+    INSERT INTO skills_registry (skill_name, description, instructions, author_id, permitted_tools, required_permissions, status, version, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(skill_name) DO UPDATE SET
+      description = excluded.description,
+      instructions = excluded.instructions,
+      permitted_tools = excluded.permitted_tools,
+      required_permissions = excluded.required_permissions,
+      status = excluded.status,
+      version = excluded.version,
+      updated_at = excluded.updated_at
+  `).run(skillName, description, instructions, String(authorId), toolsStr, permsStr, status, version, now, now);
+  return { id: Number(info.lastInsertRowid), skillName, status };
+}
+
+export function getSkills(status = null) {
+  if (status) {
+    return getDb().prepare('SELECT * FROM skills_registry WHERE status = ? ORDER BY id DESC').all(status);
+  }
+  return getDb().prepare('SELECT * FROM skills_registry ORDER BY id DESC').all();
+}
+
+export function updateSkillStatus(skillId, status) {
+  const now = new Date().toISOString();
+  return getDb().prepare('UPDATE skills_registry SET status = ?, updated_at = ? WHERE id = ?').run(status, now, skillId);
+}
+
+export function addModerationItem({ itemType, targetId, authorId, details }) {
+  const now = new Date().toISOString();
+  const detStr = typeof details === 'object' ? JSON.stringify(details) : String(details);
+  const info = getDb().prepare(`
+    INSERT INTO moderation_queue (item_type, target_id, author_id, details, status, created_at)
+    VALUES (?, ?, ?, ?, 'pending', ?)
+  `).run(itemType, String(targetId), String(authorId), detStr, now);
+  return { id: Number(info.lastInsertRowid), status: 'pending' };
+}
+
+export function getModerationQueue(status = 'pending') {
+  if (status === 'all') {
+    return getDb().prepare('SELECT * FROM moderation_queue ORDER BY id DESC').all();
+  }
+  return getDb().prepare('SELECT * FROM moderation_queue WHERE status = ? ORDER BY id DESC').all(status);
+}
+
+export function reviewModerationItem(itemId, reviewerId, status, notes = null) {
+  const now = new Date().toISOString();
+  return getDb().prepare(`
+    UPDATE moderation_queue
+    SET status = ?, reviewer_id = ?, review_notes = ?, reviewed_at = ?
+    WHERE id = ?
+  `).run(status, String(reviewerId), notes, now, itemId);
+}
+
+// -------------------------------------------------------------
+// MULTI-BOT REGISTRY
+// -------------------------------------------------------------
+export function registerMultiBot({ botId, username, roleDesignation, status = 'active' }) {
+  const now = new Date().toISOString();
+  return getDb().prepare(`
+    INSERT INTO multi_bot_registry (bot_id, username, role_designation, status, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(bot_id) DO UPDATE SET
+      username = excluded.username,
+      role_designation = excluded.role_designation,
+      status = excluded.status
+  `).run(String(botId), username, roleDesignation, status, now);
+}
+
+export function getMultiBots() {
+  return getDb().prepare('SELECT * FROM multi_bot_registry ORDER BY id ASC').all();
 }
 
 export function setUserCustomName(userId, customName) {
@@ -814,9 +1097,16 @@ export function getActiveUserIdentity(chatId, userId) {
   const participant = chatId ? getGroupParticipant(chatId, userId) : null;
   const isOwner = Boolean(config.telegramOwnerId && String(userId) === String(config.telegramOwnerId));
 
+  const callingName = profile?.nickname || profile?.custom_name || profile?.real_name || (isOwner ? 'Sandy' : (participant?.display_name || 'Friend'));
+
   return {
     userId: String(userId),
-    customName: profile?.custom_name || (isOwner ? 'Sandy' : (participant?.display_name || null)),
+    customName: callingName,
+    realName: profile?.real_name || null,
+    nickname: profile?.nickname || null,
+    personalContext: profile?.personal_context || null,
+    reasoningPreference: profile?.reasoning_preference || 'balanced',
+    communicationStyle: profile?.communication_style || 'natural',
     relationshipRole: profile?.relationship_role || (isOwner ? 'creator' : 'friend'),
     customTitle: profile?.custom_title || (isOwner ? 'Creator & Developer' : null),
     displayName: participant?.display_name || (isOwner ? 'Sandy' : null),

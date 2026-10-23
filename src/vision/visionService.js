@@ -1,6 +1,7 @@
 import { InputFile } from 'grammy';
 import { config } from '../config.js';
 import { googleDriveAdapter } from '../storage/driveAdapter.js';
+import { getAgentRouting } from '../models/modelRouter.js';
 import {
   recordAttachment,
   searchAttachments,
@@ -9,6 +10,29 @@ import {
 } from '../db/index.js';
 
 export class VisionService {
+  constructor() {
+    this._recentImageCache = new Map();
+  }
+
+  /**
+   * Set recent image in cache for follow-up conversational context
+   */
+  setRecentImage(chatId, { fileId, buffer, mimeType = 'image/jpeg', timestamp = Date.now() }) {
+    this._recentImageCache.set(String(chatId), { fileId, buffer, mimeType, timestamp });
+  }
+
+  /**
+   * Get recent image for a chat (valid for 30 minutes)
+   */
+  getRecentImage(chatId) {
+    const entry = this._recentImageCache.get(String(chatId));
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > 30 * 60 * 1000) {
+      this._recentImageCache.delete(String(chatId));
+      return null;
+    }
+    return entry;
+  }
   /**
    * Download a photo file from Telegram Bot API servers
    */

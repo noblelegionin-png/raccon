@@ -4,14 +4,36 @@ import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 // Base priority models
 export const BASE_CATALOGUE = [
   {
-    id: 'gemini-3.5-flash-lite',
-    name: 'Gemini 3.5 Flash Lite',
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
     provider: 'Google / ScaleMax',
-    category: 'General Reasoning & Text',
-    description: 'Ultra-fast low-latency text model optimized for real-time messaging with low reasoning and crisp responses.',
+    category: 'General Reasoning & Research',
+    description: 'Advanced reasoning model with deep search, browsing, image and media capabilities.',
     isDefault: true,
-    capabilities: ['text', 'speed', 'low-latency'],
-    pricing: 'Unknown — verify provider pricing',
+    capabilities: ['chat', 'search', 'browsing', 'media', 'reasoning', 'speed'],
+    pricing: 'Verified available on ScaleMax',
+    supported: true,
+  },
+  {
+    id: 'gemini-3.1-flash-lite-preview',
+    name: 'Gemini 3.1 Flash',
+    provider: 'Google / ScaleMax',
+    category: 'General Reasoning & Chat',
+    description: 'Default high-speed foundation model for responsive conversation and group chat.',
+    isDefault: false,
+    capabilities: ['chat', 'speed', 'reasoning'],
+    pricing: 'Verified available on ScaleMax',
+    supported: true,
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash Light',
+    provider: 'Google / ScaleMax',
+    category: 'Backend Management & Code',
+    description: 'Ultra-efficient reasoning engine for backend operations, tool execution, and code maintenance.',
+    isDefault: false,
+    capabilities: ['management', 'code', 'tools', 'speed'],
+    pricing: 'Verified available on ScaleMax',
     supported: true,
   },
   {
@@ -103,7 +125,7 @@ const latencyCache = new Map();
  * Get active model ID from persistent database
  */
 export function getActiveModelId() {
-  return getConfig('active_model_id', 'gemini-3.5-flash-lite');
+  return getConfig('active_model_id', 'gemini-3.8-flash');
 }
 
 /**

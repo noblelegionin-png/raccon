@@ -55,6 +55,24 @@ import { getAgentRouting, updateAgentRouting, SUPPORTED_REASONING_LEVELS } from 
 import { multiAgentCoordinator, AGENT_ROLES } from '../agents/multiAgentCoordinator.js';
 import { registerAdvancedFeatures } from './advancedFeatures.js';
 import { tryExecuteOwnerIntent } from './ownerIntentDispatcher.js';
+import {
+  isMaintenanceModeActive,
+  enableMaintenanceMode,
+  disableMaintenanceMode,
+  getMaintenanceReport,
+  MAINTENANCE_ANNOUNCEMENT_TEXT,
+} from '../maintenance/maintenanceService.js';
+import {
+  detectUserIntent,
+  extractExplicitWordLimit,
+} from '../conversation/intentDetector.js';
+import { webSearchService } from '../search/webSearchService.js';
+import { deepBrowserService } from '../browser/deepBrowserService.js';
+import { imageSearchService } from '../media/imageSearchService.js';
+import { videoSearchService } from '../media/videoSearchService.js';
+import { productSearchService } from '../shopping/productSearchService.js';
+import { websiteSafetyService } from '../security/websiteSafetyService.js';
+import { documentService } from '../documents/documentService.js';
 
 export function renderGroupControlMessage(chatId, chatTitle = 'This Group') {
   const masterSwitch = getConfig('master_switch', 'true') === 'true';
@@ -441,6 +459,59 @@ export function registerBotHandlers(bot) {
       `📊 *Token Usage Mode: ${nextState ? '🟢 ENABLED' : '⚪ DISABLED'}*\n\n${nextState ? 'Nero will now append output tokens used from your key and execution latency to each reply.' : 'Token telemetry footer hidden.'}`,
       { parse_mode: 'Markdown' }
     );
+  });
+
+  // /edit_mode [on|off|status] - Owner-Only Management Entry Point & Maintenance Coordinator
+  bot.command('edit_mode', async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!isOwner(userId)) {
+      return ctx.reply('⛔ Restricted: /edit_mode is strictly reserved for the authenticated bot owner (Sandy).');
+    }
+
+    const arg = (ctx.match || '').trim().toLowerCase();
+
+    if (arg === 'off' || arg === 'exit' || arg === 'resume') {
+      const res = disableMaintenanceMode();
+      logAudit(userId, 'EDIT_MODE_DEACTIVATED', 'Maintenance disabled via /edit_mode off');
+      return ctx.reply(
+        '🟢 *Edit Mode Deactivated & Service Resumed!*\n\n• System State: 🟢 Operational\n• Normal conversations and community replies are restored.\n• Logged to persistent audit trail.',
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    if (arg === 'status') {
+      const report = getMaintenanceReport();
+      let text = `🛠️ *EDIT MODE & MAINTENANCE STATUS*\n\n`;
+      text += `• *Status*: ${report.active ? '🔴 ACTIVE (Replies Paused)' : '🟢 INACTIVE (Operational)'}\n`;
+      text += `• *Started At*: \`${report.startedAt || 'N/A'}\`\n`;
+      text += `• *Active Management Model*: \`gemini-3.5-flash-lite\`\n`;
+      text += `• *Broadcast Delivery Summary*:\n`;
+      text += `  - Sent: ${report.summary.sent}\n`;
+      text += `  - Failed: ${report.summary.failed}\n`;
+      text += `  - Skipped: ${report.summary.skipped}\n`;
+      text += `  - Total Logged: ${report.summary.total}\n\n`;
+      text += `Use \`/edit_mode on\` to enable or \`/edit_mode off\` to resume normal service.`;
+      return ctx.reply(text, { parse_mode: 'Markdown' });
+    }
+
+    // Default: Enable / Activate Edit Mode
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const result = await enableMaintenanceMode(ctx.api, { reason: 'Activated via /edit_mode command' });
+    logAudit(userId, 'EDIT_MODE_ACTIVATED', `Maintenance active. Delivered to ${result.sentCount} chats`);
+
+    let reply = `🛠️ *Edit Mode Activated!*\n\n`;
+    reply += `• *System State*: 🔴 Maintenance Mode (Ordinary replies paused)\n`;
+    reply += `• *Persistence*: Saved in SQLite (survives process restarts)\n`;
+    reply += `• *Announcement Broadcast Telemetry*:\n`;
+    reply += `  - Sent: ${result.sentCount} chats 🟢\n`;
+    reply += `  - Failed: ${result.failedCount} chats 🔴\n`;
+    reply += `  - Skipped: ${result.skippedCount} chats ⚪\n`;
+    reply += `• *Authorized Controller*: Sandy (\`${userId}\`)\n`;
+    reply += `• *Management & Coder Model*: \`gemini-3.5-flash-lite\`\n\n`;
+    reply += `_Ordinary group & user replies are suspended. Only owner management directives and coding tools are accepted._\n\n`;
+    reply += `Send \`/edit_mode off\` or tell me *"exit edit mode"* to resume service.`;
+
+    return ctx.reply(reply, { parse_mode: 'Markdown' });
   });
 
   // /limit [global|dev] <min> <max> - Dual-tier configurable response length limits
@@ -1415,9 +1486,151 @@ export function registerBotHandlers(bot) {
     }
   };
 
-  // /image, /draw, /generate commands
-  bot.command(['image', 'draw', 'generate'], async (ctx) => {
+  // =========================================================================
+  // PHASE 3 COMMANDS: SEARCH, BROWSING, IMAGES, VIDEOS, SHOPPING, SAFETY, PDF
+  // =========================================================================
+
+  // /search <query> — Advanced Web Research
+  bot.command(['search', 'google', 'web'], async (ctx) => {
+    const query = ctx.match?.trim();
+    if (!query) {
+      return ctx.reply('🔍 *Advanced Web Search*\n\nUsage: `/search <query>`\nExample: `/search latest quantum computing breakthroughs 2026`', { parse_mode: 'Markdown' });
+    }
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const searchData = await webSearchService.search(query);
+    const synthesis = await webSearchService.synthesizeAnswer(query, searchData);
+
+    let reply = `🔍 *Research Results for:* "${query}"\n\n${synthesis.answer}\n\n`;
+    if (synthesis.sources && synthesis.sources.length > 0) {
+      reply += `📚 *Verified Sources:*\n`;
+      for (const s of synthesis.sources) {
+        reply += `• [${s.title}](${s.url}) (${s.source})\n`;
+      }
+    }
+    await ctx.reply(reply, { parse_mode: 'Markdown', link_preview_options: { is_disabled: false } }).catch(() => ctx.reply(reply));
+  });
+
+  // /browse <url> — Deep Website Exploration
+  bot.command(['browse', 'crawl', 'readsite'], async (ctx) => {
+    const url = ctx.match?.trim();
+    if (!url) {
+      return ctx.reply('🕸️ *Deep Website Browsing*\n\nUsage: `/browse <url>`\nExample: `/browse https://nodejs.org`', { parse_mode: 'Markdown' });
+    }
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const browseData = await deepBrowserService.deepBrowse(url);
+    const report = await deepBrowserService.synthesizeBrowsingReport(browseData);
+    await ctx.reply(report, { parse_mode: 'Markdown', link_preview_options: { is_disabled: false } }).catch(() => ctx.reply(report));
+  });
+
+  // /safety <url> — Website Scam & Security Risk Analysis
+  bot.command(['safety', 'scamcheck', 'isitsafe'], async (ctx) => {
+    const url = ctx.match?.trim();
+    if (!url) {
+      return ctx.reply('🛡️ *Website Scam & Safety Audit*\n\nUsage: `/safety <url>`\nExample: `/safety https://example.com`', { parse_mode: 'Markdown' });
+    }
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const analysis = await websiteSafetyService.analyzeWebsite(url);
+    const report = websiteSafetyService.formatReport(analysis);
+    await ctx.reply(report, { parse_mode: 'Markdown' }).catch(() => ctx.reply(report));
+  });
+
+  // /video <query> — Video Discovery & Transcript Summary
+  bot.command(['video', 'videos', 'tutorial'], async (ctx) => {
+    const query = ctx.match?.trim();
+    if (!query) {
+      return ctx.reply('🎬 *Video Discovery & Transcripts*\n\nUsage: `/video <topic>`\nExample: `/video transformer neural network tutorial`', { parse_mode: 'Markdown' });
+    }
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const searchData = await videoSearchService.searchVideos(query);
+    if (!searchData.videos || searchData.videos.length === 0) {
+      return ctx.reply(`❌ No videos found for "${query}".`);
+    }
+
+    const primaryVideo = searchData.videos[0];
+    const summary = await videoSearchService.summarizeVideo(primaryVideo);
+
+    let reply = `🎬 *Video Discovery: [${primaryVideo.title}](${primaryVideo.url})*\n`;
+    reply += `📺 Channel: *${primaryVideo.channel}* · ⏱️ Duration: *${primaryVideo.duration}*\n\n`;
+    reply += `${summary.summaryText}\n\n`;
+    reply += `_${summary.disclaimer}_`;
+
+    await ctx.reply(reply, { parse_mode: 'Markdown', link_preview_options: { is_disabled: false } }).catch(() => ctx.reply(reply));
+  });
+
+  // /shop <query> — Product Discovery & Comparison
+  bot.command(['shop', 'product', 'deal'], async (ctx) => {
+    const query = ctx.match?.trim();
+    if (!query) {
+      return ctx.reply('🛍️ *Product Discovery & Comparison*\n\nUsage: `/shop <item> [under $amount]`\nExample: `/shop noise cancelling headphones under $150`', { parse_mode: 'Markdown' });
+    }
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const shoppingData = await productSearchService.searchProducts(query);
+    const comparison = await productSearchService.compareProducts(query, shoppingData);
+    await ctx.reply(comparison, { parse_mode: 'Markdown', link_preview_options: { is_disabled: false } }).catch(() => ctx.reply(comparison));
+  });
+
+  // /pdf <query or url> — Educational Document Discovery & Download
+  bot.command(['pdf', 'doc', 'paper', 'notes'], async (ctx) => {
+    const input = ctx.match?.trim();
+    if (!input) {
+      return ctx.reply('📚 *Educational Documents & PDFs*\n\nUsage: `/pdf <topic or url>`\nExample: `/pdf machine learning lecture notes` or `/pdf https://example.com/syllabus.pdf`', { parse_mode: 'Markdown' });
+    }
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    if (input.startsWith('http://') || input.startsWith('https://')) {
+      const doc = await documentService.downloadDocument(input);
+      if (!doc.ok) {
+        return ctx.reply(`❌ Failed to retrieve document: ${doc.error}`);
+      }
+      const summary = await documentService.summarizeDocument(doc);
+      try {
+        await ctx.replyWithDocument(new InputFile(doc.buffer, doc.filename), {
+          caption: `📄 *${doc.filename}* (${Math.round(doc.sizeBytes / 1024)} KB)`,
+          parse_mode: 'Markdown',
+        });
+      } catch {}
+      await ctx.reply(summary, { parse_mode: 'Markdown' });
+    } else {
+      const docSearch = await documentService.searchEducationalResources(input);
+      let reply = `📚 *Educational Documents Found for:* "${input}"\n\n`;
+      if (docSearch.documents && docSearch.documents.length > 0) {
+        for (const d of docSearch.documents) {
+          reply += `• [${d.title}](${d.url})\n  ${d.snippet.slice(0, 140)}...\n\n`;
+        }
+        reply += `_Tip: Send \`/pdf <url>\` with any link above to download and summarize it!_`;
+      } else {
+        reply += 'No public study documents found matching this query.';
+      }
+      await ctx.reply(reply, { parse_mode: 'Markdown' });
+    }
+  });
+
+  // /image, /photo, /draw, /generate commands
+  bot.command(['image', 'photo', 'pic', 'draw', 'generate'], async (ctx) => {
     const prompt = ctx.match?.trim();
+    if (!prompt) {
+      return ctx.reply('🖼️ *Image Discovery & Creation*\n\nUsage: `/image <subject>` or `/draw <art prompt>`\nExample: `/image red panda` or `/draw cyberpunk city in rain`', { parse_mode: 'Markdown' });
+    }
+
+    const commandName = ctx.message.text.split(/\s+/)[0].replace(/^\//, '').toLowerCase();
+    const isDraw = ['draw', 'generate'].includes(commandName) || /\b(?:cyberpunk|anime|oil\s+painting|digital\s+art|watercolor|render|illustration)\b/i.test(prompt);
+
+    if (!isDraw) {
+      // Direct real image search & delivery
+      await ctx.replyWithChatAction('upload_photo').catch(() => {});
+      const imgRes = await imageSearchService.searchImages(prompt, 1);
+      if (imgRes.ok && imgRes.images?.length > 0) {
+        const delivered = await imageSearchService.deliverImageToTelegram(ctx, imgRes.images[0], prompt);
+        if (delivered) return;
+      }
+    }
+
+    // Fallback or explicit generative art
     await handleImageGeneration(ctx, prompt);
   });
 
@@ -1719,13 +1932,22 @@ export function registerBotHandlers(bot) {
     });
   });
 
-  // Multimodal Photo Handler (Requirement 8: Image Understanding & Drive Storage)
+  // Multimodal Photo Handler (Master Overhaul: Direct Intake Acknowledgment & Follow-Up Context)
   bot.on('message:photo', async (ctx) => {
     const isPrivate = ctx.chat.type === 'private';
     const caption = ctx.message.caption || '';
     const userId = ctx.from?.id;
     const chatId = String(ctx.chat.id);
+    const userIsOwner = isOwner(userId);
     const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
+
+    // 0. Maintenance Mode Gate
+    if (isMaintenanceModeActive() && !userIsOwner) {
+      if (isPrivate) {
+        return ctx.reply(MAINTENANCE_ANNOUNCEMENT_TEXT);
+      }
+      return; // Silent in groups while maintenance is active
+    }
 
     // In groups, evaluate invocation or direct address (Quiet Group Member)
     if (!isPrivate) {
@@ -1733,22 +1955,49 @@ export function registerBotHandlers(bot) {
       const mentionRegex = new RegExp(`@?${ctx.me?.username}\\b`, 'i');
       const isMentioned = mentionRegex.test(caption);
       const isNamed = /\bnero\b/i.test(caption);
-      const isCommand = /save|drive|explain|read|what\s+is|look/i.test(caption);
+      const isCommand = /save|drive|explain|read|what\s+is|look|describe|ocr/i.test(caption);
 
       if (!isReplyToBot && !isMentioned && !isNamed && !isCommand) {
         return; // Silent observation & archival in raw_messages
       }
     }
 
-    await ctx.replyWithChatAction('typing').catch(() => {});
+    // Download and cache image in conversation context for follow-up questions
+    let photoBuffer = null;
+    try {
+      const downloaded = await visionService.downloadTelegramFile(ctx.api, largestPhoto.file_id);
+      photoBuffer = downloaded.buffer;
+      visionService.setRecentImage(chatId, {
+        fileId: largestPhoto.file_id,
+        buffer: photoBuffer,
+        mimeType: 'image/jpeg',
+      });
+    } catch (err) {
+      console.warn('[PhotoHandler] Cache download error:', err.message);
+    }
 
-    // Save image to Google Drive if requested
-    if (/save|drive/i.test(caption)) {
+    // Clean caption
+    const cleanPrompt = caption
+      .replace(new RegExp(`@?${ctx.me?.username}\\b`, 'gi'), '')
+      .replace(/\bnero\b/gi, '')
+      .trim();
+
+    // 1. If user sent image without a specific question or command, acknowledge receipt exactly as required
+    if (!cleanPrompt || cleanPrompt.length === 0 || /^(hi|hey|hello|look)$/i.test(cleanPrompt)) {
+      return ctx.reply('🖼️ Image received! What would you like to know about it?', {
+        reply_parameters: { message_id: ctx.message.message_id },
+        ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+      });
+    }
+
+    // 2. Save image to Google Drive if requested
+    if (/save|drive/i.test(cleanPrompt)) {
+      await ctx.replyWithChatAction('upload_photo').catch(() => {});
       try {
         const saved = await visionService.saveImageToDrive({
           ctx,
           photoFileId: largestPhoto.file_id,
-          caption,
+          caption: cleanPrompt,
           actorId: String(userId),
         });
 
@@ -1774,14 +2023,10 @@ export function registerBotHandlers(bot) {
       }
     }
 
-    // Otherwise analyze image with multimodal vision model
+    // 3. Otherwise analyze image with multimodal vision model
+    await ctx.replyWithChatAction('typing').catch(() => {});
     try {
-      const { buffer } = await visionService.downloadTelegramFile(ctx.api, largestPhoto.file_id);
-      const cleanPrompt = caption
-        .replace(new RegExp(`@?${ctx.me?.username}\\b`, 'gi'), '')
-        .replace(/\bnero\b/gi, '')
-        .trim();
-
+      const buffer = photoBuffer || (await visionService.downloadTelegramFile(ctx.api, largestPhoto.file_id)).buffer;
       const analysis = await visionService.analyzeImage({
         buffer,
         prompt: cleanPrompt,
@@ -1795,7 +2040,7 @@ export function registerBotHandlers(bot) {
         const compTok = analysis.usage.completion_tokens ?? 0;
         const totalTok = analysis.usage.total_tokens ?? (promptTok + compTok);
         const lat = analysis.latencyMs ? `${analysis.latencyMs}ms` : '';
-        const modelLabel = analysis.model || 'vision';
+        const modelLabel = analysis.model || 'gemini-3.8-flash';
         replyDesc += `\n\n📊 [Token Usage: ${compTok} output tokens (${promptTok} in / ${totalTok} total) • ${modelLabel}${lat ? ' • ' + lat : ''}]`;
       }
 
@@ -1816,6 +2061,16 @@ export function registerBotHandlers(bot) {
   const nonPhotoMedia = ['message:voice', 'message:audio', 'message:sticker', 'message:animation', 'message:document'];
   bot.on(nonPhotoMedia, async (ctx) => {
     const isPrivate = ctx.chat.type === 'private';
+    const userId = ctx.from?.id;
+
+    // Maintenance Mode Gate
+    if (isMaintenanceModeActive() && !isOwner(userId)) {
+      if (isPrivate) {
+        return ctx.reply(MAINTENANCE_ANNOUNCEMENT_TEXT);
+      }
+      return;
+    }
+
     if (!isPrivate) {
       const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me?.id;
       if (!isReplyToBot) {
@@ -1849,7 +2104,15 @@ export function registerBotHandlers(bot) {
     const userId = ctx.from?.id;
     const userIsOwner = isOwner(userId);
 
-    // 0. Assistant Mode Check (Only when explicitly enabled by owner)
+    // 0a. Maintenance Mode Gate (Pauses normal replies when /edit_mode or maintenance is active)
+    if (isMaintenanceModeActive() && !userIsOwner) {
+      if (isPrivate) {
+        return ctx.reply(MAINTENANCE_ANNOUNCEMENT_TEXT);
+      }
+      return; // Silent in groups while maintenance is active
+    }
+
+    // 0b. Assistant Mode Check (Only when explicitly enabled by owner)
     if (isPrivate && !userIsOwner && assistantManager.isEnabled()) {
       const inboxRes = await assistantManager.processIncomingMessage({
         senderId: userId,
@@ -1867,12 +2130,187 @@ export function registerBotHandlers(bot) {
       return; // Message recorded; owner alerted in private chat
     }
 
-    // 0b. Owner Natural Language Direct Action Dispatcher (Sandy's Instant Execution)
+    // 0c. Owner Natural Language Direct Action Dispatcher (Sandy's Instant Execution)
     if (userIsOwner) {
       const dispatched = await tryExecuteOwnerIntent(ctx, text, isPrivate);
       if (dispatched) {
         return; // Executed directly without needing slash commands
       }
+    }
+
+    // 0d. Image Context Follow-Up (Visual Q&A, OCR, Image-to-Prompt, Future Editing Disclaimers)
+    const recentImage = visionService.getRecentImage(chatId);
+    if (recentImage && !text.startsWith('/')) {
+      // Future image editing disclaimer (Strictly honest, zero fake pipeline)
+      if (/\b(?:edit\s+this\s+image|edit\s+the\s+image|photoshop|change\s+the\s+color|remove\s+background|add\s+filter|modify\s+the\s+image)\b/i.test(text)) {
+        return ctx.reply(
+          '🎨 *Image Editing Pipeline Notice*:\n\nImage editing is currently a planned future pipeline and is not yet available in the live system. You can ask me to:\n• Describe or answer questions about the image\n• Extract/transcribe text (OCR)\n• Generate a detailed generative prompt from this image!',
+          { parse_mode: 'Markdown', reply_parameters: { message_id: ctx.message.message_id } }
+        );
+      }
+
+      // OCR / Text extraction
+      if (/\b(?:extract\s+text|read\s+text|ocr|what\s+does\s+it\s+say|transcribe\s+text|text\s+in\s+image)\b/i.test(text)) {
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        const ocrAnalysis = await visionService.analyzeImage({
+          buffer: recentImage.buffer,
+          prompt: 'Extract and transcribe all visible text, numbers, headings, and labels from this image with high accuracy.',
+          chatId: String(chatId),
+        });
+        return ctx.reply(`📝 *Text Extracted from Image*:\n\n${ocrAnalysis.description}`, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        }).catch(() => ctx.reply(ocrAnalysis.description));
+      }
+
+      // Image to Prompt Generation
+      if (/\b(?:create\s+a\s+prompt|make\s+a\s+prompt|image\s+to\s+prompt|prompt\s+from\s+this\s+image|prompt\s+for\s+midjourney|prompt\s+for\s+this)\b/i.test(text)) {
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        const promptAnalysis = await visionService.analyzeImage({
+          buffer: recentImage.buffer,
+          prompt: 'Analyze this image and write a detailed, high-aesthetic text-to-image generation prompt suitable for Midjourney v6, Stable Diffusion, or Imagen 3.',
+          chatId: String(chatId),
+        });
+        return ctx.reply(`🎨 *Generated Image Prompt*:\n\n\`${promptAnalysis.description}\``, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        }).catch(() => ctx.reply(promptAnalysis.description));
+      }
+
+      // Explicit image question (e.g., "what color is it", "who is in this picture", "explain this image")
+      if (/\b(?:in\s+the\s+image|in\s+this\s+picture|on\s+the\s+image|the\s+picture|the\s+photo|describe\s+it|what\s+is\s+in\s+it|tell\s+me\s+about\s+it)\b/i.test(text)) {
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        const followUpAnalysis = await visionService.analyzeImage({
+          buffer: recentImage.buffer,
+          prompt: text,
+          chatId: String(chatId),
+        });
+        return ctx.reply(followUpAnalysis.description, {
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+      }
+    }
+
+    // =========================================================================
+    // PHASE 3: NATURAL LANGUAGE INTENT DISPATCHER
+    // =========================================================================
+
+    // 0e. Website Safety / Scam Check
+    if (websiteSafetyService.isSafetyQuery(text)) {
+      const targetUrl = websiteSafetyService.extractUrl(text);
+      if (targetUrl) {
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        const analysis = await websiteSafetyService.analyzeWebsite(targetUrl);
+        const report = websiteSafetyService.formatReport(analysis);
+        return ctx.reply(report, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        }).catch(() => ctx.reply(report));
+      }
+    }
+
+    // 0f. Direct Real Image Search & Telegram Delivery
+    if (imageSearchService.isVisualQuery(text)) {
+      const subject = imageSearchService.extractImageQuery(text);
+      if (subject && subject.length >= 2) {
+        await ctx.replyWithChatAction('upload_photo').catch(() => {});
+        const imgRes = await imageSearchService.searchImages(subject, 1);
+        if (imgRes.ok && imgRes.images?.length > 0) {
+          const delivered = await imageSearchService.deliverImageToTelegram(ctx, imgRes.images[0], text);
+          if (delivered) return;
+        }
+      }
+    }
+
+    // 0g. Deep Website Browsing
+    const browseMatch = text.match(/^(?:please\s+)?(?:browse|read|explore|crawl|summarize)\s+(?:the\s+)?(?:website|site|url|page)?\s*(https?:\/\/[^\s]+)/i);
+    if (browseMatch && browseMatch[1]) {
+      const targetUrl = browseMatch[1].trim();
+      await ctx.replyWithChatAction('typing').catch(() => {});
+      const browseData = await deepBrowserService.deepBrowse(targetUrl);
+      const report = await deepBrowserService.synthesizeBrowsingReport(browseData, text);
+      return ctx.reply(report, {
+        parse_mode: 'Markdown',
+        reply_parameters: { message_id: ctx.message.message_id },
+      }).catch(() => ctx.reply(report));
+    }
+
+    // 0h. Video Discovery
+    if (videoSearchService.isVideoQuery(text)) {
+      const queryMatch = text.replace(/^(?:please\s+)?(?:find|search|show|get)\s+(?:me\s+)?(?:a\s+)?videos?\s+(?:on|about|for)?\s*/i, '').trim();
+      if (queryMatch.length >= 3) {
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        const vRes = await videoSearchService.searchVideos(queryMatch, 1);
+        if (vRes.ok && vRes.videos?.length > 0) {
+          const primary = vRes.videos[0];
+          const summary = await videoSearchService.summarizeVideo(primary);
+          let reply = `🎬 *Video Discovery: [${primary.title}](${primary.url})*\n`;
+          reply += `📺 Channel: *${primary.channel}* · ⏱️ Duration: *${primary.duration}*\n\n`;
+          reply += `${summary.summaryText}\n\n`;
+          reply += `_${summary.disclaimer}_`;
+          return ctx.reply(reply, {
+            parse_mode: 'Markdown',
+            reply_parameters: { message_id: ctx.message.message_id },
+            link_preview_options: { is_disabled: false },
+          }).catch(() => ctx.reply(reply));
+        }
+      }
+    }
+
+    // 0i. Shopping & Product Discovery
+    if (productSearchService.isShoppingQuery(text)) {
+      const budget = productSearchService.extractBudget(text);
+      const prodQuery = text.replace(/^(?:please\s+)?(?:find|search|compare|recommend|buy|shop)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:best\s+)?/i, '').trim();
+      if (prodQuery.length >= 3) {
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        const shopData = await productSearchService.searchProducts(prodQuery, { budget });
+        const comparison = await productSearchService.compareProducts(text, shopData);
+        return ctx.reply(comparison, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+          link_preview_options: { is_disabled: false },
+        }).catch(() => ctx.reply(comparison));
+      }
+    }
+
+    // 0j. Educational Document / PDF Direct Link
+    if (documentService.isDocumentQuery(text)) {
+      const urlInText = text.match(/https?:\/\/[^\s]+\.(pdf|docx|txt)/i);
+      if (urlInText) {
+        await ctx.replyWithChatAction('upload_document').catch(() => {});
+        const doc = await documentService.downloadDocument(urlInText[0]);
+        if (doc.ok) {
+          const summary = await documentService.summarizeDocument(doc, text);
+          try {
+            await ctx.replyWithDocument(new InputFile(doc.buffer, doc.filename), {
+              caption: `📄 *${doc.filename}* (${Math.round(doc.sizeBytes / 1024)} KB)`,
+              parse_mode: 'Markdown',
+            });
+          } catch {}
+          return ctx.reply(summary, { parse_mode: 'Markdown' });
+        }
+      }
+    }
+
+    // 0k. Explicit Natural Web Search
+    const searchMatch = text.match(/^(?:please\s+)?(?:search|look\s+up|google|search\s+the\s+web)\s+(?:for\s+)?(.+)/i);
+    if (searchMatch && searchMatch[1] && searchMatch[1].trim().length >= 3) {
+      const q = searchMatch[1].trim();
+      await ctx.replyWithChatAction('typing').catch(() => {});
+      const sData = await webSearchService.search(q);
+      const synthesis = await webSearchService.synthesizeAnswer(q, sData);
+      let reply = `🔍 *Search Results for:* "${q}"\n\n${synthesis.answer}\n\n`;
+      if (synthesis.sources?.length > 0) {
+        reply += `📚 *Sources:*\n`;
+        for (const s of synthesis.sources) {
+          reply += `• [${s.title}](${s.url}) (${s.source})\n`;
+        }
+      }
+      return ctx.reply(reply, {
+        parse_mode: 'Markdown',
+        reply_parameters: { message_id: ctx.message.message_id },
+        link_preview_options: { is_disabled: false },
+      }).catch(() => ctx.reply(reply));
     }
 
     // Natural Language Command Execution (Requirement 5)
@@ -2270,18 +2708,25 @@ export function registerBotHandlers(bot) {
       recordModelLatency(activeModel, completion.latencyMs);
 
       const isDev = isOwner(userId);
+      const explicitLimit = extractExplicitWordLimit(promptText);
       const minWords = isDev
         ? parseInt(getConfig('limit_dev_min', '1'), 10)
         : parseInt(getConfig('limit_global_min', '10'), 10);
-      const maxWords = isDev
+      let maxWords = isDev
         ? parseInt(getConfig('limit_dev_max', '500'), 10)
         : parseInt(getConfig('limit_global_max', '100'), 10);
+
+      // If user explicitly specified a word limit (e.g. 300 words), honor it!
+      if (explicitLimit) {
+        maxWords = explicitLimit;
+      }
 
       const validation = validateAndSanitizeResponse(completion.text, promptText, {
         minWords,
         maxWords,
         isDev,
         isOwner: userIsOwner,
+        explicitLimit: Boolean(explicitLimit),
       });
       let replyContent = validation.sanitizedText;
 

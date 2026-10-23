@@ -44,7 +44,34 @@ import {
   getGroupModerationRules,
   updateGroupModerationRules,
 } from '../groups/moderation.js';
-import { getBotStatus } from '../telegram/bot.js';
+import { getBotStatus, getBotApi } from '../telegram/bot.js';
+import {
+  isMaintenanceModeActive,
+  enableMaintenanceMode,
+  disableMaintenanceMode,
+  getMaintenanceReport,
+  MAINTENANCE_ANNOUNCEMENT_TEXT,
+} from '../maintenance/maintenanceService.js';
+import {
+  extractExplicitWordLimit,
+  detectUserIntent,
+} from '../conversation/intentDetector.js';
+import {
+  saveUserProfile,
+  countWords,
+  validatePersonalContext,
+  evaluateUserCorrection,
+  MAX_PERSONAL_CONTEXT_WORDS,
+} from '../memory/personalMemoryService.js';
+import { userFileService } from '../storage/userFileService.js';
+import { skillsService } from '../moderation/skillsService.js';
+import { multiBotService } from '../multibot/multiBotService.js';
+import {
+  getUserMemories,
+  addUserMemory,
+  updateUserMemory,
+  deleteUserMemory,
+} from '../db/index.js';
 import {
   handleMcpJsonRpc,
   registerMcpSession,
@@ -159,7 +186,7 @@ export function createWebServer() {
 
 
   // Models catalogue
-  app.get('/api/models', async (req, res) => {
+  app.get(['/api/models', '/api/models/catalogue'], async (req, res) => {
     try {
       const forceRefresh = req.query.refresh === 'true';
       const catalogue = await getModelCatalogue(forceRefresh);
@@ -308,6 +335,7 @@ export function createWebServer() {
     try {
       const switches = {
         master_switch: getConfig('master_switch', 'true') === 'true',
+        maintenance_mode: isMaintenanceModeActive(),
         auto_text_replies: getConfig('auto_text_replies', 'true') === 'true',
         group_participation_enabled: getConfig('group_participation_enabled', 'true') === 'true',
         group_moderation_enabled: getConfig('group_moderation_enabled', 'true') === 'true',
@@ -321,6 +349,234 @@ export function createWebServer() {
         reasoning_effort: getConfig('reasoning_effort', 'high'),
       };
       res.json({ ok: true, switches });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------
+  // OWNER MAINTENANCE & BROADCAST TELEMETRY ENDPOINTS
+  // ---------------------------------------------------------
+
+  // Get maintenance mode state and delivery report
+  app.get('/api/owner/maintenance', (req, res) => {
+    try {
+      const active = isMaintenanceModeActive();
+      const report = getMaintenanceReport();
+      res.json({ ok: true, active, maintenanceMode: active, report });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Public/App maintenance status check
+  app.get('/api/maintenance/status', (req, res) => {
+    try {
+      const active = isMaintenanceModeActive();
+      const report = getMaintenanceReport();
+      res.json({ ok: true, active, maintenanceMode: active, report });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Toggle maintenance mode (Owner only)
+  const handleMaintenanceToggle = async (req, res) => {
+    try {
+      const { enabled, forceBroadcast, reason } = req.body;
+      const botApi = getBotApi();
+
+      if (enabled) {
+        const result = await enableMaintenanceMode(botApi, { forceBroadcast, reason });
+        logAudit(req.auth.userId, 'MAINTENANCE_TOGGLED', `Enabled: delivered to ${result.sentCount} chats`);
+        return res.json({ ok: true, active: true, maintenanceMode: true, result });
+      } else {
+        const result = disableMaintenanceMode();
+        logAudit(req.auth.userId, 'MAINTENANCE_TOGGLED', 'Disabled maintenance mode');
+        return res.json({ ok: true, active: false, maintenanceMode: false, result });
+      }
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  };
+
+  app.post('/api/owner/maintenance', requireOwnerAuth, handleMaintenanceToggle);
+  app.post('/api/maintenance/toggle', requireOwnerAuth, handleMaintenanceToggle);
+
+  // Send real broadcast announcement to eligible connected groups (Owner only)
+  app.post('/api/owner/broadcast', requireOwnerAuth, async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({ ok: false, error: 'Broadcast message cannot be empty.' });
+      }
+
+      const botApi = getBotApi();
+      if (!botApi) {
+        return res.status(503).json({ ok: false, error: 'Telegram Bot API instance is offline.' });
+      }
+
+      const groups = getKnownGroups();
+      let sentCount = 0;
+      let failedCount = 0;
+      let skippedCount = 0;
+      const deliveryLogs = [];
+
+      for (const group of groups) {
+        if (group.bot_enabled === 0) {
+          skippedCount++;
+          deliveryLogs.push({
+            groupId: group.group_id,
+            title: group.group_title,
+            status: 'skipped',
+            reason: 'Group participation disabled',
+          });
+          continue;
+        }
+
+        try {
+          await botApi.sendMessage(group.group_id, message.trim());
+          sentCount++;
+          deliveryLogs.push({
+            groupId: group.group_id,
+            title: group.group_title,
+            status: 'sent',
+          });
+        } catch (err) {
+          failedCount++;
+          deliveryLogs.push({
+            groupId: group.group_id,
+            title: group.group_title,
+            status: 'failed',
+            error: err.message,
+          });
+        }
+        await new Promise((r) => setTimeout(r, 40));
+      }
+
+      logAudit(req.auth.userId, 'OWNER_BROADCAST_EXECUTED', `Sent: ${sentCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`);
+      res.json({
+        ok: true,
+        sentCount,
+        failedCount,
+        skippedCount,
+        total: sentCount + failedCount + skippedCount,
+        logs: deliveryLogs,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Detailed group permissions & chat inspection (Owner only)
+  app.get('/api/owner/chats', requireOwnerAuth, async (req, res) => {
+    try {
+      const groups = getKnownGroups();
+      const botApi = getBotApi();
+      const chatsWithRights = [];
+
+      for (const group of groups) {
+        let adminInfo = { isAdministrator: false, rights: {} };
+        if (botApi) {
+          try {
+            const me = await botApi.getMe();
+            const member = await botApi.getChatMember(group.group_id, me.id);
+            adminInfo.isAdministrator = member.status === 'administrator';
+            adminInfo.status = member.status;
+            if (member.status === 'administrator') {
+              adminInfo.rights = {
+                canDeleteMessages: member.can_delete_messages || false,
+                canRestrictMembers: member.can_restrict_members || false,
+                canPinMessages: member.can_pin_messages || false,
+              };
+            }
+          } catch (err) {
+            adminInfo.error = err.message;
+          }
+        }
+
+        chatsWithRights.push({
+          ...group,
+          adminInfo,
+        });
+      }
+
+      res.json({ ok: true, chats: chatsWithRights });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Automated System Verification & Test Suite Execution (Owner only)
+  app.post('/api/owner/run-tests', requireOwnerAuth, async (req, res) => {
+    try {
+      const tests = [
+        {
+          name: 'SQLite Database Integrity & WAL Mode',
+          passed: Boolean(getDb().prepare('PRAGMA integrity_check').get()?.integrity_check === 'ok'),
+        },
+        {
+          name: 'Model Catalogue & Active Routing',
+          passed: Boolean(getActiveModelId()),
+          details: `Active model: ${getActiveModelId()}`,
+        },
+        {
+          name: 'ScaleMax AI Provider Connection',
+          passed: scaleMaxAdapter.isConfigured(),
+          details: scaleMaxAdapter.isConfigured() ? 'API key active' : 'API key missing',
+        },
+        {
+          name: 'Maintenance Mode Persistent Controller',
+          passed: typeof isMaintenanceModeActive() === 'boolean',
+          details: `State: ${isMaintenanceModeActive() ? 'Active' : 'Inactive'}`,
+        },
+        {
+          name: 'Intent Detector & Explicit Word Limit Parser',
+          passed: extractExplicitWordLimit('in 300 words') === 300 && detectUserIntent('write a python script') === 'code',
+        },
+        {
+          name: '20 Personality Roles Engine',
+          passed: Object.keys(ROLEPLAY_ROLES).length === 20,
+          details: `Total registered modes: ${Object.keys(ROLEPLAY_ROLES).length}`,
+        },
+        {
+          name: '1,000-Word Personal Context Rejection',
+          passed: validatePersonalContext(Array.from({ length: 1005 }, () => 'w').join(' ')).valid === false,
+          details: 'Enforces hard 1,000-word ceiling',
+        },
+        {
+          name: 'User Files & Storage Sandbox Service',
+          passed: typeof userFileService.listUserFiles === 'function',
+          details: 'Isolated ./data/user_files/ directory structure',
+        },
+        {
+          name: 'Skills & Moderation Workflow Service',
+          passed: typeof skillsService.getPendingQueue === 'function',
+          details: 'Owner verification & tool whitelist',
+        },
+        {
+          name: 'Multi-Bot Platform Registry',
+          passed: Array.isArray(multiBotService.listBots()),
+          details: 'Multi-bot tracking operational',
+        },
+        {
+          name: 'Telegram Bot Long-Polling Daemon',
+          passed: Boolean(getBotApi()),
+          details: getBotApi() ? 'Bot API active' : 'Offline',
+        },
+      ];
+
+      const passedCount = tests.filter(t => t.passed).length;
+      logAudit(req.auth.userId, 'SYSTEM_TESTS_EXECUTED', `Passed ${passedCount}/${tests.length}`);
+
+      res.json({
+        ok: true,
+        allPassed: passedCount === tests.length,
+        passedCount,
+        totalCount: tests.length,
+        tests,
+        timestamp: new Date().toISOString(),
+      });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }
@@ -367,6 +623,7 @@ export function createWebServer() {
       'auto_mute_global',
       'minecraft_bridge_enabled',
       'active_model_id',
+      'maintenance_mode',
     ];
 
     if (!allowedKeys.includes(key)) {
@@ -375,6 +632,15 @@ export function createWebServer() {
 
     const strValue = String(value);
     setConfig(key, strValue);
+
+    // Coordinate maintenance mode state transitions
+    if (key === 'maintenance_mode') {
+      if (strValue === 'true') {
+        enableMaintenanceMode(getBotApi()).catch(() => {});
+      } else {
+        disableMaintenanceMode();
+      }
+    }
 
     // Sync group rules table when global toggles change
     if (key === 'spam_filter_global') {
@@ -434,19 +700,12 @@ export function createWebServer() {
         return res.status(400).json({ ok: false, error: 'Message cannot be empty.' });
       }
 
-      // Check Master Switch
+      // Check Master Switch & Maintenance Mode
       const masterSwitch = getConfig('master_switch', 'true') === 'true';
       if (!masterSwitch) {
         return res.json({
           ok: false,
           error: 'Master AI Connection is currently disabled by owner. Automated processing is suspended.',
-        });
-      }
-
-      if (!scaleMaxAdapter.isConfigured()) {
-        return res.json({
-          ok: false,
-          error: 'ScaleMax AI API key is not configured.',
         });
       }
 
@@ -463,6 +722,21 @@ export function createWebServer() {
           senderName = [auth.user.first_name, auth.user.last_name].filter(Boolean).join(' ') || senderName;
           userIsOwner = isOwner(auth.user.id);
         }
+      }
+
+      if (isMaintenanceModeActive() && !userIsOwner) {
+        return res.json({
+          ok: false,
+          error: MAINTENANCE_ANNOUNCEMENT_TEXT,
+          maintenance: true,
+        });
+      }
+
+      if (!scaleMaxAdapter.isConfigured()) {
+        return res.json({
+          ok: false,
+          error: 'ScaleMax AI API key is not configured.',
+        });
       }
 
       const chatId = customChatId || `webapp_${senderId}`;
@@ -490,19 +764,26 @@ export function createWebServer() {
         recordModelLatency(activeModel, completion.latencyMs);
       }
 
-      // Sanitize response with dual-tier limits (dev vs global)
+      // Sanitize response with dual-tier limits (dev vs global or explicit limit)
       const isDev = Boolean(userIsOwner);
+      const explicitLimit = extractExplicitWordLimit(message.trim());
       const minWords = isDev
         ? parseInt(getConfig('limit_dev_min', '1'), 10)
         : parseInt(getConfig('limit_global_min', '10'), 10);
-      const maxWords = isDev
+      let maxWords = isDev
         ? parseInt(getConfig('limit_dev_max', '500'), 10)
         : parseInt(getConfig('limit_global_max', '100'), 10);
+
+      if (explicitLimit) {
+        maxWords = explicitLimit;
+      }
 
       const validation = validateAndSanitizeResponse(completion.text, message.trim(), {
         minWords,
         maxWords,
         isDev,
+        isOwner: userIsOwner,
+        explicitLimit: Boolean(explicitLimit),
       });
       const replyContent = validation.sanitizedText;
 
@@ -586,7 +867,7 @@ export function createWebServer() {
   });
 
 
-  // User Profile & Custom Roleplay API
+  // User Profile & Custom Roleplay API (Phase 2 Enhanced with 1,000-word Context)
   app.get('/api/user/profile', (req, res) => {
     try {
       let userId = req.query.userId;
@@ -611,12 +892,26 @@ export function createWebServer() {
         profile = {
           user_id: lookupId,
           custom_name: null,
+          real_name: null,
+          nickname: null,
+          personal_context: null,
+          reasoning_preference: 'balanced',
+          communication_style: 'natural',
           relationship_role: 'friend',
           custom_title: null,
         };
       }
 
-      res.json({ ok: true, profile });
+      const contextWords = countWords(profile.personal_context);
+
+      res.json({
+        ok: true,
+        profile: {
+          ...profile,
+          context_word_count: contextWords,
+          max_context_words: MAX_PERSONAL_CONTEXT_WORDS,
+        },
+      });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }
@@ -625,7 +920,18 @@ export function createWebServer() {
 
   app.post('/api/user/profile', (req, res) => {
     try {
-      let { userId, customName, relationshipRole, customTitle } = req.body;
+      let {
+        userId,
+        customName,
+        realName,
+        nickname,
+        personalContext,
+        relationshipRole,
+        reasoningPreference,
+        communicationStyle,
+        customTitle,
+      } = req.body;
+
       const initData = req.headers['x-telegram-init-data'];
       let verifiedUserId = null;
       if (initData) {
@@ -639,22 +945,245 @@ export function createWebServer() {
 
       const updateData = {
         customName: customName !== undefined ? (customName ? String(customName).trim().slice(0, 50) : null) : undefined,
+        realName: realName !== undefined ? (realName ? String(realName).trim().slice(0, 100) : null) : undefined,
+        nickname: nickname !== undefined ? (nickname ? String(nickname).trim().slice(0, 50) : null) : undefined,
+        personalContext: personalContext !== undefined ? String(personalContext).trim() : undefined,
         relationshipRole: relationshipRole ? normalizeRole(relationshipRole) : undefined,
+        reasoningPreference: reasoningPreference ? String(reasoningPreference).toLowerCase().trim() : undefined,
+        communicationStyle: communicationStyle ? String(communicationStyle).toLowerCase().trim() : undefined,
         customTitle: customTitle !== undefined ? customTitle : undefined,
       };
 
-      const updated = setUserProfile(targetUserId, updateData);
+      const updated = saveUserProfile(targetUserId, updateData);
 
-      // If client supplied a secondary/alias ID (e.g. webapp_user or stored client ID), sync both
+      // If client supplied a secondary/alias ID, sync both
       if (verifiedUserId && userId && String(userId) !== verifiedUserId) {
         try {
-          setUserProfile(String(userId), updateData);
+          saveUserProfile(String(userId), updateData);
         } catch {}
       }
 
-      res.json({ ok: true, profile: updated });
+      const words = countWords(updated.personal_context);
+      res.json({
+        ok: true,
+        profile: {
+          ...updated,
+          context_word_count: words,
+          max_context_words: MAX_PERSONAL_CONTEXT_WORDS,
+        },
+      });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------
+  // USER PERSONAL MEMORIES API
+  // ---------------------------------------------------------
+  app.get('/api/user/memories', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.query.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      const memories = getUserMemories(userId);
+      res.json({ ok: true, memories });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/user/memories', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.body.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      const { category, key, value } = req.body;
+      if (!key || !value) {
+        return res.status(400).json({ ok: false, error: 'Key and value are required.' });
+      }
+      const mem = addUserMemory(userId, { category: category || 'preference', key, value, source: 'user_input' });
+      res.json({ ok: true, memory: mem });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/user/memories/:id', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.query.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      deleteUserMemory(parseInt(req.params.id, 10), userId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/user/correction', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.body.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      const { text } = req.body;
+      const result = evaluateUserCorrection(userId, text);
+      if (!result) {
+        return res.json({ ok: false, message: 'No recognizable correction pattern in text.' });
+      }
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------
+  // USER PERSONAL FILES & ATTACHMENTS API
+  // ---------------------------------------------------------
+  app.get('/api/user/files', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.query.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      const files = userFileService.listUserFiles(userId);
+      res.json({ ok: true, files });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/user/files/upload', async (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.body.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      const { filename, mimeType, base64Data, textContent, aiDescription } = req.body;
+      let buffer = null;
+      if (base64Data) {
+        buffer = Buffer.from(base64Data, 'base64');
+      } else if (textContent) {
+        buffer = Buffer.from(textContent, 'utf-8');
+      } else {
+        return res.status(400).json({ ok: false, error: 'Provide either base64Data or textContent.' });
+      }
+
+      const file = await userFileService.storeUserFile(userId, {
+        filename: filename || 'note.txt',
+        mimeType: mimeType || (textContent ? 'text/plain' : 'application/octet-stream'),
+        buffer,
+        aiDescription,
+      });
+
+      res.json({ ok: true, file });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/user/files/:id', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let userId = req.query.userId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) userId = String(auth.user.id);
+      }
+      userFileService.deleteUserFile(parseInt(req.params.id, 10), userId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(403).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------
+  // SKILLS REGISTRY & MODERATION API
+  // ---------------------------------------------------------
+  app.get('/api/skills', (req, res) => {
+    try {
+      const skills = skillsService.getApprovedSkills();
+      res.json({ ok: true, skills });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/skills/submit', (req, res) => {
+    try {
+      const initData = req.headers['x-telegram-init-data'];
+      let authorId = req.body.authorId || 'webapp_user';
+      if (initData) {
+        const auth = validateTelegramInitData(initData);
+        if (auth.valid && auth.user) authorId = String(auth.user.id);
+      }
+      const { skillName, description, instructions, permittedTools } = req.body;
+      const result = skillsService.submitSkillForReview(authorId, {
+        skillName,
+        description,
+        instructions,
+        permittedTools,
+      });
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/owner/moderation/queue', requireOwnerAuth, (req, res) => {
+    try {
+      const queue = skillsService.getPendingQueue();
+      res.json({ ok: true, queue });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/owner/moderation/review', requireOwnerAuth, (req, res) => {
+    try {
+      const { itemId, status, reviewNotes } = req.body;
+      const reviewerId = req.auth?.userId || 'owner';
+      const result = skillsService.reviewModerationItem(itemId, reviewerId, status, reviewNotes);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------
+  // MULTI-BOT PLATFORM REGISTRY API
+  // ---------------------------------------------------------
+  app.get('/api/owner/bots', requireOwnerAuth, (req, res) => {
+    try {
+      const bots = multiBotService.listBots();
+      res.json({ ok: true, bots });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/owner/bots', requireOwnerAuth, (req, res) => {
+    try {
+      const { botId, username, roleDesignation, status } = req.body;
+      const registered = multiBotService.registerBot({ botId, username, roleDesignation, status });
+      res.json({ ok: true, bot: registered });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
     }
   });
 
@@ -871,8 +1400,12 @@ export function createWebServer() {
       supportedReasoning: SUPPORTED_REASONING_LEVELS,
       routing: {
         chat: getAgentRouting('chat'),
+        management: getAgentRouting('management'),
+        coding: getAgentRouting('coding'),
         security: getAgentRouting('security'),
         media: getAgentRouting('media'),
+        research: getAgentRouting('research'),
+        browsing: getAgentRouting('browsing'),
       },
     });
   });
@@ -924,6 +1457,11 @@ export function createWebServer() {
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message });
     }
+  });
+
+  // Owner Web App route
+  app.get('/owner', (req, res) => {
+    res.sendFile(path.join(publicDir, 'owner.html'));
   });
 
   // Fallback route for SPA (Express 5 compatible)

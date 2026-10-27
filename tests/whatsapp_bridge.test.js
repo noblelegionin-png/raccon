@@ -356,4 +356,33 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.match(masterDirective, /Gemini 3\.8 Flash/i);
     assert.match(masterDirective, /MAXIMUM \(HIGH\) reasoning/i);
   });
+
+  await t.test('19. Owner Chat Buttons & Quick Action Execution', async () => {
+    assert.ok(typeof whatsAppService.sendMasterBotMenu === 'function');
+    assert.ok(typeof whatsAppService.executeOwnerAction === 'function');
+
+    // Test executeOwnerAction for diagnostics
+    let sentDiagnostic = '';
+    const originalSafeSend = whatsAppService.safeSendMessage;
+    whatsAppService.safeSendMessage = async (jid, payload) => {
+      sentDiagnostic = payload.text || '';
+      return { key: { id: 'test_msg_id' } };
+    };
+
+    try {
+      await whatsAppService.executeOwnerAction('2', 'wa_sandy_master');
+      assert.match(sentDiagnostic, /SYSTEM DIAGNOSTICS/i);
+      assert.match(sentDiagnostic, /gemini-3.8-flash/i);
+
+      // Test executeOwnerAction for routine
+      await whatsAppService.executeOwnerAction('3', 'wa_sandy_master');
+      assert.match(sentDiagnostic, /ROUTINE & GAMING/i);
+
+      // Test executeOwnerAction for ping
+      await whatsAppService.executeOwnerAction('6', 'wa_sandy_master');
+      assert.match(sentDiagnostic, /Pong!/i);
+    } finally {
+      whatsAppService.safeSendMessage = originalSafeSend;
+    }
+  });
 });

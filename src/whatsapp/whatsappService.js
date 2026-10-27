@@ -4,6 +4,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers,
   downloadMediaMessage,
+  decryptPollVote,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
@@ -11,6 +12,7 @@ import qrcodeTerminal from 'qrcode-terminal';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import {
@@ -45,6 +47,174 @@ class WhatsAppService {
     this.lastActivity = null;
     this.isInitializing = false;
     this.sentMessageIds = new Set();
+    this.activePolls = new Map();
+  }
+
+  async sendMasterBotMenu(remoteJid, quotedMsg = null) {
+    const options = [
+      '📬 Urgent Inbox',
+      '📊 System Diagnostics',
+      '🎮 Routine & Gaming',
+      '🛠️ Toggle Maintenance',
+      '📝 View Notes',
+      '🏓 Latency Ping',
+    ];
+
+    const sent = await this.safeSendMessage(
+      remoteJid,
+      {
+        poll: {
+          name: '👑 NERO MASTERBOT — QUICK ACTION BUTTONS',
+          values: options,
+          selectableCount: 1,
+        },
+      },
+      quotedMsg ? { quoted: quotedMsg } : {}
+    );
+
+    if (sent?.key?.id) {
+      const pollEncKey =
+        sent.message?.messageContextInfo?.messageSecret ||
+        sent.message?.pollCreationMessageV3?.messageSecret ||
+        sent.message?.pollCreationMessage?.messageSecret;
+      this.activePolls.set(sent.key.id, {
+        options,
+        pollEncKey,
+        createdAt: Date.now(),
+      });
+      if (this.activePolls.size > 50) {
+        const oldestKey = this.activePolls.keys().next().value;
+        this.activePolls.delete(oldestKey);
+      }
+    }
+
+    const menuText =
+      `👑 *NERO MASTERBOT — OWNER CONTROL DECK*\n\n` +
+      `Tap any action button in the poll above, or reply with the number:\n\n` +
+      `1️⃣ \`1\` — 📬 *Urgent Inbox* (Check requests left by contacts)\n` +
+      `2️⃣ \`2\` — 📊 *System Diagnostics* (RAM, CPU, Uptime & Latency)\n` +
+      `3️⃣ \`3\` — 🎮 *Routine & Gaming* (Minecraft realm / routine status)\n` +
+      `4️⃣ \`4\` — 🛠️ *Maintenance Mode* (Pause / Resume public bot)\n` +
+      `5️⃣ \`5\` — 📝 *Persistent Notes* (View / manage saved notes)\n` +
+      `6️⃣ \`6\` — 🏓 *Latency Ping* (Test real-time bridge responsiveness)\n\n` +
+      `_Type \`menu\` or \`/buttons\` anytime to summon these buttons!_`;
+
+    await this.safeSendMessage(remoteJid, { text: menuText }, quotedMsg ? { quoted: quotedMsg } : {});
+  }
+
+  async executeOwnerAction(actionType, remoteJid, quotedMsg = null) {
+    const act = String(actionType).toLowerCase().trim();
+
+    // 1. Urgent Inbox
+    if (act === '1' || act === '[1]' || act.includes('urgent') || act.includes('inbox')) {
+      const urgentList = sandyStatusService.getUrgentRequests(10);
+      recordUserMessage('wa_sandy_master', 'Action: Check Urgent Inbox');
+      if (urgentList.length === 0) {
+        const emptyText = "Boss Sandy! Abhi koi pending urgent talk request nahi hai. All clear! ✨";
+        recordAssistantMessage('wa_sandy_master', emptyText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: emptyText }, quotedMsg ? { quoted: quotedMsg } : {});
+        return;
+      }
+      let report = "📬 *NERO MASTERBOT — SANDY'S URGENT INBOX*\n\nHere are the latest urgent talk requests left by contacts:\n\n";
+      for (const item of urgentList) {
+        report += `• *+${item.sender_number}* (${item.sender_name || 'Contact'}):\n  "${item.message_text}"\n  _Received: ${new Date(item.created_at).toLocaleString()}_\n\n`;
+      }
+      report += `_Reply with:_ \`/wa_send <number> <your reply>\``;
+      recordAssistantMessage('wa_sandy_master', report, 100, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: report }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 2. System Diagnostics (sysinfo)
+    if (act === '2' || act === '[2]' || act.includes('diagnostic') || act.includes('telemetry') || act.includes('sysinfo')) {
+      const memoryUsage = process.memoryUsage();
+      const uptimeSec = Math.floor(process.uptime());
+      const hours = Math.floor(uptimeSec / 3600);
+      const minutes = Math.floor((uptimeSec % 3600) / 60);
+      const seconds = uptimeSec % 60;
+      const sysText =
+        `⚡ *NERO LABS — MASTERBOT SYSTEM DIAGNOSTICS*\n\n` +
+        `• *Process Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
+        `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
+        `• *RAM Heap Used:* ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB\n` +
+        `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Coder & Manager)\n` +
+        `• *Public Talk Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
+        `• *Total Processed Messages:* ${this.messageCount}\n` +
+        `• *Active Socket Status:* 🟢 ${this.status.toUpperCase()}\n` +
+        `• *OS Platform:* ${os.platform()} (${os.arch()})\n` +
+        `• *Host Memory Free:* ${Math.round(os.freemem() / 1024 / 1024)} MB / ${Math.round(os.totalmem() / 1024 / 1024)} MB\n\n` +
+        `_All systems nominal and linked to MasterBot console! ✨_`;
+      recordUserMessage('wa_sandy_master', 'Action: System Diagnostics');
+      recordAssistantMessage('wa_sandy_master', sysText, 100, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: sysText }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 3. Sandy Routine & Gaming
+    if (act === '3' || act === '[3]' || act.includes('routine') || act.includes('gaming') || act.includes('status')) {
+      const s = sandyStatusService.getStatus();
+      const routineReport =
+        `🎮 *SANDY'S REAL-TIME ROUTINE & GAMING STATUS*\n\n` +
+        `• *Current Activity:* "${s.activity || 'Working'}"\n` +
+        `• *Availability:* \`${s.availability || 'busy'}\`\n` +
+        `• *Gaming Realm/Server:* "${s.game_info || 'None specified'}"\n` +
+        `• *Instructions for Callers:* "${s.contact_instructions || 'Take priority message if urgent.'}"\n\n` +
+        `_💡 To update your live status, just text me naturally, e.g.:_\n` +
+        `• "I am playing Minecraft on Hypixel realm: mc.hypixel.net"\n` +
+        `• "Studying till 5pm"\n` +
+        `• "Abhi so raha hu wake me at 7"`;
+      recordUserMessage('wa_sandy_master', 'Action: View Routine');
+      recordAssistantMessage('wa_sandy_master', routineReport, 80, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: routineReport }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 4. Maintenance Mode Toggle
+    if (act === '4' || act === '[4]' || act.includes('maintenance')) {
+      const isMaint = isMaintenanceModeActive();
+      if (isMaint) {
+        await disableMaintenanceMode();
+        const msgText = "🟢 *Maintenance Mode DEACTIVATED.* Public chat replies are now fully LIVE for all contacts! 🚀";
+        recordUserMessage('wa_sandy_master', 'Action: Disable Maintenance Mode');
+        recordAssistantMessage('wa_sandy_master', msgText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: msgText }, quotedMsg ? { quoted: quotedMsg } : {});
+      } else {
+        await enableMaintenanceMode();
+        const msgText = "🛠️ *Maintenance Mode ACTIVATED.* Public chat replies for contacts are temporarily paused while you work! 🔒";
+        recordUserMessage('wa_sandy_master', 'Action: Enable Maintenance Mode');
+        recordAssistantMessage('wa_sandy_master', msgText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: msgText }, quotedMsg ? { quoted: quotedMsg } : {});
+      }
+      return;
+    }
+
+    // 5. Notes
+    if (act === '5' || act === '[5]' || act.includes('note')) {
+      const notes = getUserNotes('sandy');
+      recordUserMessage('wa_sandy_master', 'Action: View Notes');
+      if (!notes || notes.length === 0) {
+        const noNotes = "📝 Boss Sandy, your persistent notepad is currently empty. You can add one by texting: `add note: <your text>`";
+        recordAssistantMessage('wa_sandy_master', noNotes, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: noNotes }, quotedMsg ? { quoted: quotedMsg } : {});
+        return;
+      }
+      let notesReport = `📝 *SANDY'S PERSISTENT NOTES (${notes.length})*:\n\n`;
+      for (const n of notes.slice(0, 10)) {
+        notesReport += `• [#${n.id}] ${n.note_text} _(${new Date(n.created_at).toLocaleDateString()})_\n`;
+      }
+      recordAssistantMessage('wa_sandy_master', notesReport, 60, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: notesReport }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 6. Latency Ping
+    if (act === '6' || act === '[6]' || act.includes('ping')) {
+      const pingText = `Pong! 🏓 MasterBot is live on *gemini-3.8-flash* (High Reasoning) with active low-latency dual bridge. 🟢`;
+      recordUserMessage('wa_sandy_master', 'Action: Latency Ping');
+      recordAssistantMessage('wa_sandy_master', pingText, 20, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: pingText }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
   }
 
   async safeSendMessage(jid, content, options = {}) {
@@ -229,6 +399,41 @@ class WhatsAppService {
 
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || remoteJid === 'status@broadcast') return;
+
+    // Handle Interactive WhatsApp Poll Button Clicks
+    if (msg.message?.pollUpdateMessage) {
+      const pollKey = msg.message.pollUpdateMessage.pollCreationMessageKey;
+      const pollId = pollKey?.id;
+      const pollData = this.activePolls.get(pollId);
+      if (pollData && pollData.pollEncKey) {
+        try {
+          const voterJid = msg.key.participant || msg.key.remoteJid;
+          const voteMsg = decryptPollVote(
+            msg.message.pollUpdateMessage.vote,
+            {
+              pollCreatorJid: this.sock?.user?.id || voterJid,
+              pollMsgId: pollId,
+              pollEncKey: pollData.pollEncKey,
+              voterJid,
+            }
+          );
+          if (voteMsg?.selectedOptions?.length > 0) {
+            const selectedBytes = voteMsg.selectedOptions[0];
+            const matchedOption = pollData.options.find((opt) => {
+              const h = crypto.createHash('sha256').update(opt).digest();
+              return Buffer.compare(Buffer.from(h), Buffer.from(selectedBytes)) === 0;
+            });
+            if (matchedOption) {
+              await this.executeOwnerAction(matchedOption, remoteJid, msg);
+              return;
+            }
+          }
+        } catch (pollErr) {
+          console.warn('[WhatsApp Poll Decrypt Warning]:', pollErr.message);
+        }
+      }
+      return;
+    }
 
     // Extract image payload if present
     const imageMessage =
@@ -492,6 +697,20 @@ class WhatsAppService {
     // 👑 MASTERBOT CONSOLE (SANDY'S PERSONAL CHAT)
     // ==========================================
     if (isSandy) {
+      // 0. MasterBot Interactive Action Menu & Button Triggers
+      if (/^(?:menu|\/menu|buttons|\/buttons|controls|\/controls|actions|\/actions|help|\/help)$/i.test(promptText)) {
+        await this.sendMasterBotMenu(remoteJid, msg);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 1-tap numeric button shortcut: 1, 2, 3, 4, 5, 6
+      if (/^\[?[1-6]\]?$/.test(promptText)) {
+        await this.executeOwnerAction(promptText.replace(/[^0-9]/g, ''), remoteJid, msg);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
       // 1. Natural Language Status / Routine Update
       const statusUpdate = sandyStatusService.parseNaturalLanguageUpdate(promptText);
       if (statusUpdate.updated) {

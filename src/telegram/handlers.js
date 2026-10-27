@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 import { whatsAppService } from '../whatsapp/whatsappService.js';
-import { getConfig, setConfig, isUpdateProcessed, markUpdateProcessed, logAudit } from '../db/index.js';
+import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
+import { getConfig, setConfig, isUpdateProcessed, markUpdateProcessed, logAudit, getUserNotes } from '../db/index.js';
 import { isOwner } from '../auth/accessControl.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId, setActiveModelId, BASE_CATALOGUE, recordModelLatency } from '../models/catalogue.js';
@@ -1027,6 +1028,107 @@ export function registerBotHandlers(bot) {
     } catch (err) {
       await ctx.reply(`⚠️ Could not generate QR image: ${err.message}`);
     }
+  });
+
+  // /menu /controls /buttons: Interactive Owner Button Deck for Telegram
+  bot.command(['menu', 'controls', 'buttons'], async (ctx) => {
+    const userIsOwner = isOwner(ctx.from?.id);
+    if (!userIsOwner) {
+      return ctx.reply('🔒 This interactive console is reserved for Sandy (Owner).');
+    }
+
+    const webAppUrl = config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
+    const keyboard = new InlineKeyboard()
+      .text('📬 Urgent Inbox', 'owner_btn_inbox')
+      .text('📊 System Telemetry', 'owner_btn_telemetry')
+      .row()
+      .text('🎮 Sandy Routine', 'owner_btn_routine')
+      .text('🛠️ Toggle Maintenance', 'owner_btn_maintenance')
+      .row()
+      .text('📝 View Notes', 'owner_btn_notes')
+      .text('🔄 WhatsApp QR', 'wa_send_qr')
+      .row()
+      .webApp('👑 Open Owner Console', `${webAppUrl.replace(/\/+$/, '')}/owner.html`);
+
+    return ctx.reply(
+      `👑 *NERO LABS — OWNER INTERACTIVE ACTION DECK*\n\nTap any button below to execute instant controls across WhatsApp & Telegram:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      }
+    );
+  });
+
+  bot.callbackQuery('owner_btn_inbox', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const urgentList = sandyStatusService.getUrgentRequests(10);
+    if (urgentList.length === 0) {
+      return ctx.reply('Boss Sandy! Abhi koi pending urgent talk request nahi hai. All clear! ✨');
+    }
+    let report = "📬 *NERO MASTERBOT — SANDY'S URGENT INBOX*\n\n";
+    for (const item of urgentList) {
+      report += `• *+${item.sender_number}* (${item.sender_name || 'Contact'}):\n  "${item.message_text}"\n  _Received: ${new Date(item.created_at).toLocaleString()}_\n\n`;
+    }
+    report += `_Reply with:_ \`/wa_send <number> <your reply>\``;
+    return ctx.reply(report, { parse_mode: 'Markdown' });
+  });
+
+  bot.callbackQuery('owner_btn_telemetry', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const status = whatsAppService.getStatus();
+    const memoryUsage = process.memoryUsage();
+    const uptimeSec = Math.floor(process.uptime());
+    const hours = Math.floor(uptimeSec / 3600);
+    const minutes = Math.floor((uptimeSec % 3600) / 60);
+
+    const text =
+      `📊 *NERO TELEMETRY & SYSTEM STATUS*\n\n` +
+      `• *Process Uptime:* ${hours}h ${minutes}m\n` +
+      `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
+      `• *WhatsApp Status:* 🟢 \`${status.status}\`\n` +
+      `• *WhatsApp Messages:* ${status.messageCount}\n` +
+      `• *Public Talk Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
+      `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Coder & Manager)\n` +
+      `• *Device Linked:* \`${status.connectedUser?.name || 'Waiting for scan'}\``;
+    return ctx.reply(text, { parse_mode: 'Markdown' });
+  });
+
+  bot.callbackQuery('owner_btn_routine', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const s = sandyStatusService.getStatus();
+    const text =
+      `🎮 *SANDY'S REAL-TIME ROUTINE & GAMING STATUS*\n\n` +
+      `• *Activity:* "${s.activity || 'Working'}"\n` +
+      `• *Availability:* \`${s.availability || 'busy'}\`\n` +
+      `• *Realm/Server:* "${s.game_info || 'None specified'}"\n` +
+      `• *Instructions:* "${s.contact_instructions || 'Take priority request.'}"\n\n` +
+      `_💡 To update, simply tell Nero on WhatsApp or Telegram!_`;
+    return ctx.reply(text, { parse_mode: 'Markdown' });
+  });
+
+  bot.callbackQuery('owner_btn_maintenance', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const isMaint = isMaintenanceModeActive();
+    if (isMaint) {
+      await disableMaintenanceMode();
+      return ctx.reply('🟢 *Maintenance Mode DEACTIVATED.* Public replies are now fully live for all contacts! 🚀', { parse_mode: 'Markdown' });
+    } else {
+      await enableMaintenanceMode();
+      return ctx.reply('🛠️ *Maintenance Mode ACTIVATED.* Public replies are temporarily paused for contacts while you work! 🔒', { parse_mode: 'Markdown' });
+    }
+  });
+
+  bot.callbackQuery('owner_btn_notes', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const notes = getUserNotes('sandy');
+    if (!notes || notes.length === 0) {
+      return ctx.reply('📝 Boss Sandy, your persistent notepad is currently empty.');
+    }
+    let notesReport = `📝 *SANDY'S PERSISTENT NOTES (${notes.length})*:\n\n`;
+    for (const n of notes.slice(0, 10)) {
+      notesReport += `• [#${n.id}] ${n.note_text} _(${new Date(n.created_at).toLocaleDateString()})_\n`;
+    }
+    return ctx.reply(notesReport, { parse_mode: 'Markdown' });
   });
 
   // /mcp command: Model Context Protocol bridge status & live telemetry

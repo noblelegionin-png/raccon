@@ -13,17 +13,20 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import {
-  buildChatContext,
   recordUserMessage,
   recordAssistantMessage,
   clearConversation,
 } from '../conversation/manager.js';
-import { logAudit } from '../db/index.js';
+import { logAudit, getRecentConversation } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { getBotApi } from '../telegram/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
 import { visionService } from '../vision/visionService.js';
 import { extractExplicitWordLimit, detectUserIntent } from '../conversation/intentDetector.js';
+import { sandyStatusService } from './sandyStatusService.js';
+import { mediaManager } from './mediaManager.js';
+import { buildWhatsAppChatContext, buildWhatsAppDirective } from './whatsappPersona.js';
+import { updateAgentRouting } from '../models/modelRouter.js';
 
 class WhatsAppService {
   constructor() {
@@ -39,6 +42,20 @@ class WhatsAppService {
     this.messageCount = 0;
     this.lastActivity = null;
     this.isInitializing = false;
+    this.sentMessageIds = new Set();
+  }
+
+  async safeSendMessage(jid, content, options = {}) {
+    if (!this.sock) return null;
+    const sent = await this.sock.sendMessage(jid, content, options);
+    if (sent?.key?.id) {
+      this.sentMessageIds.add(sent.key.id);
+      if (this.sentMessageIds.size > 2000) {
+        const ids = Array.from(this.sentMessageIds).slice(0, 500);
+        ids.forEach((id) => this.sentMessageIds.delete(id));
+      }
+    }
+    return sent;
   }
 
   getAuthDir() {
@@ -206,12 +223,22 @@ class WhatsAppService {
 
   async handleIncomingMessage(msg) {
     if (!msg.message) return;
+    if (msg.key?.id && this.sentMessageIds.has(msg.key.id)) return;
+
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || remoteJid === 'status@broadcast') return;
 
     // Extract image payload if present
-    const imageMessage = msg.message.imageMessage || (msg.message.documentMessage?.mimetype?.startsWith('image/') ? msg.message.documentMessage : null);
+    const imageMessage =
+      msg.message.imageMessage ||
+      (msg.message.documentMessage?.mimetype?.startsWith('image/') ? msg.message.documentMessage : null);
     const isImage = Boolean(imageMessage);
+
+    // Extract video payload if present
+    const videoMessage =
+      msg.message.videoMessage ||
+      (msg.message.documentMessage?.mimetype?.startsWith('video/') ? msg.message.documentMessage : null);
+    const isVideo = Boolean(videoMessage);
 
     // Extract text content or caption
     const text =
@@ -223,7 +250,7 @@ class WhatsAppService {
       '';
 
     const trimmed = (text || '').trim();
-    if (!trimmed && !isImage) return;
+    if (!trimmed && !isImage && !isVideo) return;
 
     this.messageCount++;
     this.lastActivity = new Date().toISOString();
@@ -234,42 +261,52 @@ class WhatsAppService {
     const senderName = msg.pushName || senderNumber || 'Friend';
     const isFromMe = Boolean(msg.key.fromMe);
 
-    // Self-message guard (when user sends message from the linked phone)
-    if (isFromMe) {
+    const myPhone = (this.sock?.user?.id || '').split(':')[0].replace(/[^0-9]/g, '');
+    const ownerConfigPhone = (config.whatsAppOwnerNumber || '').replace(/[^0-9]/g, '');
+    const remoteClean = (remoteJid || '').replace(/[^0-9]/g, '');
+
+    // True self-chat in WhatsApp "Message Yourself":
+    const isSelfChat = isFromMe && (
+      (Boolean(myPhone) && remoteClean.includes(myPhone)) ||
+      (Boolean(ownerConfigPhone) && remoteClean.includes(ownerConfigPhone))
+    );
+
+    const isOwnerSender = isSelfChat ||
+      (Boolean(ownerConfigPhone) && senderNumber === ownerConfigPhone) ||
+      (Boolean(myPhone) && senderNumber === myPhone);
+
+    const isSandy = isOwnerSender;
+
+    // Self-message guard:
+    // If sent from the linked phone to someone else or a group, only respond if explicitly commanded
+    if (isFromMe && !isSelfChat) {
       const lower = trimmed.toLowerCase();
-      // Only respond to self if explicitly commanded to prevent infinite echo
-      const isSelfTrigger =
+      const isExplicitTrigger =
         lower.startsWith('!nero') ||
         lower.startsWith('/nero') ||
         lower.startsWith('.nero') ||
         lower.startsWith('nero ') ||
-        lower.startsWith('/ai ') ||
-        (isImage && lower.length > 0);
+        lower.startsWith('/ai ');
 
-      if (!isSelfTrigger) {
+      if (!isExplicitTrigger) {
         return;
       }
     }
-
-    // Owner check
-    const isOwnerSender = Boolean(
-      (config.whatsAppOwnerNumber && senderNumber.includes(config.whatsAppOwnerNumber.replace(/[^0-9]/g, ''))) ||
-      isFromMe
-    );
 
     // Mode check: if owner_only mode is on and sender is not owner, skip
     if (config.whatsAppMode === 'owner_only' && !isOwnerSender) {
       return;
     }
 
-    // Group message check: only respond if mentioned, commanded, or sent image with mention
+    // Group message check: only respond if mentioned, commanded, or sent media
     if (isGroup) {
       const isMentioned =
         trimmed.toLowerCase().includes('nero') ||
         trimmed.startsWith('!') ||
         trimmed.startsWith('/') ||
         trimmed.startsWith('.') ||
-        isImage;
+        isImage ||
+        isVideo;
       if (!isMentioned) return;
     }
 
@@ -282,29 +319,30 @@ class WhatsAppService {
     // Show typing presence
     await this.sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
-    // Command handling
+    // Built-in commands (Strictly WhatsApp AI persona — zero Telegram references)
     if (promptText === '/start' || promptText === '/help') {
       const helpText =
-        `⚡ *NERO LABS — WHATSAPP AI ASSISTANT*\n\n` +
-        `Hello ${senderName}! I am Nero, connected 24/7 with dedicated *Gemini 3.8 Flash (High Reasoning)* & persistent memory.\n\n` +
+        `⚡ *NERO LABS — WHATSAPP EXECUTIVE AI ASSISTANT*\n\n` +
+        `Hello ${senderName}! I am Nero, Sandy's personal AI executive assistant connected 24/7 with *Gemini 3.8 Flash (High Reasoning)* & memory.\n\n` +
         `*Capabilities:*\n` +
-        `• 💬 Direct Chat & Research: Ask questions, explore concepts, debate, or just talk casually\n` +
-        `• 📸 Vision: Send any photo, screenshot, document, or diagram — I'll inspect and explain it\n` +
-        `• 📏 Dynamic Sizing: Match brevity on greetings, 10–500 words on inquiries, or exact length when requested\n` +
-        `• \`/status\` — System telemetry, active AI model & latency\n` +
-        `• \`/model\` — Active neural engine\n` +
+        `• 💬 Research & Conversation: In-depth research, reasoning, problem solving, and discussions\n` +
+        `• 📸 Vision Vault: Send any image, diagram, or screenshot — I'll inspect, explain, and store it\n` +
+        `• 📹 Video Vault: Send any video — securely saved to Sandy's archive vault\n` +
+        `• 👑 MasterBot Console: When Sandy texts himself, manage live routine, gaming status, and priority inbox\n` +
+        `• 📏 Dynamic Sizing: "Hy to Hy" brevity, 10–500 words for inquiries, or exact words requested\n` +
+        `• \`/status\` — Live telemetry & active model\n` +
         `• \`/ping\` — Real-time response ping\n` +
         `• \`/clear\` — Wipe conversation context memory\n\n` +
-        `_Built with ScaleMax & Grammy by Nero Labs._`;
+        `_Nero Labs Executive AI Assistant_`;
 
-      await this.sock.sendMessage(remoteJid, { text: helpText }, { quoted: msg });
+      await this.safeSendMessage(remoteJid, { text: helpText }, { quoted: msg });
       await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
       return;
     }
 
     if (promptText === '/ping') {
       const activeModel = 'gemini-3.8-flash';
-      await this.sock.sendMessage(
+      await this.safeSendMessage(
         remoteJid,
         { text: `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (High Reasoning). 🟢` },
         { quoted: msg }
@@ -314,8 +352,9 @@ class WhatsAppService {
     }
 
     if (promptText === '/clear') {
-      clearConversation(`wa_${remoteJid}`);
-      await this.sock.sendMessage(
+      const targetChatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+      clearConversation(targetChatId);
+      await this.safeSendMessage(
         remoteJid,
         { text: `🧹 Memory cleared for this conversation.` },
         { quoted: msg }
@@ -328,25 +367,26 @@ class WhatsAppService {
       const activeModel = 'gemini-3.8-flash';
       const statusText =
         `📊 *NERO TELEMETRY & STATUS*\n\n` +
-        `• *Bridge Status:* 🟢 Live & Connected\n` +
+        `• *Bridge Status:* 🟢 Live & Connected 24/7\n` +
         `• *Active AI Model:* \`${activeModel}\` (Reasoning: High)\n` +
         `• *Connected Device:* \`+${(this.sock.user?.id || '').split(':')[0]}\`\n` +
         `• *Total Processed:* ${this.messageCount} messages\n` +
         `• *Provider:* ScaleMax API Gateway\n` +
         `• *Vision Engine:* Multimodal Active\n` +
+        `• *Media Vault:* SQLite & Local Disk Active\n` +
         `• *Memory Store:* SQLite WAL Persistent`;
 
-      await this.sock.sendMessage(remoteJid, { text: statusText }, { quoted: msg });
+      await this.safeSendMessage(remoteJid, { text: statusText }, { quoted: msg });
       await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
       return;
     }
 
     // ==========================================
-    // 📸 IMAGE UNDERSTANDING & VISION PIPELINE
+    // 📹 VIDEO ARCHIVE & PROCESSING PIPELINE
     // ==========================================
-    if (isImage) {
+    if (isVideo) {
       try {
-        console.log(`[WhatsApp Vision] Downloading and analyzing incoming image from ${senderName}...`);
+        console.log(`[WhatsApp Media Vault] Downloading and archiving incoming video from ${senderName} (+${senderNumber})...`);
         const buffer = await downloadMediaMessage(
           msg,
           'buffer',
@@ -354,12 +394,68 @@ class WhatsAppService {
           { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage }
         );
 
+        // Save every video to media vault in dedicated user folder
+        await mediaManager.saveMediaBuffer({
+          buffer,
+          senderNumber,
+          senderName,
+          fileType: 'video',
+          mimeType: videoMessage.mimetype || 'video/mp4',
+          caption: promptText,
+        });
+
+        const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+        recordUserMessage(chatId, promptText ? `[User sent a video: "${promptText}"]` : `[User sent a video]`);
+
+        const replyText = isSandy
+          ? `Boss Sandy, aapka video received aur vault mein safely store ho gaya! (${Math.round(buffer.length / 1024)} KB) 📹✨`
+          : `Maine aapka video receive kar liya hai aur securely store ho gaya hai! (${Math.round(buffer.length / 1024)} KB) 📹✨`;
+
+        recordAssistantMessage(chatId, replyText, 40, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      } catch (vidErr) {
+        console.error('[WhatsApp Video Error]:', vidErr.message);
+        await this.safeSendMessage(
+          remoteJid,
+          { text: `📹 Video download error (${vidErr.message}). Could you try re-sending?` },
+          { quoted: msg }
+        );
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+    }
+
+    // ==========================================
+    // 📸 IMAGE UNDERSTANDING & VISION PIPELINE
+    // ==========================================
+    if (isImage) {
+      try {
+        console.log(`[WhatsApp Vision Vault] Downloading, archiving and analyzing incoming image from ${senderName} (+${senderNumber})...`);
+        const buffer = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage }
+        );
+
+        // Permanently archive every image into user's folder and SQLite vault
+        await mediaManager.saveMediaBuffer({
+          buffer,
+          senderNumber,
+          senderName,
+          fileType: 'image',
+          mimeType: imageMessage.mimetype || 'image/jpeg',
+          caption: promptText,
+        });
+
         const visionPrompt = promptText.length > 0
           ? `The user sent this image with note: "${promptText}". Answer their inquiry with deep visual comprehension.`
-          : `Thoroughly inspect this image (OCR text, objects, scene, details). In character as Nero, describe what you see, highlight the key points, and ask the user: "I've analyzed your image — what do you need help with regarding it?"`;
+          : `Thoroughly inspect this image (OCR text, objects, scene, details). In character as Nero (Sandy's dedicated executive assistant, super chill and brilliant), describe what you see, highlight key points, and ask the user: "Maine aapki image dekh li hai — iske baare mein aapko kya madad chahiye?"`;
 
-        const chatId = `wa_${remoteJid}`;
-        recordUserMessage(chatId, promptText ? `[User Image: ${promptText}]` : `[User sent an image]`);
+        const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+        recordUserMessage(chatId, promptText ? `[User Image: "${promptText}"]` : `[User sent an image]`);
 
         const analysis = await visionService.analyzeImage({
           buffer,
@@ -368,17 +464,17 @@ class WhatsAppService {
           chatId,
         });
 
-        const replyText = analysis.description || "I've inspected your image! What would you like help with regarding it? ✨";
+        const replyText = analysis.description || "Maine aapki image dekh li hai! Iske baare mein aapko kya madad chahiye? ✨";
         recordAssistantMessage(chatId, replyText, 120, 'gemini-3.8-flash');
 
-        await this.sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg });
+        await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
       } catch (imgErr) {
         console.error('[WhatsApp Vision Error]:', imgErr.message);
-        await this.sock.sendMessage(
+        await this.safeSendMessage(
           remoteJid,
-          { text: `📸 I noticed your image, but had a transient glitch reading it (${imgErr.message}). Could you re-send or forward it again?` },
+          { text: `📸 Image analysis notice: (${imgErr.message}). Could you try re-sending?` },
           { quoted: msg }
         );
         await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -386,7 +482,103 @@ class WhatsAppService {
       }
     }
 
-    // Notify Telegram owner if configured and not self-message
+    // ==========================================
+    // 👑 MASTERBOT CONSOLE (SANDY'S PERSONAL CHAT)
+    // ==========================================
+    if (isSandy) {
+      // 1. Natural Language Status / Routine Update
+      const statusUpdate = sandyStatusService.parseNaturalLanguageUpdate(promptText);
+      if (statusUpdate.updated) {
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', statusUpdate.summary, 30, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: statusUpdate.summary }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 2. Urgent Inbox / Talk Requests Check
+      if (/\b(?:urgent|emergency|inbox|talk\s+requests?|kisi\s+ne\s+kuch\s+bola)\b/i.test(promptText)) {
+        const urgentList = sandyStatusService.getUrgentRequests(10);
+        recordUserMessage('wa_sandy_master', promptText);
+        if (urgentList.length === 0) {
+          const emptyText = "Boss Sandy! Abhi koi pending urgent talk request nahi hai. All clear! ✨";
+          recordAssistantMessage('wa_sandy_master', emptyText, 25, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: emptyText }, { quoted: msg });
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+        let report = "📬 *NERO MASTERBOT — SANDY'S URGENT INBOX*\n\nHere are the latest urgent talk requests left by contacts:\n\n";
+        for (const item of urgentList) {
+          report += `• *+${item.sender_number}* (${item.sender_name || 'Contact'}):\n  "${item.message_text}"\n  _Received: ${new Date(item.created_at).toLocaleString()}_\n\n`;
+        }
+        report += `_Reply with:_ \`/wa_send <number> <your reply>\``;
+        recordAssistantMessage('wa_sandy_master', report, 100, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: report }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 3. Inspect Another Contact's Chat / Saved Media
+      const showChatMatch = promptText.match(/(?:read|show|check|kya\s+bola)\s+(?:chat|messages?|talk)\s+(?:of|from)?\s*([+0-9]+)/i);
+      if (showChatMatch && showChatMatch[1]) {
+        const targetNum = showChatMatch[1].replace(/[^0-9]/g, '');
+        const targetJid = `${targetNum}@s.whatsapp.net`;
+        const recentHistory = getRecentConversation(`wa_${targetJid}`, 10);
+        const mediaHistory = mediaManager.getMediaHistory(targetNum, 5);
+        recordUserMessage('wa_sandy_master', promptText);
+        if (recentHistory.length === 0 && mediaHistory.length === 0) {
+          const noChatText = `Boss Sandy! +${targetNum} se abhi tak koi recorded chat ya media nahi mili hai.`;
+          recordAssistantMessage('wa_sandy_master', noChatText, 25, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: noChatText }, { quoted: msg });
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+        let report = `📋 *RECENT CHAT HISTORY WITH +${targetNum}*:\n\n`;
+        for (const h of recentHistory) {
+          report += `${h.role === 'user' ? '👤 Them' : '🤖 Nero'}: ${h.content}\n`;
+        }
+        if (mediaHistory.length > 0) {
+          report += `\n📁 *Saved Media Vault (${mediaHistory.length} files)*:\n`;
+          for (const m of mediaHistory) {
+            report += `• [${m.file_type.toUpperCase()}] ${m.file_name} (${Math.round(m.file_size / 1024)} KB) - ${m.caption || 'No caption'}\n`;
+          }
+        }
+        recordAssistantMessage('wa_sandy_master', report, 120, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: report }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 4. Change Reasoning Effort (Low / Medium / High)
+      const reasoningMatch = promptText.match(/\b(?:change|set|switch)\s+reasoning(?:\s+to)?\s+(high|low|medium)\b/i);
+      if (reasoningMatch && reasoningMatch[1]) {
+        const newLevel = reasoningMatch[1].toLowerCase();
+        updateAgentRouting('chat', { reasoning: newLevel });
+        recordUserMessage('wa_sandy_master', promptText);
+        const confText = `✅ Reasoning effort successfully updated to *${newLevel.toUpperCase()}* for chat completions, Boss!`;
+        recordAssistantMessage('wa_sandy_master', confText, 20, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: confText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+    }
+
+    // ==========================================
+    // 💬 CONTACTS MESSAGING SANDY'S WHATSAPP
+    // ==========================================
+    if (!isSandy) {
+      // Check if contact is leaving an urgent message / important talk request
+      if (/\b(?:urgent|emergency|zaroori|urgent\s+hai|important\s+work|call\s+karo|connect\s+karo|tell\s+sandy\s+to\s+call)\b/i.test(promptText)) {
+        sandyStatusService.addUrgentRequest({
+          senderNumber,
+          senderName,
+          messageText: promptText,
+          urgency: 'high',
+        });
+      }
+    }
+
+    // Optional Telegram notification for Sandy's private log
     if (config.whatsAppNotifyTelegram && !isFromMe) {
       this.notifyTelegramOwner(
         `📲 *[WhatsApp Message]*\n*From:* ${senderName} (\`+${senderNumber}\`)\n*Chat:* ${isGroup ? 'Group' : 'Direct Message'}\n*Message:* "${promptText.slice(0, 250)}"\n\n_Reply with:_ \`/wa_send ${senderNumber} <reply>\``
@@ -395,18 +587,15 @@ class WhatsAppService {
 
     // AI Generation Pipeline (Dedicated Gemini 3.8 Flash, High Reasoning)
     try {
-      const chatId = `wa_${remoteJid}`;
+      const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
       recordUserMessage(chatId, promptText);
 
-      const explicitLimit = extractExplicitWordLimit(promptText);
-      const detectedIntent = detectUserIntent(promptText);
-
-      const messages = buildChatContext(chatId, promptText, {
-        senderId: senderNumber,
+      const { messages, explicitLimit, detectedIntent } = buildWhatsAppChatContext({
+        chatId,
+        promptText,
+        senderNumber,
         senderName,
-        userIsOwner: isOwnerSender,
-        explicitWordLimit: explicitLimit,
-        intent: detectedIntent,
+        isSandy,
       });
 
       const activeModel = 'gemini-3.8-flash';
@@ -451,11 +640,11 @@ class WhatsAppService {
 
       recordAssistantMessage(chatId, replyText, completion.tokensUsed || 0, activeModel);
 
-      // Send response to WhatsApp
-      await this.sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg });
+      // Send response to WhatsApp via safeSendMessage
+      await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
     } catch (err) {
       console.error('[WhatsApp AI Generation Error]:', err.message);
-      await this.sock.sendMessage(
+      await this.safeSendMessage(
         remoteJid,
         { text: `⚠️ *Nero AI Notice:* Transient error processing your request (${err.message}). Please try again shortly.` },
         { quoted: msg }
@@ -504,7 +693,7 @@ class WhatsAppService {
       jid = `${clean}@s.whatsapp.net`;
     }
 
-    await this.sock.sendMessage(jid, { text });
+    await this.safeSendMessage(jid, { text });
     return { ok: true, jid, text };
   }
 

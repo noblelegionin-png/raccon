@@ -176,4 +176,156 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.equal(chatRouting.model, 'gemini-3.8-flash');
     assert.equal(chatRouting.reasoning, 'high');
   });
+
+  await t.test('13. Sandy Status Service — Natural Language Live Routine Updates', async () => {
+    const { sandyStatusService } = await import('../src/whatsapp/sandyStatusService.js');
+
+    // Gaming / Minecraft update
+    const gameResult = sandyStatusService.parseNaturalLanguageUpdate('I am playing Minecraft on Hypixel realm: mc.hypixel.net');
+    assert.equal(gameResult.updated, true);
+    assert.equal(gameResult.type, 'gaming');
+    assert.match(gameResult.summary, /Gaming/i);
+
+    const statusAfterGame = sandyStatusService.getStatus();
+    assert.match(statusAfterGame.activity, /Minecraft/i);
+    assert.match(statusAfterGame.game_info, /mc\.hypixel\.net/i);
+
+    // Sleeping update
+    const sleepResult = sandyStatusService.parseNaturalLanguageUpdate('Abhi so raha hu wake me at 7');
+    assert.equal(sleepResult.updated, true);
+    assert.equal(sleepResult.type, 'sleeping');
+
+    const statusAfterSleep = sandyStatusService.getStatus();
+    assert.match(statusAfterSleep.activity, /Resting/i);
+    assert.equal(statusAfterSleep.availability, 'sleeping');
+
+    // Directive formatting contains live activity
+    const directive = sandyStatusService.formatSandyStatusDirective();
+    assert.match(directive, /Resting/i);
+    assert.match(directive, /mc\.hypixel\.net/i);
+  });
+
+  await t.test('14. Urgent Talk Request Inbox — Priority Logging & Retrieval', async () => {
+    const { sandyStatusService } = await import('../src/whatsapp/sandyStatusService.js');
+
+    const id = sandyStatusService.addUrgentRequest({
+      senderNumber: '919876543210',
+      senderName: 'Vikas',
+      messageText: 'Sandy bhai urgent kaam hai call back karna please!',
+      urgency: 'high',
+    });
+    assert.ok(id);
+
+    const urgentInbox = sandyStatusService.getUrgentRequests(5);
+    assert.ok(urgentInbox.length > 0);
+    const latest = urgentInbox[0];
+    assert.equal(latest.sender_number, '919876543210');
+    assert.equal(latest.sender_name, 'Vikas');
+    assert.match(latest.message_text, /urgent kaam hai/i);
+  });
+
+  await t.test('15. Media Vault — Dedicated Per-User Folders & File Archiving', async () => {
+    const { mediaManager } = await import('../src/whatsapp/mediaManager.js');
+
+    const sampleImageBuffer = Buffer.from('FAKE_IMAGE_BYTES_12345');
+    const imageRecord = await mediaManager.saveMediaBuffer({
+      buffer: sampleImageBuffer,
+      senderNumber: '919876543210',
+      senderName: 'Alice',
+      fileType: 'image',
+      mimeType: 'image/jpeg',
+      caption: 'Look at this diagram',
+    });
+    assert.ok(imageRecord.id);
+    assert.ok(imageRecord.filePath.includes('whatsapp_media'));
+    assert.ok(imageRecord.filePath.includes('919876543210'));
+    assert.ok(imageRecord.filePath.includes('images'));
+
+    const sampleVideoBuffer = Buffer.from('FAKE_VIDEO_BYTES_67890');
+    const videoRecord = await mediaManager.saveMediaBuffer({
+      buffer: sampleVideoBuffer,
+      senderNumber: '919876543210',
+      senderName: 'Alice',
+      fileType: 'video',
+      mimeType: 'video/mp4',
+      caption: 'Screen recording',
+    });
+    assert.ok(videoRecord.id);
+    assert.ok(videoRecord.filePath.includes('videos'));
+
+    const mediaHistory = mediaManager.getMediaHistory('919876543210', 10);
+    assert.ok(mediaHistory.length >= 2);
+    assert.ok(mediaHistory.some((m) => m.file_type === 'image'));
+    assert.ok(mediaHistory.some((m) => m.file_type === 'video'));
+  });
+
+  await t.test('16. WhatsApp Independence — 100% Zero Telegram References', async () => {
+    const { buildWhatsAppDirective } = await import('../src/whatsapp/whatsappPersona.js');
+
+    const contactDirective = buildWhatsAppDirective({
+      senderNumber: '919876543210',
+      senderName: 'Client',
+      isSandy: false,
+      userPrompt: 'Hello who are you?',
+    });
+
+    const masterBotDirective = buildWhatsAppDirective({
+      senderNumber: '919999999999',
+      senderName: 'Sandy',
+      isSandy: true,
+      userPrompt: 'What is your status?',
+    });
+
+    // Both directives must be 100% free of Telegram mentions
+    assert.doesNotMatch(contactDirective, /telegram/i);
+    assert.doesNotMatch(contactDirective, /botfather/i);
+    assert.doesNotMatch(contactDirective, /grammy/i);
+
+    assert.doesNotMatch(masterBotDirective, /telegram/i);
+    assert.doesNotMatch(masterBotDirective, /botfather/i);
+    assert.doesNotMatch(masterBotDirective, /grammy/i);
+  });
+
+  await t.test('17. WhatsApp Context Memory — Segregated Per-Sender Chat History', async () => {
+    const { buildWhatsAppChatContext } = await import('../src/whatsapp/whatsappPersona.js');
+
+    const user1Jid = '919111111111@s.whatsapp.net';
+    const user2Jid = '919222222222@s.whatsapp.net';
+
+    clearConversation(`wa_${user1Jid}`);
+    clearConversation(`wa_${user2Jid}`);
+    clearConversation('wa_sandy_master');
+
+    recordUserMessage(`wa_${user1Jid}`, 'My secret is Apples');
+    recordAssistantMessage(`wa_${user1Jid}`, 'Noted Apples', 10, 'gemini-3.8-flash');
+
+    recordUserMessage(`wa_${user2Jid}`, 'My secret is Oranges');
+    recordAssistantMessage(`wa_${user2Jid}`, 'Noted Oranges', 10, 'gemini-3.8-flash');
+
+    const ctx1 = buildWhatsAppChatContext({
+      chatId: `wa_${user1Jid}`,
+      promptText: 'What is my secret?',
+      senderNumber: '919111111111',
+      senderName: 'User1',
+      isSandy: false,
+    });
+
+    const ctx2 = buildWhatsAppChatContext({
+      chatId: `wa_${user2Jid}`,
+      promptText: 'What is my secret?',
+      senderNumber: '919222222222',
+      senderName: 'User2',
+      isSandy: false,
+    });
+
+    // User1 history contains Apples and NOT Oranges
+    const user1HistoryText = ctx1.messages.map((m) => m.content).join(' ');
+    assert.match(user1HistoryText, /Apples/i);
+    assert.doesNotMatch(user1HistoryText, /Oranges/i);
+
+    // User2 history contains Oranges and NOT Apples
+    const user2HistoryText = ctx2.messages.map((m) => m.content).join(' ');
+    assert.match(user2HistoryText, /Oranges/i);
+    assert.doesNotMatch(user2HistoryText, /Apples/i);
+  });
 });

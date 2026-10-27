@@ -7,7 +7,7 @@ import {
   executeMcpTool,
   MCP_TOOLS,
 } from '../src/mcp/mcpServer.js';
-import { whatsAppService } from '../src/whatsapp/whatsAppService.js';
+import { whatsAppService } from '../src/whatsapp/whatsappService.js';
 import { sandyStatusService } from '../src/whatsapp/sandyStatusService.js';
 import { isWhatsAppSilentModeActive, setWhatsAppSilentMode } from '../src/maintenance/maintenanceService.js';
 

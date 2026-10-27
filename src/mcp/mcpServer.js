@@ -18,7 +18,7 @@ import { minecraftBridge } from '../minecraft/bridge.js';
 import { minecraftCommandExecutor } from '../minecraft/commandExecutor.js';
 import { gameGroupNotifier } from '../minecraft/gameGroupNotifier.js';
 import { playerRegistry } from '../minecraft/playerRegistry.js';
-import { whatsAppService } from '../whatsapp/whatsAppService.js';
+import { whatsAppService } from '../whatsapp/whatsappService.js';
 import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
 import { buildOutreachMessage } from '../whatsapp/whatsappPersona.js';
 import { stickerService } from '../whatsapp/stickerService.js';

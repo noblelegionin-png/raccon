@@ -2,6 +2,7 @@ import { config, validateConfig } from './config.js';
 import { initDatabase, getDb } from './db/index.js';
 import { startBot, stopBot } from './telegram/bot.js';
 import { createWebServer } from './web/server.js';
+import { whatsAppService } from './whatsapp/whatsappService.js';
 
 async function main() {
   console.log('====================================================');
@@ -37,10 +38,23 @@ async function main() {
     console.log('[TelegramBot] Bot long-polling skipped (No TELEGRAM_BOT_TOKEN provided).');
   }
 
+  // 4b. Start WhatsApp 24/7 Live Bridge
+  if (config.whatsAppEnabled) {
+    console.log('[WhatsApp] Starting WhatsApp 24/7 Live Bridge...');
+    whatsAppService.init().catch((err) => {
+      console.warn('[WhatsApp] Startup warning:', err.message);
+    });
+  }
+
   // 5. Graceful Shutdown
   const shutdown = async (signal) => {
     console.log(`\n[System] Received ${signal}. Shutting down gracefully...`);
     await stopBot();
+    try {
+      if (whatsAppService.sock) {
+        whatsAppService.sock.end();
+      }
+    } catch (e) {}
     server.close(() => {
       console.log('[WebServer] HTTP server closed.');
       try {

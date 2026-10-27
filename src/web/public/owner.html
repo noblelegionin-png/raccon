@@ -81,6 +81,7 @@
         <button class="owner-nav-btn" data-owner-tab="tab-owner-moderation">🛡️ Moderation Queue</button>
         <button class="owner-nav-btn" data-owner-tab="tab-owner-mcp">🔑 Tokens &amp; MCP</button>
         <button class="owner-nav-btn" data-owner-tab="tab-owner-devops">💻 Verification &amp; Tests</button>
+        <button class="owner-nav-btn" data-owner-tab="tab-owner-whatsapp">💬 WhatsApp 24/7 Bridge</button>
       </div>
 
       <!-- TAB 0: 50+ COMMAND & TOOL CENTER (PRIMARY) -->
@@ -423,6 +424,95 @@
             <button id="ownerActionClearChat" class="btn-action-grey">🧹 Clear Chat History</button>
             <button id="ownerActionClearWarns" class="btn-action-grey">⚠️ Reset All Group Strikes</button>
             <button id="ownerActionKillSwitch" class="btn-action-red">🚨 Master Kill Switch (Halt AI)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 7: WHATSAPP 24/7 LIVE BRIDGE -->
+      <section id="tab-owner-whatsapp" class="owner-tab-pane" style="display: none;">
+        <!-- Status Card -->
+        <div class="owner-section-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <h3 class="card-heading">WHATSAPP 24/7 LIVE BRIDGE</h3>
+              <p class="card-subheading">Multi-device persistent socket connection to WhatsApp. AI auto-reply, memory &amp; Telegram cross-bridge.</p>
+            </div>
+            <div id="waStatusBadge" class="badge-status-green" style="font-weight: 700; padding: 6px 14px; border-radius: 999px;">
+              CHECKING...
+            </div>
+          </div>
+
+          <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+            <div style="background: var(--bg-surface-subtle); padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-card);">
+              <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Linked Device</div>
+              <div id="waLinkedUser" style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">Not Connected</div>
+            </div>
+            <div style="background: var(--bg-surface-subtle); padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-card);">
+              <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Processed Messages</div>
+              <div id="waProcessedCount" style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">0</div>
+            </div>
+            <div style="background: var(--bg-surface-subtle); padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-card);">
+              <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Active Mode</div>
+              <div id="waActiveMode" style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">All Messages</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection Hub (QR Code & Phone Pairing) -->
+        <div class="owner-section-card" style="margin-top: 14px;">
+          <h3 class="card-heading">LINK YOUR WHATSAPP (2 WAYS)</h3>
+          <p class="card-subheading">Choose either Method A (Point Phone Camera at QR Code) or Method B (Instant 8-Digit Pairing Code).</p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 14px;">
+            <!-- Method A: QR Code -->
+            <div style="background: var(--bg-surface-subtle); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-card); text-align: center;">
+              <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">METHOD A: SCAN QR CODE</h4>
+              <div id="waQrContainer" style="margin: 12px auto; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; background: #ffffff; border-radius: 8px; border: 1px solid #e0e0e0; overflow: hidden;">
+                <span id="waQrPlaceholder" style="font-size: 12px; color: #888;">Generating QR...</span>
+                <img id="waQrImage" src="" alt="WhatsApp QR Code" style="display: none; width: 100%; height: 100%; object-fit: contain;" />
+              </div>
+              <p style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">
+                Open WhatsApp &gt; <strong>Settings</strong> &gt; <strong>Linked Devices</strong> &gt; <strong>Link a Device</strong>
+              </p>
+              <button id="waRefreshQrBtn" class="btn-action-grey" style="margin-top: 10px; width: 100%; padding: 8px; font-size: 12px;">🔄 Refresh QR Code</button>
+            </div>
+
+            <!-- Method B: Pairing Code -->
+            <div style="background: var(--bg-surface-subtle); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-card);">
+              <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">METHOD B: 8-DIGIT PAIRING CODE</h4>
+              <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+                Enter your WhatsApp number with country code (e.g. <code>919876543210</code>) to generate an 8-digit linking code.
+              </p>
+
+              <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <input id="waPhoneNumberInput" type="text" placeholder="e.g. 919876543210" style="flex: 1; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-card); font-size: 13px; background: var(--bg-card); color: var(--text-primary);" />
+                <button id="waGetPairingCodeBtn" class="btn-action-grey" style="padding: 9px 16px; font-size: 12px; font-weight: 700; white-space: nowrap;">Get Code</button>
+              </div>
+
+              <div id="waPairingCodeBox" style="display: none; margin-top: 12px; padding: 14px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: var(--radius-sm); text-align: center;">
+                <div style="font-size: 11px; color: #2e7d32; font-weight: 700;">ENTER THIS CODE IN WHATSAPP:</div>
+                <div id="waPairingCodeDisplay" style="font-size: 24px; font-weight: 900; letter-spacing: 4px; color: #1b5e20; margin: 8px 0; font-family: monospace;">ABCD-EFGH</div>
+                <div style="font-size: 10px; color: #388e3c;">Settings &gt; Linked Devices &gt; Link with phone number instead</div>
+              </div>
+
+              <!-- Outbound Test Message -->
+              <div style="margin-top: 20px; border-top: 1px solid var(--border-card); padding-top: 14px;">
+                <h5 style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">SEND TEST MESSAGE</h5>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                  <input id="waTestToInput" type="text" placeholder="Recipient (e.g. 919876543210)" style="flex: 1; padding: 8px 10px; font-size: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-card); background: var(--bg-card); color: var(--text-primary);" />
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <input id="waTestMsgInput" type="text" placeholder="Message content..." style="flex: 1; padding: 8px 10px; font-size: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-card); background: var(--bg-card); color: var(--text-primary);" />
+                  <button id="waSendTestBtn" class="btn-action-grey" style="padding: 8px 14px; font-size: 12px;">Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+            <button id="waRestartBtn" class="btn-action-grey" style="padding: 10px 18px; font-size: 12px;">🔄 Restart Bridge Socket</button>
+            <button id="waDisconnectBtn" class="btn-action-red" style="padding: 10px 18px; font-size: 12px;">⚠️ Disconnect WhatsApp Session</button>
           </div>
         </div>
       </section>

@@ -199,6 +199,8 @@ function setupNavigation() {
       } else if (targetTab === 'tab-owner-moderation') {
         loadModerationQueue();
         loadApprovedSkills();
+      } else if (targetTab === 'tab-owner-whatsapp') {
+        loadWhatsAppBridge();
       }
     });
   });
@@ -1067,6 +1069,215 @@ function setupDevopsVerification() {
   });
 }
 
+// =========================================================================
+// 💬 WHATSAPP 24/7 LIVE BRIDGE CLIENT CONTROLLER
+// =========================================================================
+let waQrInterval = null;
+
+async function loadWhatsAppBridge() {
+  try {
+    const res = await fetch('/api/whatsapp/status', { headers: getAuthHeaders() });
+    const data = await res.json();
+    if (!data.ok) return;
+
+    const badge = document.getElementById('waStatusBadge');
+    const linkedUser = document.getElementById('waLinkedUser');
+    const countEl = document.getElementById('waProcessedCount');
+    const modeEl = document.getElementById('waActiveMode');
+    const qrImg = document.getElementById('waQrImage');
+    const qrPlaceholder = document.getElementById('waQrPlaceholder');
+
+    if (badge) {
+      if (data.status === 'connected') {
+        badge.textContent = '🟢 CONNECTED 24/7';
+        badge.className = 'badge-status-green';
+      } else if (data.status === 'qr_ready') {
+        badge.textContent = '🟡 SCAN QR / PAIR';
+        badge.className = 'badge-status-yellow';
+      } else if (data.status === 'reconnecting') {
+        badge.textContent = '🔄 RECONNECTING';
+        badge.className = 'badge-status-yellow';
+      } else {
+        badge.textContent = '🔴 DISCONNECTED';
+        badge.className = 'badge-status-red';
+      }
+    }
+
+    if (linkedUser) {
+      if (data.connectedUser) {
+        const phone = (data.connectedUser.id || '').split(':')[0];
+        linkedUser.textContent = `+${phone} (${data.connectedUser.name || 'Owner'})`;
+      } else {
+        linkedUser.textContent = 'Not Connected';
+      }
+    }
+
+    if (countEl) {
+      countEl.textContent = `${data.messageCount || 0} msgs`;
+    }
+
+    if (modeEl) {
+      modeEl.textContent = data.mode === 'owner_only' ? 'Owner Only' : 'All Contacts';
+    }
+
+    if (data.status === 'connected') {
+      if (qrPlaceholder) {
+        qrPlaceholder.textContent = '✅ WhatsApp is connected!';
+        qrPlaceholder.style.display = 'block';
+      }
+      if (qrImg) qrImg.style.display = 'none';
+      if (waQrInterval) {
+        clearInterval(waQrInterval);
+        waQrInterval = null;
+      }
+    } else {
+      await refreshWhatsAppQr();
+      if (!waQrInterval) {
+        waQrInterval = setInterval(refreshWhatsAppQr, 6000);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load WhatsApp bridge status:', err);
+  }
+}
+
+async function refreshWhatsAppQr() {
+  try {
+    const res = await fetch('/api/whatsapp/qr', { headers: getAuthHeaders() });
+    const data = await res.json();
+    const qrImg = document.getElementById('waQrImage');
+    const qrPlaceholder = document.getElementById('waQrPlaceholder');
+
+    if (data.ok && data.qrDataUrl) {
+      if (qrImg) {
+        qrImg.src = data.qrDataUrl;
+        qrImg.style.display = 'block';
+      }
+      if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+    } else if (data.status === 'connected') {
+      if (qrImg) qrImg.style.display = 'none';
+      if (qrPlaceholder) {
+        qrPlaceholder.textContent = '✅ WhatsApp is connected!';
+        qrPlaceholder.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+}
+
+function setupWhatsAppBridge() {
+  document.getElementById('waRefreshQrBtn')?.addEventListener('click', async () => {
+    haptic.selection();
+    showToast('Refreshing QR Code...');
+    await refreshWhatsAppQr();
+  });
+
+  document.getElementById('waGetPairingCodeBtn')?.addEventListener('click', async () => {
+    const input = document.getElementById('waPhoneNumberInput');
+    const phone = (input?.value || '').trim();
+    if (!phone) {
+      showToast('Enter phone number with country code (e.g. 919876543210)', 'error');
+      return;
+    }
+
+    haptic.impact('medium');
+    showToast('Requesting 8-digit pairing code...');
+    const btn = document.getElementById('waGetPairingCodeBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/whatsapp/pair', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ phoneNumber: phone }),
+      });
+      const data = await res.json();
+      if (data.ok && data.pairingCode) {
+        const box = document.getElementById('waPairingCodeBox');
+        const display = document.getElementById('waPairingCodeDisplay');
+        if (box && display) {
+          display.textContent = data.pairingCode;
+          box.style.display = 'block';
+        }
+        showToast('Pairing code generated!');
+      } else {
+        showToast(data.error || 'Failed to generate code', 'error');
+      }
+    } catch (err) {
+      showToast('Error requesting pairing code', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
+  document.getElementById('waSendTestBtn')?.addEventListener('click', async () => {
+    const toInput = document.getElementById('waTestToInput');
+    const msgInput = document.getElementById('waTestMsgInput');
+    const to = (toInput?.value || '').trim();
+    const text = (msgInput?.value || '').trim();
+
+    if (!to || !text) {
+      showToast('Provide both recipient and message text', 'error');
+      return;
+    }
+
+    haptic.impact('medium');
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ to, text }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('✅ WhatsApp message sent!');
+        if (msgInput) msgInput.value = '';
+      } else {
+        showToast(data.error || 'Failed to send message', 'error');
+      }
+    } catch {
+      showToast('Error sending message', 'error');
+    }
+  });
+
+  document.getElementById('waRestartBtn')?.addEventListener('click', async () => {
+    haptic.impact('medium');
+    showToast('Restarting WhatsApp Bridge socket...');
+    try {
+      const res = await fetch('/api/whatsapp/restart', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('WhatsApp Bridge restarted.');
+        setTimeout(loadWhatsAppBridge, 2000);
+      }
+    } catch {
+      showToast('Restart failed', 'error');
+    }
+  });
+
+  document.getElementById('waDisconnectBtn')?.addEventListener('click', async () => {
+    if (!confirm('Disconnect WhatsApp session and wipe credentials?')) return;
+    haptic.impact('heavy');
+    try {
+      const res = await fetch('/api/whatsapp/disconnect', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('WhatsApp session disconnected.');
+        loadWhatsAppBridge();
+      }
+    } catch {
+      showToast('Disconnect failed', 'error');
+    }
+  });
+}
+
 // App Initialization
 async function initOwnerApp() {
   startFpsMonitor();
@@ -1080,6 +1291,7 @@ async function initOwnerApp() {
   setupChatsInspector();
   setupMcpKeys();
   setupDevopsVerification();
+  setupWhatsAppBridge();
 
   document.getElementById('refreshModerationQueueBtn')?.addEventListener('click', () => {
     haptic.selection();

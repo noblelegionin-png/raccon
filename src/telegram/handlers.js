@@ -1,7 +1,9 @@
 import { InlineKeyboard, InputFile } from 'grammy';
+import QRCode from 'qrcode';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
+import { whatsAppService } from '../whatsapp/whatsappService.js';
 import { getConfig, setConfig, isUpdateProcessed, markUpdateProcessed, logAudit } from '../db/index.js';
 import { isOwner } from '../auth/accessControl.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
@@ -776,6 +778,209 @@ export function registerBotHandlers(bot) {
     const msg = renderGroupControlMessage(ctx.chat.id, ctx.chat.title);
     const keyboard = buildGroupControlKeyboard(ctx.chat.id);
     return ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+  });
+
+  // WhatsApp Bridge Management Commands (Owner & Diagnostics)
+  bot.command(['whatsapp', 'wa'], async (ctx) => {
+    const userId = ctx.from?.id;
+    const userIsOwner = isOwner(userId);
+    const args = ctx.message.text.trim().split(/\s+/).slice(1);
+    const subCmd = (args[0] || '').toLowerCase();
+
+    const status = whatsAppService.getStatus();
+
+    if (!subCmd) {
+      const badge =
+        status.status === 'connected'
+          ? '🟢 Connected'
+          : status.status === 'qr_ready'
+          ? '🟡 Waiting for QR Scan'
+          : status.status === 'reconnecting'
+          ? '🔄 Reconnecting'
+          : '🔴 Disconnected';
+
+      const userDisplay = status.connectedUser
+        ? `\n• *Linked Number:* \`+${(status.connectedUser.id || '').split(':')[0]}\` (${status.connectedUser.name || 'Owner'})`
+        : '';
+
+      const webAppUrl = config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
+
+      const keyboard = new InlineKeyboard()
+        .url('🌐 Open WhatsApp Deck', `${webAppUrl.replace(/\/+$/, '')}/owner.html`)
+        .row()
+        .text('🔄 Refresh Status', 'wa_refresh_status');
+
+      if (status.status === 'qr_ready') {
+        keyboard.text('📷 Get QR Code', 'wa_send_qr');
+      }
+
+      return ctx.reply(
+        `💬 *NERO LABS — 24/7 WHATSAPP BRIDGE*\n\n` +
+        `• *State:* ${badge}${userDisplay}\n` +
+        `• *Messages Processed:* ${status.messageCount}\n` +
+        `• *Mode:* \`${status.mode}\`\n` +
+        `• *Auto-Reply:* ${status.autoReply ? '✅ Enabled' : '❌ Disabled'}\n` +
+        `• *Telegram Sync:* ${status.notifyTelegram ? '✅ Enabled' : '❌ Disabled'}\n\n` +
+        `*Quick Commands:*\n` +
+        `• \`/wa qr\` — Send live QR code photo here\n` +
+        `• \`/wa pair <phone>\` — Get 8-digit phone pairing code\n` +
+        `• \`/wa send <phone> <text>\` — Send WhatsApp message\n` +
+        `• \`/wa restart\` — Restart WhatsApp bridge\n` +
+        `• \`/wa logout\` — Disconnect session`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        }
+      );
+    }
+
+    if (subCmd === 'qr') {
+      const qrInfo = whatsAppService.getQrCode();
+      if (!qrInfo.qrRaw) {
+        if (status.status === 'connected') {
+          return ctx.reply('🟢 WhatsApp bridge is already connected! No QR scan needed.');
+        }
+        return ctx.reply('⏳ QR code is not ready yet. Please wait a few seconds and try again.');
+      }
+
+      try {
+        const qrBuffer = await QRCode.toBuffer(qrInfo.qrRaw, { scale: 8, margin: 2 });
+        return ctx.replyWithPhoto(new InputFile(qrBuffer, 'whatsapp-qr.png'), {
+          caption: '📷 *Scan this QR code with WhatsApp on your phone:*\n\n1. Open WhatsApp on your phone\n2. Tap Settings > Linked Devices\n3. Tap "Link a Device" and point your camera here.',
+          parse_mode: 'Markdown',
+        });
+      } catch (err) {
+        return ctx.reply(`⚠️ Could not generate QR image: ${err.message}`);
+      }
+    }
+
+    if (!userIsOwner) {
+      return ctx.reply('🚫 Only the bot owner can execute WhatsApp management actions.');
+    }
+
+    if (subCmd === 'pair') {
+      const phone = args[1];
+      if (!phone) {
+        return ctx.reply('⚠️ Please provide your phone number with country code:\nExample: `/wa pair 919876543210`', { parse_mode: 'Markdown' });
+      }
+
+      try {
+        await ctx.reply('⏳ Requesting 8-digit WhatsApp pairing code...');
+        const code = await whatsAppService.requestPairingCode(phone);
+        return ctx.reply(
+          `🔑 *Your WhatsApp Pairing Code:*\n\n` +
+          `\`${code}\`\n\n` +
+          `*Instructions:*\n` +
+          `1. Open WhatsApp on your phone (+${phone})\n` +
+          `2. Go to **Settings** > **Linked Devices**\n` +
+          `3. Tap **Link with phone number instead**\n` +
+          `4. Enter the code above: \`${code}\`\n\n` +
+          `_Code expires in 60 seconds!_`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (err) {
+        return ctx.reply(`⚠️ Pairing failed: ${err.message}`);
+      }
+    }
+
+    if (subCmd === 'send') {
+      const targetPhone = args[1];
+      const messageText = args.slice(2).join(' ');
+      if (!targetPhone || !messageText) {
+        return ctx.reply('⚠️ Usage: `/wa send <phone_with_country_code> <message>`\nExample: `/wa send 919876543210 Hello from Nero!`', { parse_mode: 'Markdown' });
+      }
+
+      try {
+        await whatsAppService.sendOutboundMessage(targetPhone, messageText);
+        return ctx.reply(`✅ Message sent to WhatsApp number \`+${targetPhone}\`!`, { parse_mode: 'Markdown' });
+      } catch (err) {
+        return ctx.reply(`⚠️ Send failed: ${err.message}`);
+      }
+    }
+
+    if (subCmd === 'restart') {
+      await ctx.reply('🔄 Restarting WhatsApp bridge socket...');
+      await whatsAppService.restart();
+      return ctx.reply('✅ WhatsApp bridge socket rebooted.');
+    }
+
+    if (subCmd === 'logout' || subCmd === 'disconnect') {
+      await whatsAppService.disconnectSession();
+      return ctx.reply('✅ WhatsApp session disconnected and local credentials reset.');
+    }
+  });
+
+  bot.command('wa_send', async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!isOwner(userId)) {
+      return ctx.reply('🚫 Owner only command.');
+    }
+    const parts = ctx.message.text.trim().split(/\s+/);
+    const targetPhone = parts[1];
+    const messageText = parts.slice(2).join(' ');
+    if (!targetPhone || !messageText) {
+      return ctx.reply('⚠️ Usage: `/wa_send <phone> <message>`');
+    }
+    try {
+      await whatsAppService.sendOutboundMessage(targetPhone, messageText);
+      return ctx.reply(`✅ Message sent to WhatsApp \`+${targetPhone}\``, { parse_mode: 'Markdown' });
+    } catch (err) {
+      return ctx.reply(`⚠️ Send error: ${err.message}`);
+    }
+  });
+
+  // Inline callback query handlers for WhatsApp refresh & QR
+  bot.callbackQuery('wa_refresh_status', async (ctx) => {
+    await ctx.answerCallbackQuery({ text: 'Status refreshed' }).catch(() => {});
+    const status = whatsAppService.getStatus();
+    const badge =
+      status.status === 'connected'
+        ? '🟢 Connected'
+        : status.status === 'qr_ready'
+        ? '🟡 Waiting for QR Scan'
+        : status.status === 'reconnecting'
+        ? '🔄 Reconnecting'
+        : '🔴 Disconnected';
+
+    const userDisplay = status.connectedUser
+      ? `\n• *Linked Number:* \`+${(status.connectedUser.id || '').split(':')[0]}\` (${status.connectedUser.name || 'Owner'})`
+      : '';
+
+    await ctx.editMessageText(
+      `💬 *NERO LABS — 24/7 WHATSAPP BRIDGE*\n\n` +
+      `• *State:* ${badge}${userDisplay}\n` +
+      `• *Messages Processed:* ${status.messageCount}\n` +
+      `• *Mode:* \`${status.mode}\`\n` +
+      `• *Auto-Reply:* ${status.autoReply ? '✅ Enabled' : '❌ Disabled'}\n` +
+      `• *Telegram Sync:* ${status.notifyTelegram ? '✅ Enabled' : '❌ Disabled'}\n\n` +
+      `*Quick Commands:*\n` +
+      `• \`/wa qr\` — Send live QR code photo here\n` +
+      `• \`/wa pair <phone>\` — Get 8-digit phone pairing code\n` +
+      `• \`/wa send <phone> <text>\` — Send WhatsApp message\n` +
+      `• \`/wa restart\` — Restart WhatsApp bridge\n` +
+      `• \`/wa logout\` — Disconnect session`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: ctx.callbackQuery.message?.reply_markup,
+      }
+    ).catch(() => {});
+  });
+
+  bot.callbackQuery('wa_send_qr', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const qrInfo = whatsAppService.getQrCode();
+    if (!qrInfo.qrRaw) {
+      return ctx.reply('⏳ QR code not ready yet.');
+    }
+    try {
+      const qrBuffer = await QRCode.toBuffer(qrInfo.qrRaw, { scale: 8, margin: 2 });
+      await ctx.replyWithPhoto(new InputFile(qrBuffer, 'whatsapp-qr.png'), {
+        caption: '📷 *Scan this QR code with WhatsApp on your phone*',
+        parse_mode: 'Markdown',
+      });
+    } catch (err) {
+      await ctx.reply(`⚠️ Could not generate QR image: ${err.message}`);
+    }
   });
 
   // /mcp command: Model Context Protocol bridge status & live telemetry

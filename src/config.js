@@ -28,6 +28,13 @@ export const config = {
   // Dashboard Security
   dashboardAccessKey: cleanEnv(process.env.DASHBOARD_ACCESS_KEY),
 
+  // WhatsApp Bridge Configuration
+  whatsAppEnabled: cleanEnv(process.env.WHATSAPP_ENABLED, 'true') === 'true',
+  whatsAppOwnerNumber: cleanEnv(process.env.WHATSAPP_OWNER_NUMBER, ''),
+  whatsAppAutoReply: cleanEnv(process.env.WHATSAPP_AUTO_REPLY, 'true') === 'true',
+  whatsAppMode: cleanEnv(process.env.WHATSAPP_MODE, 'all'), // 'all' or 'owner_only'
+  whatsAppNotifyTelegram: cleanEnv(process.env.WHATSAPP_NOTIFY_TELEGRAM, 'true') === 'true',
+
   // Server
   port: parseInt(cleanEnv(process.env.PORT, '3001'), 10),
   nodeEnv: cleanEnv(process.env.NODE_ENV, 'development'),

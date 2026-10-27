@@ -46,6 +46,7 @@ import {
   updateGroupModerationRules,
 } from '../groups/moderation.js';
 import { getBotStatus, getBotApi } from '../telegram/bot.js';
+import { whatsAppService } from '../whatsapp/whatsappService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
@@ -237,6 +238,69 @@ export function createWebServer() {
   app.get('/api/storage/status', (req, res) => {
     const status = googleDriveAdapter.getStatus();
     res.json({ ok: true, storage: status });
+  });
+
+  // =========================================================================
+  // 💬 WHATSAPP 24/7 LIVE BRIDGE REST ENDPOINTS
+  // =========================================================================
+
+  // WhatsApp connection status
+  app.get('/api/whatsapp/status', (req, res) => {
+    res.json({ ok: true, ...whatsAppService.getStatus() });
+  });
+
+  // WhatsApp live QR code
+  app.get('/api/whatsapp/qr', (req, res) => {
+    const qrInfo = whatsAppService.getQrCode();
+    res.json({ ok: true, ...qrInfo });
+  });
+
+  // Request phone number pairing code (8-digit code for phone linking)
+  app.post('/api/whatsapp/pair', requireOwnerAuth, async (req, res) => {
+    try {
+      const phoneNumber = req.body?.phoneNumber;
+      if (!phoneNumber) {
+        return res.status(400).json({ ok: false, error: 'Phone number is required.' });
+      }
+      const code = await whatsAppService.requestPairingCode(phoneNumber);
+      res.json({ ok: true, pairingCode: code });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Send WhatsApp message
+  app.post('/api/whatsapp/send', requireOwnerAuth, async (req, res) => {
+    try {
+      const { to, text } = req.body;
+      if (!to || !text) {
+        return res.status(400).json({ ok: false, error: 'Both "to" and "text" are required.' });
+      }
+      const result = await whatsAppService.sendOutboundMessage(to, text);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Restart WhatsApp Bridge socket
+  app.post('/api/whatsapp/restart', requireOwnerAuth, async (req, res) => {
+    try {
+      await whatsAppService.restart();
+      res.json({ ok: true, message: 'WhatsApp bridge restarted successfully.' });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Disconnect / logout WhatsApp session
+  app.post('/api/whatsapp/disconnect', requireOwnerAuth, async (req, res) => {
+    try {
+      const result = await whatsAppService.disconnectSession();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
   });
 
   // Trigger Database Backup Snapshot (Owner only)

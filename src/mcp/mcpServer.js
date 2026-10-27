@@ -18,6 +18,11 @@ import { minecraftBridge } from '../minecraft/bridge.js';
 import { minecraftCommandExecutor } from '../minecraft/commandExecutor.js';
 import { gameGroupNotifier } from '../minecraft/gameGroupNotifier.js';
 import { playerRegistry } from '../minecraft/playerRegistry.js';
+import { whatsAppService } from '../whatsapp/whatsAppService.js';
+import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
+import { buildOutreachMessage } from '../whatsapp/whatsappPersona.js';
+import { stickerService } from '../whatsapp/stickerService.js';
+import { isWhatsAppSilentModeActive, setWhatsAppSilentMode } from '../maintenance/maintenanceService.js';
 
 // Connection capacity & session store
 const MAX_MCP_CONNECTIONS = 10;
@@ -279,6 +284,90 @@ export const MCP_TOOLS = [
       required: ['minecraftUsername'],
     },
   },
+  {
+    name: 'whatsapp_get_status',
+    description: 'Retrieve real-time WhatsApp bridge connection status, linked phone number, active pairing code, message counters, and stealth mode state.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'whatsapp_send_message',
+    description: 'Send a direct message or Sandy\'s personalized decorative assistant outreach to any WhatsApp contact or phone number.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient phone number (e.g. 919317741936) or contact name (e.g. Rahul)' },
+        message: { type: 'string', description: 'Message text to send' },
+        asAssistant: { type: 'boolean', description: 'Whether to format as Sandy\'s decorative personal assistant outreach with emojis and formal styling (default: false)' },
+      },
+      required: ['to', 'message'],
+    },
+  },
+  {
+    name: 'whatsapp_send_sticker',
+    description: 'Send an expressive 512x512 WebP sticker (nero_cyber, bro_fist, fire, sandy_chill, wave) to a WhatsApp recipient.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient phone number or contact name' },
+        preset: { type: 'string', enum: ['nero_cyber', 'bro_fist', 'fire', 'sandy_chill', 'wave'], description: 'Preset sticker theme' },
+      },
+      required: ['to', 'preset'],
+    },
+  },
+  {
+    name: 'whatsapp_get_inbox',
+    description: 'Retrieve urgent talk requests, call back requests, and personal notes left for Sandy by WhatsApp contacts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max items to retrieve (default: 10)' },
+      },
+    },
+  },
+  {
+    name: 'whatsapp_get_digest',
+    description: 'Generate Sandy\'s executive WhatsApp intelligence digest summarizing active conversations, sentiment, and pending tasks.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'whatsapp_read_chat',
+    description: 'Read recent cross-chat WhatsApp history across all contacts, or fetch full conversation logs for a specific contact.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contact: { type: 'string', description: 'Contact name or phone number. If omitted, returns universal cross-chat summary across all active chats.' },
+        limit: { type: 'number', description: 'Maximum messages/conversations to retrieve (default: 15)' },
+      },
+    },
+  },
+  {
+    name: 'whatsapp_set_silent_mode',
+    description: 'Toggle WhatsApp silent/stealth mode. Halts automatic replies to public contacts while preserving Sandy MasterBot controls.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean', description: 'True to activate silent mode (stop auto-replies), false to resume auto-replies' },
+      },
+      required: ['enabled'],
+    },
+  },
+  {
+    name: 'whatsapp_request_pairing_code',
+    description: 'Request an 8-character WhatsApp pairing code for linking phone number without scanning QR.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        phoneNumber: { type: 'string', description: 'Phone number including country code with no + or spaces (e.g. 919317741936)' },
+      },
+      required: ['phoneNumber'],
+    },
+  },
 ];
 
 /**
@@ -492,6 +581,140 @@ export async function executeMcpTool(toolName, args = {}, auth = {}, botInstance
       });
     }
 
+    case 'whatsapp_get_status': {
+      const status = whatsAppService.getStatus();
+      return {
+        ...status,
+        connected: status.status === 'connected',
+        silentModeActive: isWhatsAppSilentModeActive(),
+      };
+    }
+
+    case 'whatsapp_send_message': {
+      const { to, message, asAssistant } = args;
+      if (!to || !message) {
+        throw new Error('Arguments "to" and "message" are required.');
+      }
+
+      let cleanDigits = String(to).replace(/[^0-9]/g, '');
+      let contactName = null;
+
+      if (/[a-zA-Z]/.test(to) || cleanDigits.length < 9) {
+        const contact = sandyStatusService.findContactByNameOrNumber(to);
+        if (contact && contact.sender_number) {
+          cleanDigits = contact.sender_number;
+          contactName = contact.sender_name || to.trim();
+        } else {
+          throw new Error(`Contact "${to}" not found in WhatsApp memory. Please specify a full phone number.`);
+        }
+      }
+
+      let outboundText = message.trim();
+      if (asAssistant) {
+        outboundText = buildOutreachMessage({
+          contactName: contactName || 'Friend',
+          messageText: outboundText,
+          senderTitle: "Sandy's Personal Assistant",
+        });
+      }
+
+      await whatsAppService.sendOutboundMessage(cleanDigits, outboundText);
+      logAudit(auth.clientName || 'mcp', 'WHATSAPP_MESSAGE_SENT', `Sent to +${cleanDigits} (asAssistant: ${Boolean(asAssistant)})`);
+
+      return {
+        ok: true,
+        recipient: `+${cleanDigits}`,
+        contactName: contactName || 'Contact',
+        asAssistant: Boolean(asAssistant),
+        sentText: outboundText,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    case 'whatsapp_send_sticker': {
+      const { to, preset } = args;
+      if (!to || !preset) {
+        throw new Error('Arguments "to" and "preset" are required.');
+      }
+
+      let cleanDigits = String(to).replace(/[^0-9]/g, '');
+      if (/[a-zA-Z]/.test(to) || cleanDigits.length < 9) {
+        const contact = sandyStatusService.findContactByNameOrNumber(to);
+        if (contact && contact.sender_number) {
+          cleanDigits = contact.sender_number;
+        } else {
+          throw new Error(`Contact "${to}" not found in WhatsApp memory. Please specify a full phone number.`);
+        }
+      }
+
+      const targetJid = `${cleanDigits}@s.whatsapp.net`;
+      const stickerBuf = await stickerService.getPresetSticker(preset);
+      await whatsAppService.safeSendMessage(targetJid, { sticker: stickerBuf });
+
+      logAudit(auth.clientName || 'mcp', 'WHATSAPP_STICKER_SENT', `Preset ${preset} sent to +${cleanDigits}`);
+      return {
+        ok: true,
+        recipient: `+${cleanDigits}`,
+        preset,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    case 'whatsapp_get_inbox': {
+      const limit = Math.min(50, Math.max(1, Number(args.limit || 10)));
+      const items = sandyStatusService.getUrgentRequests(limit);
+      return {
+        count: items.length,
+        urgentRequests: items,
+      };
+    }
+
+    case 'whatsapp_get_digest': {
+      const digest = sandyStatusService.getDailyExecutiveDigest();
+      return {
+        digest,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    case 'whatsapp_read_chat': {
+      const limit = Math.min(50, Math.max(1, Number(args.limit || 15)));
+      if (args.contact && args.contact.trim()) {
+        const history = sandyStatusService.getContactChatHistory(args.contact.trim(), limit);
+        return history;
+      }
+      const summary = sandyStatusService.getRecentChatsSummary(limit);
+      return summary;
+    }
+
+    case 'whatsapp_set_silent_mode': {
+      if (args.enabled === undefined) {
+        throw new Error('Argument "enabled" (boolean) is required.');
+      }
+      const active = setWhatsAppSilentMode(Boolean(args.enabled));
+      return {
+        ok: true,
+        silentModeActive: active,
+        message: active
+          ? 'WhatsApp silent stealth mode ENABLED. Public auto-replies are paused.'
+          : 'WhatsApp silent stealth mode DISABLED. Public auto-replies resumed.',
+      };
+    }
+
+    case 'whatsapp_request_pairing_code': {
+      const phone = String(args.phoneNumber || '').replace(/[^0-9]/g, '');
+      if (!phone || phone.length < 9) {
+        throw new Error('Valid phone number with country code is required (e.g. 919317741936).');
+      }
+      const code = await whatsAppService.requestPairingCode(phone);
+      return {
+        ok: true,
+        phoneNumber: phone,
+        pairingCode: code,
+        instructions: 'Open WhatsApp -> Linked Devices -> Link with phone number instead -> Enter code.',
+      };
+    }
+
     default:
       throw new Error(`Unknown MCP tool: ${toolName}`);
   }
@@ -604,6 +827,18 @@ export async function handleMcpJsonRpc(body, auth, botInstance = null) {
                 description: 'Live system status and health parameters',
                 mimeType: 'application/json',
               },
+              {
+                uri: 'nero://whatsapp/status',
+                name: 'WhatsApp Status & Telemetry',
+                description: 'Real-time WhatsApp connection status, active number, and stealth state',
+                mimeType: 'application/json',
+              },
+              {
+                uri: 'nero://whatsapp/inbox',
+                name: 'Sandy WhatsApp Urgent Inbox',
+                description: 'Pending urgent talk requests and notes left by contacts',
+                mimeType: 'application/json',
+              },
             ],
           },
         };
@@ -622,6 +857,13 @@ export async function handleMcpJsonRpc(body, auth, botInstance = null) {
             activeModel: getActiveModelId(),
             memory: getMemoryStats(),
           });
+        } else if (uri === 'nero://whatsapp/status') {
+          content = JSON.stringify({
+            ...whatsAppService.getStatus(),
+            silentModeActive: isWhatsAppSilentModeActive(),
+          });
+        } else if (uri === 'nero://whatsapp/inbox') {
+          content = JSON.stringify(sandyStatusService.getUrgentRequests(20));
         } else {
           return {
             jsonrpc: '2.0',

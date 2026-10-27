@@ -328,4 +328,32 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.match(user2HistoryText, /Oranges/i);
     assert.doesNotMatch(user2HistoryText, /Apples/i);
   });
+
+  await t.test('18. Dual-Engine Architecture & MasterBot Manager/Coder Role', async () => {
+    const { buildWhatsAppDirective } = await import('../src/whatsapp/whatsappPersona.js');
+
+    const contactDirective = buildWhatsAppDirective({
+      senderNumber: '919876543210',
+      senderName: 'Friend',
+      isSandy: false,
+      userPrompt: 'Tell me about quantum computing',
+    });
+
+    const masterDirective = buildWhatsAppDirective({
+      senderNumber: '919999999999',
+      senderName: 'Sandy',
+      isSandy: true,
+      userPrompt: 'Inspect the bot status',
+    });
+
+    // Contact directive emphasizes fast talk & low latency
+    assert.match(contactDirective, /Gemini 3\.5 Flash/i);
+    assert.match(contactDirective, /lowest latency/i);
+
+    // MasterBot directive emphasizes supreme senior coder, manager & caretaker
+    assert.match(masterDirective, /MASTERBOT/i);
+    assert.match(masterDirective, /Autonomous Senior Coder/i);
+    assert.match(masterDirective, /Gemini 3\.8 Flash/i);
+    assert.match(masterDirective, /MAXIMUM \(HIGH\) reasoning/i);
+  });
 });

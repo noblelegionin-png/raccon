@@ -10,6 +10,7 @@ import QRCode from 'qrcode';
 import qrcodeTerminal from 'qrcode-terminal';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { config } from '../config.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import {
@@ -17,7 +18,7 @@ import {
   recordAssistantMessage,
   clearConversation,
 } from '../conversation/manager.js';
-import { logAudit, getRecentConversation } from '../db/index.js';
+import { logAudit, getRecentConversation, addNote, getUserNotes } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { getBotApi } from '../telegram/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
@@ -27,6 +28,7 @@ import { sandyStatusService } from './sandyStatusService.js';
 import { mediaManager } from './mediaManager.js';
 import { buildWhatsAppChatContext, buildWhatsAppDirective } from './whatsappPersona.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
+import { isMaintenanceModeActive, enableMaintenanceMode, disableMaintenanceMode } from '../maintenance/maintenanceService.js';
 
 class WhatsAppService {
   constructor() {
@@ -323,12 +325,15 @@ class WhatsAppService {
     if (promptText === '/start' || promptText === '/help') {
       const helpText =
         `⚡ *NERO LABS — WHATSAPP EXECUTIVE AI ASSISTANT*\n\n` +
-        `Hello ${senderName}! I am Nero, Sandy's personal AI executive assistant connected 24/7 with *Gemini 3.8 Flash (High Reasoning)* & memory.\n\n` +
+        `Hello ${senderName}! I am Nero, Sandy's personal AI executive assistant connected 24/7 with dual-engine intelligence:\n\n` +
+        `*Engines & Architecture:*\n` +
+        `• ⚡ *Fast Talk Engine (Contacts):* \`gemini-3.5-flash-lite\` (Ultra-low latency, blazing fast)\n` +
+        `• 👑 *Master Console (Sandy):* \`gemini-3.8-flash\` (High Reasoning manager & senior coder)\n\n` +
         `*Capabilities:*\n` +
         `• 💬 Research & Conversation: In-depth research, reasoning, problem solving, and discussions\n` +
-        `• 📸 Vision Vault: Send any image, diagram, or screenshot — I'll inspect, explain, and store it\n` +
+        `• 📸 Vision Vault: Send any image, diagram, or screenshot — inspected, explained, and stored\n` +
         `• 📹 Video Vault: Send any video — securely saved to Sandy's archive vault\n` +
-        `• 👑 MasterBot Console: When Sandy texts himself, manage live routine, gaming status, and priority inbox\n` +
+        `• 👑 MasterBot Console: When Sandy texts himself, manage live routine, code fixes, gaming status, and priority inbox\n` +
         `• 📏 Dynamic Sizing: "Hy to Hy" brevity, 10–500 words for inquiries, or exact words requested\n` +
         `• \`/status\` — Live telemetry & active model\n` +
         `• \`/ping\` — Real-time response ping\n` +
@@ -341,10 +346,10 @@ class WhatsAppService {
     }
 
     if (promptText === '/ping') {
-      const activeModel = 'gemini-3.8-flash';
+      const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
       await this.safeSendMessage(
         remoteJid,
-        { text: `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (High Reasoning). 🟢` },
+        { text: `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (${isSandy ? 'High' : 'Fast/Low'} Reasoning). 🟢` },
         { quoted: msg }
       );
       await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -364,11 +369,11 @@ class WhatsAppService {
     }
 
     if (promptText === '/status') {
-      const activeModel = 'gemini-3.8-flash';
       const statusText =
-        `📊 *NERO TELEMETRY & STATUS*\n\n` +
+        `📊 *NERO TELEMETRY & SYSTEM STATUS*\n\n` +
         `• *Bridge Status:* 🟢 Live & Connected 24/7\n` +
-        `• *Active AI Model:* \`${activeModel}\` (Reasoning: High)\n` +
+        `• *Public Chat Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
+        `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Manager & Coder)\n` +
         `• *Connected Device:* \`+${(this.sock.user?.id || '').split(':')[0]}\`\n` +
         `• *Total Processed:* ${this.messageCount} messages\n` +
         `• *Provider:* ScaleMax API Gateway\n` +
@@ -411,7 +416,7 @@ class WhatsAppService {
           ? `Boss Sandy, aapka video received aur vault mein safely store ho gaya! (${Math.round(buffer.length / 1024)} KB) 📹✨`
           : `Maine aapka video receive kar liya hai aur securely store ho gaya hai! (${Math.round(buffer.length / 1024)} KB) 📹✨`;
 
-        recordAssistantMessage(chatId, replyText, 40, 'gemini-3.8-flash');
+        recordAssistantMessage(chatId, replyText, 40, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -457,6 +462,7 @@ class WhatsAppService {
         const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
         recordUserMessage(chatId, promptText ? `[User Image: "${promptText}"]` : `[User sent an image]`);
 
+        const visionModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
         const analysis = await visionService.analyzeImage({
           buffer,
           prompt: visionPrompt,
@@ -465,7 +471,7 @@ class WhatsAppService {
         });
 
         const replyText = analysis.description || "Maine aapki image dekh li hai! Iske baare mein aapko kya madad chahiye? ✨";
-        recordAssistantMessage(chatId, replyText, 120, 'gemini-3.8-flash');
+        recordAssistantMessage(chatId, replyText, 120, visionModel);
 
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -518,7 +524,33 @@ class WhatsAppService {
         return;
       }
 
-      // 3. Inspect Another Contact's Chat / Saved Media
+      // 3. System Telemetry & Health Diagnostics (sysinfo / status / diagnose)
+      if (/\b(?:sysinfo|system\s+stats|telemetry|diagnos(?:e|tics?)|server\s+stats)\b/i.test(promptText)) {
+        const memoryUsage = process.memoryUsage();
+        const uptimeSec = Math.floor(process.uptime());
+        const hours = Math.floor(uptimeSec / 3600);
+        const minutes = Math.floor((uptimeSec % 3600) / 60);
+        const seconds = uptimeSec % 60;
+        const sysText =
+          `⚡ *NERO LABS — MASTERBOT SYSTEM DIAGNOSTICS*\n\n` +
+          `• *Process Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
+          `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
+          `• *RAM Heap Used:* ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB\n` +
+          `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Coder & Manager)\n` +
+          `• *Public Talk Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
+          `• *Total Processed Messages:* ${this.messageCount}\n` +
+          `• *Active Socket Status:* 🟢 ${this.status.toUpperCase()}\n` +
+          `• *OS Platform:* ${os.platform()} (${os.arch()})\n` +
+          `• *Host Memory Free:* ${Math.round(os.freemem() / 1024 / 1024)} MB / ${Math.round(os.totalmem() / 1024 / 1024)} MB\n\n` +
+          `_All systems nominal and linked to MasterBot console! ✨_`;
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', sysText, 100, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: sysText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 4. Inspect Another Contact's Chat / Saved Media
       const showChatMatch = promptText.match(/(?:read|show|check|kya\s+bola)\s+(?:chat|messages?|talk)\s+(?:of|from)?\s*([+0-9]+)/i);
       if (showChatMatch && showChatMatch[1]) {
         const targetNum = showChatMatch[1].replace(/[^0-9]/g, '');
@@ -549,7 +581,75 @@ class WhatsAppService {
         return;
       }
 
-      // 4. Change Reasoning Effort (Low / Medium / High)
+      // 5. Memory Wiping / Resetting for Specific Contact
+      const clearContactMatch = promptText.match(/\b(?:clear|reset|wipe)\s+(?:chat|memory)\s+(?:of|for)?\s*([+0-9]+)\b/i);
+      if (clearContactMatch && clearContactMatch[1]) {
+        const targetNum = clearContactMatch[1].replace(/[^0-9]/g, '');
+        const targetJid = `${targetNum}@s.whatsapp.net`;
+        clearConversation(`wa_${targetJid}`);
+        recordUserMessage('wa_sandy_master', promptText);
+        const clearedText = `🧹 Memory successfully cleared for contact +${targetNum}, Boss!`;
+        recordAssistantMessage('wa_sandy_master', clearedText, 20, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: clearedText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 6. Maintenance Mode Controls
+      if (/\b(?:enable|turn\s+on|activate)\s+maintenance\b/i.test(promptText)) {
+        await enableMaintenanceMode();
+        recordUserMessage('wa_sandy_master', promptText);
+        const maintText = "🛠️ *Maintenance Mode ACTIVATED.* Public chat replies for contacts are temporarily paused while you work! 🔒";
+        recordAssistantMessage('wa_sandy_master', maintText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: maintText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      if (/\b(?:disable|turn\s+off|deactivate)\s+maintenance\b/i.test(promptText)) {
+        await disableMaintenanceMode();
+        recordUserMessage('wa_sandy_master', promptText);
+        const maintText = "🟢 *Maintenance Mode DEACTIVATED.* Public chat replies are now fully live for all contacts! 🚀";
+        recordAssistantMessage('wa_sandy_master', maintText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: maintText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 7. Persistent Notes
+      const addNoteMatch = promptText.match(/\b(?:add|save|create)\s+note[:\s]+(.+)/i);
+      if (addNoteMatch && addNoteMatch[1]) {
+        const noteBody = addNoteMatch[1].trim();
+        addNote('sandy', 'wa_sandy_master', noteBody);
+        recordUserMessage('wa_sandy_master', promptText);
+        const noteConf = `📝 *Note Saved in Persistent Storage:*\n"${noteBody}"`;
+        recordAssistantMessage('wa_sandy_master', noteConf, 20, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: noteConf }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      if (/\b(?:show|list|my|view)\s+notes\b/i.test(promptText)) {
+        const notes = getUserNotes('sandy');
+        recordUserMessage('wa_sandy_master', promptText);
+        if (!notes || notes.length === 0) {
+          const noNotes = "📝 Boss Sandy, your persistent notepad is currently empty.";
+          recordAssistantMessage('wa_sandy_master', noNotes, 20, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: noNotes }, { quoted: msg });
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+        let notesReport = `📝 *SANDY'S PERSISTENT NOTES (${notes.length})*:\n\n`;
+        for (const n of notes.slice(0, 10)) {
+          notesReport += `• [#${n.id}] ${n.note_text} _(${new Date(n.created_at).toLocaleDateString()})_\n`;
+        }
+        recordAssistantMessage('wa_sandy_master', notesReport, 60, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: notesReport }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 8. Change Reasoning Effort (Low / Medium / High)
       const reasoningMatch = promptText.match(/\b(?:change|set|switch)\s+reasoning(?:\s+to)?\s+(high|low|medium)\b/i);
       if (reasoningMatch && reasoningMatch[1]) {
         const newLevel = reasoningMatch[1].toLowerCase();
@@ -567,6 +667,14 @@ class WhatsAppService {
     // 💬 CONTACTS MESSAGING SANDY'S WHATSAPP
     // ==========================================
     if (!isSandy) {
+      // Check if maintenance mode is active
+      if (isMaintenanceModeActive()) {
+        const maintMsg = "🛠️ *Sandy's AI Assistant is currently in brief maintenance mode.* Replies are paused for a few moments while updates finish. Thanks for your patience! 🚀";
+        await this.safeSendMessage(remoteJid, { text: maintMsg }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
       // Check if contact is leaving an urgent message / important talk request
       if (/\b(?:urgent|emergency|zaroori|urgent\s+hai|important\s+work|call\s+karo|connect\s+karo|tell\s+sandy\s+to\s+call)\b/i.test(promptText)) {
         sandyStatusService.addUrgentRequest({
@@ -585,7 +693,10 @@ class WhatsAppService {
       );
     }
 
-    // AI Generation Pipeline (Dedicated Gemini 3.8 Flash, High Reasoning)
+    // AI Generation Pipeline:
+    // Dual Architecture:
+    // • MasterBot (Sandy): 'gemini-3.8-flash' (High Reasoning / Manager & Senior Coder)
+    // • Public Chat (Contacts): 'gemini-3.5-flash-lite' (Low Reasoning / Fastest Speed / Lowest Latency)
     try {
       const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
       recordUserMessage(chatId, promptText);
@@ -598,13 +709,14 @@ class WhatsAppService {
         isSandy,
       });
 
-      const activeModel = 'gemini-3.8-flash';
+      const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+      const reasoningEffort = isSandy ? 'high' : 'low';
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages,
         chatId,
-        reasoningEffort: 'high',
+        reasoningEffort,
       });
 
       let replyText = completion.text || 'I processed your request but have no response to return.';

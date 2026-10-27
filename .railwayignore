@@ -6,3 +6,7 @@ data/
 dist/
 .git/
 tests/
+*.exe
+cloudflared*
+.railway/
+.system_generated/

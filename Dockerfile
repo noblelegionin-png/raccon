@@ -5,7 +5,12 @@ WORKDIR /app
 # Install build dependencies if needed
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure git to use https instead of ssh for public dependencies
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:" && \
+    git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
 COPY package*.json ./
 RUN npm ci --omit=dev

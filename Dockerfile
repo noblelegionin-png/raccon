@@ -16,7 +16,7 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:" &&
     git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --verbose
 
 COPY . .
 

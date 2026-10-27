@@ -23,7 +23,7 @@ export const config = {
   // ScaleMax
   scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY),
   scaleMaxBaseUrl: (cleanEnv(process.env.SCALEMAX_BASE_URL, 'https://api.scalemax.pro/v1')).replace(/\/+$/, ''),
-  scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gpt-6-luna'),
+  scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gemini-3.8-flash'),
 
   // Dashboard Security
   dashboardAccessKey: cleanEnv(process.env.DASHBOARD_ACCESS_KEY),

@@ -6,16 +6,23 @@
  * to ensure strict instruction-following and precision responses.
  */
 
-export const SUPPORTED_INTENTS = ['explanation', 'code', 'summary', 'prompt', 'action', 'general'];
+export const SUPPORTED_INTENTS = ['greeting', 'explanation', 'code', 'summary', 'prompt', 'action', 'general'];
 
 /**
  * Detect user intent from prompt text
  * @param {string} text - Cleaned user prompt
- * @returns {'explanation' | 'code' | 'summary' | 'prompt' | 'action' | 'general'}
+ * @returns {'greeting' | 'explanation' | 'code' | 'summary' | 'prompt' | 'action' | 'general'}
  */
 export function detectUserIntent(text) {
   if (!text || typeof text !== 'string') return 'general';
   const clean = text.trim().toLowerCase();
+
+  // 0. Greeting intent ("Hy to Hy" rule)
+  if (/\b(?:hi|hy|hello|hey|yo|sup|hlo|hii|heyy|heya|hola|kaisa\s+hai|kaise\s+ho|kya\s+haal|namaste|good\s+morning|good\s+evening|good\s+afternoon|wassup|whats\s+up)\b/i.test(clean) &&
+      clean.split(/\s+/).length <= 6 &&
+      !/\b(?:what|why|how|explain|describe|write|show|tell\s+me\s+about)\b/i.test(clean)) {
+    return 'greeting';
+  }
 
   // 1. Code intent
   if (/\b(?:write|create|implement|fix|refactor|show|give\s+me)?\s*(?:code|script|function|class|program|algorithm|sql|python|javascript|typescript|c\+\+|html|css|regex|query|endpoint|api)\b/i.test(clean) ||
@@ -68,6 +75,7 @@ export function extractExplicitWordLimit(text) {
 
   // Patterns for explicit word count constraints
   const patterns = [
+    /\b(?:write|give|provide)?\s*(?:a|an)?\s*(\d{1,4})\s*word\s*(?:explanation|summary|essay|reply|answer|note|post|article)\b/i,
     /\b(?:in|under|max|maximum|at\s+most|around|within|up\s+to|strictly)\s+(\d{1,4})\s*words?\b/i,
     /\b(?:word\s+limit|length\s+limit|limit\s+of)\s*[:=]?\s*(\d{1,4})\b/i,
     /\b(\d{1,4})\s*words?\s*(?:max|maximum|or\s+less|limit)\b/i,
@@ -98,7 +106,12 @@ export function extractExplicitWordLimit(text) {
 export function formatIntentDirective(intent, explicitWordLimit = null) {
   const parts = [];
 
-  if (intent === 'code') {
+  if (intent === 'greeting') {
+    parts.push(`[INTENT: CASUAL GREETING ("HY TO HY" RULE)]
+• The user sent a casual greeting or brief hello.
+• MATCH THEIR LENGTH & VIBE: Reply with a warm, stylish, concise 1 to 2 sentence greeting.
+• STRICTLY FORBIDDEN: Do not write paragraphs or lecture on a simple greeting.`);
+  } else if (intent === 'code') {
     parts.push(`[INTENT: CODE GENERATION / DEBUGGING]
 • Provide clean, working, idiomatic code with minimal fluff.
 • Include a concise 1-2 sentence explanation of how the code works.
@@ -112,14 +125,17 @@ export function formatIntentDirective(intent, explicitWordLimit = null) {
 • Deliver a well-structured, production-ready system or generative prompt.
 • Include specific constraints, format rules, and role definitions.`);
   } else if (intent === 'explanation') {
-    parts.push(`[INTENT: EXPLANATION]
-• Explain clearly, starting with the core intuition followed by necessary depth.
-• Maintain an engaging, friendly, yet technically precise tone.`);
+    parts.push(`[INTENT: RESEARCH & EXPLANATION (10 TO 500 WORDS)]
+• Provide an engaging, deep, and intuitive explanation strictly under 10 to 500 words.
+• Focus on substance, clarity, and insight without unnecessary filler.`);
+  } else {
+    parts.push(`[INTENT: RESEARCH & CONVERSATIONAL CHAT (10 TO 500 WORDS)]
+• Answer with high intelligence and clarity strictly between 10 to 500 words.`);
   }
 
   if (explicitWordLimit) {
     parts.push(`[CRITICAL CONSTRAINT: EXPLICIT WORD LIMIT]
-• The user explicitly requested approximately ${explicitWordLimit} words.
+• The user explicitly requested approximately ${explicitWordLimit} words (e.g. "${explicitWordLimit} word explanation").
 • You MUST respect this length constraint: craft your response to be around ${explicitWordLimit} words (neither truncating abruptly nor ignoring the limit).`);
   }
 

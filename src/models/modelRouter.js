@@ -5,10 +5,10 @@ export const SUPPORTED_REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhi
 
 export const DEFAULT_ROUTING = {
   chat: {
-    model: 'gemini-3.1-flash-lite-preview',
-    reasoning: 'low',
-    targetTokens: 2000,
-    maxInputTokens: 16000,
+    model: 'gemini-3.8-flash',
+    reasoning: 'high',
+    targetTokens: 4000,
+    maxInputTokens: 32000,
     maxOutputTokens: 8000,
   },
   management: {

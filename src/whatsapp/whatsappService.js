@@ -3,6 +3,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
@@ -21,6 +22,8 @@ import { logAudit } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { getBotApi } from '../telegram/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
+import { visionService } from '../vision/visionService.js';
+import { extractExplicitWordLimit, detectUserIntent } from '../conversation/intentDetector.js';
 
 class WhatsAppService {
   constructor() {
@@ -206,16 +209,21 @@ class WhatsAppService {
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || remoteJid === 'status@broadcast') return;
 
-    // Extract text content
+    // Extract image payload if present
+    const imageMessage = msg.message.imageMessage || (msg.message.documentMessage?.mimetype?.startsWith('image/') ? msg.message.documentMessage : null);
+    const isImage = Boolean(imageMessage);
+
+    // Extract text content or caption
     const text =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text ||
       msg.message.imageMessage?.caption ||
       msg.message.videoMessage?.caption ||
+      msg.message.documentMessage?.caption ||
       '';
 
     const trimmed = (text || '').trim();
-    if (!trimmed) return;
+    if (!trimmed && !isImage) return;
 
     this.messageCount++;
     this.lastActivity = new Date().toISOString();
@@ -235,7 +243,8 @@ class WhatsAppService {
         lower.startsWith('/nero') ||
         lower.startsWith('.nero') ||
         lower.startsWith('nero ') ||
-        lower.startsWith('/ai ');
+        lower.startsWith('/ai ') ||
+        (isImage && lower.length > 0);
 
       if (!isSelfTrigger) {
         return;
@@ -253,13 +262,14 @@ class WhatsAppService {
       return;
     }
 
-    // Group message check: only respond if mentioned or asked
+    // Group message check: only respond if mentioned, commanded, or sent image with mention
     if (isGroup) {
       const isMentioned =
         trimmed.toLowerCase().includes('nero') ||
         trimmed.startsWith('!') ||
         trimmed.startsWith('/') ||
-        trimmed.startsWith('.');
+        trimmed.startsWith('.') ||
+        isImage;
       if (!isMentioned) return;
     }
 
@@ -276,9 +286,11 @@ class WhatsAppService {
     if (promptText === '/start' || promptText === '/help') {
       const helpText =
         `⚡ *NERO LABS — WHATSAPP AI ASSISTANT*\n\n` +
-        `Hello ${senderName}! I am Nero, connected 24/7 with ultra-fast AI reasoning and persistent memory.\n\n` +
-        `*Commands:*\n` +
-        `• Direct Question: Just ask anything naturally\n` +
+        `Hello ${senderName}! I am Nero, connected 24/7 with dedicated *Gemini 3.8 Flash (High Reasoning)* & persistent memory.\n\n` +
+        `*Capabilities:*\n` +
+        `• 💬 Direct Chat & Research: Ask questions, explore concepts, debate, or just talk casually\n` +
+        `• 📸 Vision: Send any photo, screenshot, document, or diagram — I'll inspect and explain it\n` +
+        `• 📏 Dynamic Sizing: Match brevity on greetings, 10–500 words on inquiries, or exact length when requested\n` +
         `• \`/status\` — System telemetry, active AI model & latency\n` +
         `• \`/model\` — Active neural engine\n` +
         `• \`/ping\` — Real-time response ping\n` +
@@ -291,10 +303,10 @@ class WhatsAppService {
     }
 
     if (promptText === '/ping') {
-      const activeModel = getActiveModelId();
+      const activeModel = 'gemini-3.8-flash';
       await this.sock.sendMessage(
         remoteJid,
-        { text: `Pong! 🏓 Nero WhatsApp Bridge is live on *${activeModel}*. 🟢` },
+        { text: `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (High Reasoning). 🟢` },
         { quoted: msg }
       );
       await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -313,19 +325,65 @@ class WhatsAppService {
     }
 
     if (promptText === '/status') {
-      const activeModel = getActiveModelId();
+      const activeModel = 'gemini-3.8-flash';
       const statusText =
         `📊 *NERO TELEMETRY & STATUS*\n\n` +
         `• *Bridge Status:* 🟢 Live & Connected\n` +
-        `• *Active AI Model:* \`${activeModel}\`\n` +
+        `• *Active AI Model:* \`${activeModel}\` (Reasoning: High)\n` +
         `• *Connected Device:* \`+${(this.sock.user?.id || '').split(':')[0]}\`\n` +
         `• *Total Processed:* ${this.messageCount} messages\n` +
         `• *Provider:* ScaleMax API Gateway\n` +
+        `• *Vision Engine:* Multimodal Active\n` +
         `• *Memory Store:* SQLite WAL Persistent`;
 
       await this.sock.sendMessage(remoteJid, { text: statusText }, { quoted: msg });
       await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
       return;
+    }
+
+    // ==========================================
+    // 📸 IMAGE UNDERSTANDING & VISION PIPELINE
+    // ==========================================
+    if (isImage) {
+      try {
+        console.log(`[WhatsApp Vision] Downloading and analyzing incoming image from ${senderName}...`);
+        const buffer = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage }
+        );
+
+        const visionPrompt = promptText.length > 0
+          ? `The user sent this image with note: "${promptText}". Answer their inquiry with deep visual comprehension.`
+          : `Thoroughly inspect this image (OCR text, objects, scene, details). In character as Nero, describe what you see, highlight the key points, and ask the user: "I've analyzed your image — what do you need help with regarding it?"`;
+
+        const chatId = `wa_${remoteJid}`;
+        recordUserMessage(chatId, promptText ? `[User Image: ${promptText}]` : `[User sent an image]`);
+
+        const analysis = await visionService.analyzeImage({
+          buffer,
+          prompt: visionPrompt,
+          mimeType: imageMessage.mimetype || 'image/jpeg',
+          chatId,
+        });
+
+        const replyText = analysis.description || "I've inspected your image! What would you like help with regarding it? ✨";
+        recordAssistantMessage(chatId, replyText, 120, 'gemini-3.8-flash');
+
+        await this.sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      } catch (imgErr) {
+        console.error('[WhatsApp Vision Error]:', imgErr.message);
+        await this.sock.sendMessage(
+          remoteJid,
+          { text: `📸 I noticed your image, but had a transient glitch reading it (${imgErr.message}). Could you re-send or forward it again?` },
+          { quoted: msg }
+        );
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
     }
 
     // Notify Telegram owner if configured and not self-message
@@ -335,33 +393,52 @@ class WhatsAppService {
       );
     }
 
-    // AI Generation Pipeline
+    // AI Generation Pipeline (Dedicated Gemini 3.8 Flash, High Reasoning)
     try {
       const chatId = `wa_${remoteJid}`;
       recordUserMessage(chatId, promptText);
+
+      const explicitLimit = extractExplicitWordLimit(promptText);
+      const detectedIntent = detectUserIntent(promptText);
 
       const messages = buildChatContext(chatId, promptText, {
         senderId: senderNumber,
         senderName,
         userIsOwner: isOwnerSender,
+        explicitWordLimit: explicitLimit,
+        intent: detectedIntent,
       });
 
-      const activeModel = getActiveModelId() || config.scaleMaxDefaultModel;
+      const activeModel = 'gemini-3.8-flash';
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages,
         chatId,
-        reasoningEffort: 'low',
+        reasoningEffort: 'high',
       });
 
       let replyText = completion.text || 'I processed your request but have no response to return.';
 
+      // Dynamic reply length intelligence:
+      // 1. "Hy to Hy" rule -> casual greetings capped to 35 words (1-2 punchy sentences)
+      // 2. Standard questions -> 10 to 500 words limit
+      // 3. Explicit limits (e.g. "write a 500 word explanation") -> exact requested limit
+      let maxWords = 500;
+      if (explicitLimit) {
+        maxWords = explicitLimit;
+      } else if (detectedIntent === 'greeting') {
+        maxWords = 35;
+      }
+
+      const minWords = detectedIntent === 'greeting' ? 1 : 10;
+
       // Sanitize response
       try {
         const validated = validateAndSanitizeResponse(replyText, promptText, {
-          minWords: 1,
-          maxWords: isOwnerSender ? 800 : 300,
+          minWords,
+          maxWords,
+          explicitLimit: Boolean(explicitLimit),
           isDev: isOwnerSender,
           isOwner: isOwnerSender,
         });

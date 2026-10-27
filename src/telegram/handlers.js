@@ -2982,21 +2982,25 @@ export function registerBotHandlers(bot) {
 
       const isDev = isOwner(userId);
       const explicitLimit = extractExplicitWordLimit(promptText);
-      const minWords = isDev
-        ? parseInt(getConfig('limit_dev_min', '1'), 10)
-        : parseInt(getConfig('limit_global_min', '10'), 10);
-      let maxWords = isDev
-        ? parseInt(getConfig('limit_dev_max', '500'), 10)
-        : parseInt(getConfig('limit_global_max', '100'), 10);
+      const detectedIntent = detectUserIntent(promptText);
 
-      // If user explicitly specified a word limit (e.g. 300 words), honor it!
+      // Self-Intelligence in Reply Length:
+      // 1. "Hy to Hy" rule -> casual greetings capped to 35 words (1-2 punchy sentences)
+      // 2. Standard questions -> 10 to 500 words limit
+      // 3. Explicit limits (e.g. "write a 500 word explanation") -> exact requested limit
+      let maxWords = 500;
       if (explicitLimit) {
         maxWords = explicitLimit;
+      } else if (detectedIntent === 'greeting') {
+        maxWords = 35;
       }
+
+      const minWords = detectedIntent === 'greeting' ? 1 : 10;
 
       const validation = validateAndSanitizeResponse(completion.text, promptText, {
         minWords,
         maxWords,
+        explicitLimit: Boolean(explicitLimit),
         isDev,
         isOwner: userIsOwner,
         explicitLimit: Boolean(explicitLimit),
@@ -3207,7 +3211,7 @@ export function registerBotHandlers(bot) {
             { role: 'user', content: text || 'Hello' },
           ],
           chatId: String(targetChatId),
-          reasoningEffort: 'low',
+          reasoningEffort: 'high',
         });
 
         const replyContent = aiResponse.text || 'Nero Labs system active. Direct owner connection established. ✨';

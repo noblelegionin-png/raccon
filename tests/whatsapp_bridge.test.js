@@ -142,4 +142,38 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.match(html, /Scan to Connect WhatsApp/i);
     assert.match(html, /checkStatus/i);
   });
+
+  await t.test('11. Dynamic Length Intelligence & Word Limit Extraction', async () => {
+    const { detectUserIntent, extractExplicitWordLimit } = await import('../src/conversation/intentDetector.js');
+    
+    // Greeting detection ("Hy to Hy")
+    assert.equal(detectUserIntent('hy'), 'greeting');
+    assert.equal(detectUserIntent('hi!'), 'greeting');
+    assert.equal(detectUserIntent('kaisa hai bhai'), 'greeting');
+    assert.equal(detectUserIntent('sup'), 'greeting');
+
+    // Explicit 500 word explanation detection
+    const limit500 = extractExplicitWordLimit('write a 500 word explanation about black holes');
+    assert.equal(limit500, 500);
+
+    const limit200 = extractExplicitWordLimit('explain in 200 words what photosynthesis is');
+    assert.equal(limit200, 200);
+
+    // Standard question has no explicit limit (defaults to 10-500 in pipeline)
+    const noLimit = extractExplicitWordLimit('what is the speed of light?');
+    assert.equal(noLimit, null);
+  });
+
+  await t.test('12. Dedicated Gemini 3.8 Flash & High Reasoning Verification', async () => {
+    const { getActiveModelId } = await import('../src/models/catalogue.js');
+    const { getAgentRouting } = await import('../src/models/modelRouter.js');
+    const { getConfig } = await import('../src/db/index.js');
+
+    assert.equal(getActiveModelId(), 'gemini-3.8-flash');
+    assert.equal(getConfig('reasoning_effort'), 'high');
+
+    const chatRouting = getAgentRouting('chat');
+    assert.equal(chatRouting.model, 'gemini-3.8-flash');
+    assert.equal(chatRouting.reasoning, 'high');
+  });
 });

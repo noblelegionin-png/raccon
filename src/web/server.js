@@ -249,10 +249,224 @@ export function createWebServer() {
     res.json({ ok: true, ...whatsAppService.getStatus() });
   });
 
-  // WhatsApp live QR code
+  // WhatsApp live QR code JSON
   app.get('/api/whatsapp/qr', (req, res) => {
     const qrInfo = whatsAppService.getQrCode();
     res.json({ ok: true, ...qrInfo });
+  });
+
+  // WhatsApp live QR direct PNG image
+  app.get('/api/whatsapp/qr.png', async (req, res) => {
+    try {
+      const buffer = await whatsAppService.getQrBuffer();
+      if (!buffer) {
+        // Return 1x1 transparent pixel or 503
+        return res.status(404).send('QR code not ready yet');
+      }
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.send(buffer);
+    } catch (err) {
+      res.status(500).send(err.message);
+    }
+  });
+
+  // Dedicated 24/7 Always-Live QR Web Page for mobile & desktop
+  app.get('/qr', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ Nero Labs — WhatsApp 24/7 Live QR</title>
+  <link rel="icon" href="img/avatar.jpg">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d2f;
+      --border: #23304c;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--primary);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-yellow {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .badge-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    h1 { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+    p.subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+    .qr-box {
+      background: #ffffff;
+      padding: 16px;
+      border-radius: 12px;
+      width: 250px;
+      height: 250px;
+      margin: 0 auto 20px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--primary);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+    }
+    .qr-box img { width: 100%; height: 100%; object-fit: contain; }
+    .instructions {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 12px;
+      text-align: left;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .instructions ol { padding-left: 20px; }
+    .instructions li { margin-bottom: 4px; color: var(--text-muted); }
+    .instructions strong { color: var(--text); }
+    .footer-actions { display: flex; gap: 10px; justify-content: center; }
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      color: #fff;
+      background: var(--border);
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary { background: var(--primary); color: #000; font-weight: 700; }
+    .btn:hover { opacity: 0.9; }
+    #connectedView { display: none; }
+    .check-icon { font-size: 54px; color: var(--primary); margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="liveView">
+      <div id="statusBadge" class="badge badge-yellow">
+        <span class="badge-pulse"></span>
+        <span id="statusText">INITIALIZING 24/7 QR...</span>
+      </div>
+      <h1>Scan to Connect WhatsApp</h1>
+      <p class="subtitle">Nero AI will run 24/7 live on your WhatsApp</p>
+
+      <div class="qr-box">
+        <img id="qrImage" src="/api/whatsapp/qr.png" alt="WhatsApp QR Code" />
+      </div>
+
+      <div class="instructions">
+        <ol>
+          <li>Open <strong>WhatsApp</strong> on your phone</li>
+          <li>Tap <strong>Settings</strong> or <strong>Menu (⋮)</strong></li>
+          <li>Select <strong>Linked Devices</strong> &gt; <strong>Link a Device</strong></li>
+          <li>Point your phone camera at this QR code</li>
+        </ol>
+      </div>
+
+      <div class="footer-actions">
+        <a href="/owner.html" class="btn">👑 Owner Console</a>
+        <a href="https://t.me/NeroLabsBot" target="_blank" class="btn btn-primary">📱 Telegram Bot</a>
+      </div>
+    </div>
+
+    <div id="connectedView">
+      <div class="check-icon">✓</div>
+      <div class="badge">
+        <span class="badge-pulse"></span>
+        <span>CONNECTED & LIVE 24/7</span>
+      </div>
+      <h1 id="connTitle">WhatsApp Successfully Linked!</h1>
+      <p id="connSubtitle" class="subtitle">Nero is now actively responding to your WhatsApp messages with persistent memory.</p>
+      <div class="footer-actions">
+        <a href="/owner.html" class="btn btn-primary">Open Owner Console</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/whatsapp/status');
+        const data = await res.json();
+        if (data.status === 'connected') {
+          document.getElementById('liveView').style.display = 'none';
+          document.getElementById('connectedView').style.display = 'block';
+          if (data.connectedUser) {
+            const phone = (data.connectedUser.id || '').split(':')[0];
+            document.getElementById('connSubtitle').textContent = 'Connected to phone +' + phone + ' (' + (data.connectedUser.name || 'Owner') + '). AI auto-reply is live!';
+          }
+          return;
+        }
+
+        const badge = document.getElementById('statusBadge');
+        const text = document.getElementById('statusText');
+        const qr = document.getElementById('qrImage');
+
+        if (data.status === 'qr_ready') {
+          badge.className = 'badge';
+          text.textContent = '🟢 LIVE QR CODE (AUTO-UPDATING)';
+          qr.src = '/api/whatsapp/qr.png?t=' + Date.now();
+        } else {
+          badge.className = 'badge badge-yellow';
+          text.textContent = '🔄 GENERATING FRESH QR...';
+        }
+      } catch (e) {}
+    }
+
+    setInterval(checkStatus, 3500);
+    checkStatus();
+  </script>
+</body>
+</html>`);
   });
 
   // Request phone number pairing code (8-digit code for phone linking)

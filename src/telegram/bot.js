@@ -98,6 +98,8 @@ export async function startBot() {
         try {
           await botInstance.api.setMyCommands([
             { command: 'start', description: '🚀 Open Nero AI Mini App & group controls' },
+            { command: 'qr', description: '📷 View live WhatsApp QR code to connect 24/7' },
+            { command: 'wa', description: '💬 WhatsApp 24/7 bridge status & controls' },
             { command: 'owner', description: '👑 Open Owner Console (Direct Root Access)' },
             { command: 'app', description: '📱 Open Mobile Mini App dashboard' },
             { command: 'edit_mode', description: '🛠️ Owner-only maintenance & management' },

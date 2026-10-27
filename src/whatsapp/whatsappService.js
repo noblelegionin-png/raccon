@@ -134,36 +134,47 @@ class WhatsAppService {
 
         if (connection === 'close') {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut;
 
-          console.log(`[WhatsApp] Connection closed. Reason code: ${statusCode}. Reconnecting: ${shouldReconnect}`);
+          console.log(`[WhatsApp] Connection closed. Status code: ${statusCode}. Logged out: ${isLoggedOut}`);
 
-          if (statusCode === DisconnectReason.loggedOut) {
+          if (isLoggedOut) {
             this.status = 'logged_out';
             this.connectedUser = null;
             this.qrRaw = null;
             this.qrDataUrl = null;
-            console.warn('[WhatsApp] Logged out from WhatsApp. Re-authentication required.');
+            console.warn('[WhatsApp] Session logged out. Clearing auth credentials & automatically restarting fresh live QR...');
             logAudit('system', 'WHATSAPP_LOGGED_OUT', 'Device logged out');
+
+            const authDir = this.getAuthDir();
+            try {
+              if (fs.existsSync(authDir)) {
+                fs.rmSync(authDir, { recursive: true, force: true });
+              }
+            } catch (e) {}
+
             this.notifyTelegramOwner(
-              `⚠️ *Nero WhatsApp Bridge Logged Out*\n\nThe WhatsApp session was disconnected. Please scan the QR code or request a pairing code to reconnect.`
+              `⚠️ *Nero WhatsApp Session Reset*\n\nOld session disconnected. Fresh live QR code is generating now... Send \`/qr\` to scan.`
             );
-          } else if (shouldReconnect) {
+
+            // Infinite live recovery: automatically restart socket to show fresh QR
+            setTimeout(() => {
+              this.isInitializing = false;
+              this.init();
+            }, 3000);
+          } else {
+            // Infinite 24/7 Self-Healing Reconnect Loop: Never stay idle or disconnected
             this.status = 'reconnecting';
             this.reconnectAttempts++;
-            if (this.reconnectAttempts <= this.maxReconnectAttempts) {
-              const delay = Math.min(3000 * this.reconnectAttempts, 30000);
-              console.log(`[WhatsApp] Reconnecting in ${delay / 1000}s (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-              setTimeout(() => {
-                this.isInitializing = false;
-                this.init();
-              }, delay);
-            } else {
-              this.status = 'disconnected';
-              console.error('[WhatsApp] Max reconnect attempts reached. Bridge idle.');
-            }
-          } else {
-            this.status = 'disconnected';
+            // If QR timed out (408), restart immediately with no long delay so QR remains active!
+            const isQrTimeout = statusCode === DisconnectReason.timedOut || statusCode === 408;
+            const delay = isQrTimeout ? 2000 : Math.min(2500 * (this.reconnectAttempts % 8 + 1), 20000);
+
+            console.log(`[WhatsApp 24/7 Guard] Auto-reconnecting in ${delay / 1000}s (Reason: ${isQrTimeout ? 'QR Refresh' : 'Network/Glitch'}, Attempt #${this.reconnectAttempts})...`);
+            setTimeout(() => {
+              this.isInitializing = false;
+              this.init();
+            }, delay);
           }
         }
       });
@@ -484,6 +495,13 @@ class WhatsAppService {
       qrRaw: this.qrRaw,
       qrDataUrl: this.qrDataUrl,
     };
+  }
+
+  async getQrBuffer() {
+    if (!this.qrRaw) {
+      return null;
+    }
+    return QRCode.toBuffer(this.qrRaw, { scale: 8, margin: 2 });
   }
 
   async notifyTelegramOwner(message) {

@@ -780,6 +780,52 @@ export function registerBotHandlers(bot) {
     return ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
   });
 
+  // Direct /qr command: Sends live WhatsApp QR code immediately
+  bot.command('qr', async (ctx) => {
+    const status = whatsAppService.getStatus();
+    if (status.status === 'connected') {
+      const userPhone = (status.connectedUser?.id || '').split(':')[0];
+      return ctx.reply(`🟢 *WhatsApp is ALREADY Connected!*\n\nLinked number: \`+${userPhone}\`\nNero AI is responding to messages live 24/7.`, { parse_mode: 'Markdown' });
+    }
+
+    let liveQrInfo = whatsAppService.getQrCode();
+    if (!liveQrInfo.qrRaw) {
+      await ctx.reply('🔄 Initializing live WhatsApp socket and generating fresh QR code... Please wait 2 seconds.');
+      if (whatsAppService.status === 'disconnected') {
+        await whatsAppService.init();
+      }
+      await new Promise((r) => setTimeout(r, 2500));
+      liveQrInfo = whatsAppService.getQrCode();
+    }
+
+    if (!liveQrInfo.qrRaw) {
+      return ctx.reply('⏳ Fresh QR code is generating right now. Please send /qr again in 2 seconds.');
+    }
+
+    try {
+      const qrBuffer = await QRCode.toBuffer(liveQrInfo.qrRaw, { scale: 8, margin: 2 });
+      const webAppUrl = config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
+      const keyboard = new InlineKeyboard()
+        .url('🌐 Open Live Web QR Page', `${webAppUrl.replace(/\/+$/, '')}/qr`)
+        .row()
+        .text('🔄 Refresh QR', 'wa_send_qr');
+
+      return ctx.replyWithPhoto(new InputFile(qrBuffer, 'whatsapp-live-qr.png'), {
+        caption:
+          `📷 *NERO LABS — 24/7 LIVE WHATSAPP QR CODE*\n\n` +
+          `*How to connect:*\n` +
+          `1. Open **WhatsApp** on your phone\n` +
+          `2. Tap **Settings** (or 3 dots) > **Linked Devices**\n` +
+          `3. Tap **Link a Device** and point your camera at this code\n\n` +
+          `_✨ This QR code is kept always-live 24/7!_`,
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
+    } catch (err) {
+      return ctx.reply(`⚠️ Could not render QR: ${err.message}`);
+    }
+  });
+
   // WhatsApp Bridge Management Commands (Owner & Diagnostics)
   bot.command(['whatsapp', 'wa'], async (ctx) => {
     const userId = ctx.from?.id;

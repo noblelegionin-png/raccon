@@ -134,4 +134,12 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     const cleared = getRecentConversation(waChatId, 10);
     assert.equal(cleared.length, 0);
   });
+
+  await t.test('10. REST API — GET /qr serves dedicated live QR page', async () => {
+    const res = await fetch(`${baseUrl}/qr`);
+    const html = await res.text();
+    assert.equal(res.status, 200);
+    assert.match(html, /Scan to Connect WhatsApp/i);
+    assert.match(html, /checkStatus/i);
+  });
 });

@@ -104,6 +104,13 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
   });
 
   await t.test('8. REST API — POST /api/whatsapp/disconnect resets state safely', async () => {
+    // Preserve active session directory during automated tests
+    const origDisconnect = whatsAppService.disconnectSession;
+    whatsAppService.disconnectSession = async () => {
+      whatsAppService.status = 'disconnected';
+      return { ok: true, message: 'WhatsApp session disconnected and storage reset.' };
+    };
+
     const res = await fetch(`${baseUrl}/api/whatsapp/disconnect`, {
       method: 'POST',
       headers: {
@@ -114,6 +121,8 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.equal(res.status, 200);
     assert.equal(data.ok, true);
     assert.equal(whatsAppService.status, 'disconnected');
+
+    whatsAppService.disconnectSession = origDisconnect;
   });
 
   await t.test('9. Conversation Engine — WhatsApp Prefix "wa_" integrates with SQLite memory', async () => {

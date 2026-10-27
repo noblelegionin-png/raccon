@@ -29,6 +29,24 @@ export function isMaintenanceModeActive() {
 }
 
 /**
+ * WhatsApp Silent Mode (Kill Switch): Completely halts all outgoing messages to contacts
+ */
+export function isWhatsAppSilentModeActive() {
+  try {
+    return getConfig('whatsapp_silent_mode', 'false') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setWhatsAppSilentMode(active = true) {
+  const val = active ? 'true' : 'false';
+  setConfig('whatsapp_silent_mode', val);
+  logAudit('sandy', 'WHATSAPP_SILENT_MODE_CHANGED', `Silent mode: ${val}`);
+  return active;
+}
+
+/**
  * Log a broadcast delivery attempt to SQLite audit table
  */
 function logBroadcastAttempt(sessionId, chatId, chatTitle, status, errorMessage = null) {

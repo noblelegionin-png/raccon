@@ -47,12 +47,15 @@ import {
 } from '../groups/moderation.js';
 import { getBotStatus, getBotApi } from '../telegram/bot.js';
 import { whatsAppService } from '../whatsapp/whatsappService.js';
+import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
   disableMaintenanceMode,
   getMaintenanceReport,
   MAINTENANCE_ANNOUNCEMENT_TEXT,
+  isWhatsAppSilentModeActive,
+  setWhatsAppSilentMode,
 } from '../maintenance/maintenanceService.js';
 import {
   extractExplicitWordLimit,
@@ -512,6 +515,51 @@ export function createWebServer() {
     try {
       const result = await whatsAppService.disconnectSession();
       res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // WhatsApp Executive Daily Digest (Owner only)
+  app.get('/api/whatsapp/digest', requireOwnerAuth, (req, res) => {
+    try {
+      const digest = sandyStatusService.getDailyExecutiveDigest();
+      res.json({ ok: true, digest });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // WhatsApp Silent Mode / Kill Switch API (Owner only)
+  app.post('/api/whatsapp/silent-mode', requireOwnerAuth, (req, res) => {
+    try {
+      const { active } = req.body;
+      const isSilent = setWhatsAppSilentMode(Boolean(active));
+      res.json({ ok: true, silentMode: isSilent });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // WhatsApp Routine & Status Update API (Owner only)
+  app.post('/api/whatsapp/routine', requireOwnerAuth, (req, res) => {
+    try {
+      const { updateText } = req.body;
+      if (!updateText) {
+        return res.status(400).json({ ok: false, error: 'updateText is required.' });
+      }
+      const result = sandyStatusService.parseNaturalLanguageUpdate(updateText);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // WhatsApp Urgent Inbox List API (Owner only)
+  app.get('/api/whatsapp/inbox', requireOwnerAuth, (req, res) => {
+    try {
+      const list = sandyStatusService.getUrgentRequests(20);
+      res.json({ ok: true, requests: list });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }

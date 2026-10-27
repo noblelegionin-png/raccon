@@ -28,9 +28,11 @@ import { visionService } from '../vision/visionService.js';
 import { extractExplicitWordLimit, detectUserIntent } from '../conversation/intentDetector.js';
 import { sandyStatusService } from './sandyStatusService.js';
 import { mediaManager } from './mediaManager.js';
-import { buildWhatsAppChatContext, buildWhatsAppDirective } from './whatsappPersona.js';
+import { buildWhatsAppChatContext, buildWhatsAppDirective, buildOutreachMessage } from './whatsappPersona.js';
+import { voiceNoteService } from './voiceNoteService.js';
+import { stickerService } from './stickerService.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
-import { isMaintenanceModeActive, enableMaintenanceMode, disableMaintenanceMode } from '../maintenance/maintenanceService.js';
+import { isMaintenanceModeActive, enableMaintenanceMode, disableMaintenanceMode, isWhatsAppSilentModeActive, setWhatsAppSilentMode } from '../maintenance/maintenanceService.js';
 
 class WhatsAppService {
   constructor() {
@@ -51,6 +53,7 @@ class WhatsAppService {
   }
 
   async sendMasterBotMenu(remoteJid, quotedMsg = null) {
+    const isSilent = isWhatsAppSilentModeActive();
     const options = [
       '📬 Urgent Inbox',
       '📊 System Diagnostics',
@@ -58,13 +61,17 @@ class WhatsAppService {
       '🛠️ Toggle Maintenance',
       '📝 View Notes',
       '🏓 Latency Ping',
+      isSilent ? '🟢 Resume Texting Everyone' : '🛑 Stop Texting Everyone',
+      '📑 Executive Daily Digest',
+      '💬 Universal Cross-Chat Context',
+      '🎨 Send Cyber Sticker',
     ];
 
     const sent = await this.safeSendMessage(
       remoteJid,
       {
         poll: {
-          name: '👑 NERO MASTERBOT — QUICK ACTION BUTTONS',
+          name: '👑 NERO MASTERBOT — OWNER CONTROL DECK',
           values: options,
           selectableCount: 1,
         },
@@ -78,6 +85,7 @@ class WhatsAppService {
         sent.message?.pollCreationMessageV3?.messageSecret ||
         sent.message?.pollCreationMessage?.messageSecret;
       this.activePolls.set(sent.key.id, {
+        type: 'owner_menu',
         options,
         pollEncKey,
         createdAt: Date.now(),
@@ -96,7 +104,12 @@ class WhatsAppService {
       `3️⃣ \`3\` — 🎮 *Routine & Gaming* (Minecraft realm / routine status)\n` +
       `4️⃣ \`4\` — 🛠️ *Maintenance Mode* (Pause / Resume public bot)\n` +
       `5️⃣ \`5\` — 📝 *Persistent Notes* (View / manage saved notes)\n` +
-      `6️⃣ \`6\` — 🏓 *Latency Ping* (Test real-time bridge responsiveness)\n\n` +
+      `6️⃣ \`6\` — 🏓 *Latency Ping* (Test real-time bridge responsiveness)\n` +
+      `7️⃣ \`7\` — ${isSilent ? '🟢 *Resume Texting*' : '🛑 *Stop Texting Everyone*'} (Emergency Kill Switch)\n` +
+      `8️⃣ \`8\` — 📑 *Executive Daily Digest* (Recap of chats, media & requests today)\n` +
+      `9️⃣ \`9\` — 💬 *Universal Cross-Chat Context* (Summarize what everyone is talking about)\n` +
+      `🔟 \`10\` — 🎨 *Send Cyber Sticker* (Dispatches custom Nero sticker) 🦾✨\n\n` +
+      `_Status: ${isSilent ? '🛑 MUTED (Not texting anyone)' : '🟢 ACTIVE (Replying to contacts)'}_\n` +
       `_Type \`menu\` or \`/buttons\` anytime to summon these buttons!_`;
 
     await this.safeSendMessage(remoteJid, { text: menuText }, quotedMsg ? { quoted: quotedMsg } : {});
@@ -213,6 +226,223 @@ class WhatsAppService {
       recordUserMessage('wa_sandy_master', 'Action: Latency Ping');
       recordAssistantMessage('wa_sandy_master', pingText, 20, 'gemini-3.8-flash');
       await this.safeSendMessage(remoteJid, { text: pingText }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 7. Stop Texting / Silent Mode Kill Switch
+    if (act === '7' || act === '[7]' || act.includes('stop texting') || act.includes('resume texting') || act.includes('silent') || act.includes('freeze')) {
+      const isSilent = isWhatsAppSilentModeActive();
+      if (isSilent) {
+        setWhatsAppSilentMode(false);
+        const resText = "🟢 *SILENT MODE DEACTIVATED: REPLIES RESUMED* 🚀\nNero is now actively replying to WhatsApp contacts again. Full control is yours, Sandy!";
+        recordUserMessage('wa_sandy_master', 'Action: Resume Texting');
+        recordAssistantMessage('wa_sandy_master', resText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: resText }, quotedMsg ? { quoted: quotedMsg } : {});
+      } else {
+        setWhatsAppSilentMode(true);
+        const haltText = "🛑 *KILL SWITCH ACTIVATED: STOP TEXTING EVERYONE* 🔒\nNero will NOT send any messages, replies, or notifications to anyone until you command it to resume!\n\n_Reply with 'resume texting' or tap option 7 anytime to lift this freeze._";
+        recordUserMessage('wa_sandy_master', 'Action: Stop Texting Everyone');
+        recordAssistantMessage('wa_sandy_master', haltText, 25, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: haltText }, quotedMsg ? { quoted: quotedMsg } : {});
+      }
+      return;
+    }
+
+    // 8. Executive Daily Digest
+    if (act === '8' || act === '[8]' || act.includes('digest') || act.includes('summary')) {
+      const digestText = sandyStatusService.getDailyExecutiveDigest();
+      recordUserMessage('wa_sandy_master', 'Action: Executive Daily Digest');
+      recordAssistantMessage('wa_sandy_master', digestText, 100, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: digestText }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 9. Universal Cross-Chat Context
+    if (act === '9' || act === '[9]' || act.includes('cross-chat') || act.includes('chat context') || act.includes('everyone')) {
+      const universalSummary = sandyStatusService.getRecentChatsSummary(10);
+      recordUserMessage('wa_sandy_master', 'Action: Cross-Chat Context');
+      recordAssistantMessage('wa_sandy_master', universalSummary.summary, 120, 'gemini-3.8-flash');
+      await this.safeSendMessage(remoteJid, { text: universalSummary.summary }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    // 10. Send Cyber Sticker
+    if (act === '10' || act === '[10]' || act.includes('sticker')) {
+      const stickerBuf = await stickerService.getPresetSticker('nero_cyber');
+      await this.safeSendMessage(remoteJid, { sticker: stickerBuf }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+  }
+
+  /**
+   * Interactive Poll & Buttons for First-Time Contact Character Choice
+   */
+  async sendCharacterSelectionButtons(remoteJid, quotedMsg = null, senderNumber = null) {
+    const options = [
+      '👤 Friend (Dost vibe, slang & banter)',
+      '🤝 Brother (Bhai vibe, caring & supportive)',
+    ];
+
+    const sent = await this.safeSendMessage(
+      remoteJid,
+      {
+        poll: {
+          name: "👋 Choose Nero's Character Vibe:",
+          values: options,
+          selectableCount: 1,
+        },
+      },
+      quotedMsg ? { quoted: quotedMsg } : {}
+    );
+
+    if (sent?.key?.id) {
+      const pollEncKey =
+        sent.message?.messageContextInfo?.messageSecret ||
+        sent.message?.pollCreationMessageV3?.messageSecret ||
+        sent.message?.pollCreationMessage?.messageSecret;
+      this.activePolls.set(sent.key.id, {
+        type: 'character_selection',
+        options,
+        pollEncKey,
+        senderNumber,
+        remoteJid,
+        createdAt: Date.now(),
+      });
+      if (this.activePolls.size > 50) {
+        const oldestKey = this.activePolls.keys().next().value;
+        this.activePolls.delete(oldestKey);
+      }
+    }
+
+    const menuText =
+      `👋 *WELCOME! CHOOSE NERO'S CHARACTER VIBE*\n\n` +
+      `Tap an option in the poll above, or reply with a number:\n\n` +
+      `1️⃣ Reply \`1\` or \`friend\` — *Friend* (Chill dost, banter & informal street slang)\n` +
+      `2️⃣ Reply \`2\` or \`brother\` — *Brother* (Bhai vibe, caring, protective & supportive)\n\n` +
+      `_You can switch anytime by saying 'change character to brother' or 'friend'!_ ✨`;
+
+    await this.safeSendMessage(remoteJid, { text: menuText }, quotedMsg ? { quoted: quotedMsg } : {});
+  }
+
+  /**
+   * Interactive Action Buttons when asking about Sandy's routine/whereabouts
+   */
+  async sendSandyActionButtons(remoteJid, quotedMsg = null, senderNumber = null) {
+    const options = [
+      '🚨 Send Urgent Talk Request',
+      '🔔 Notify When Sandy Is Available',
+      '📝 Leave Note for Sandy',
+      '🤙 Request Call Back',
+    ];
+
+    const sent = await this.safeSendMessage(
+      remoteJid,
+      {
+        poll: {
+          name: '📌 Need to connect with Sandy?',
+          values: options,
+          selectableCount: 1,
+        },
+      },
+      quotedMsg ? { quoted: quotedMsg } : {}
+    );
+
+    if (sent?.key?.id) {
+      const pollEncKey =
+        sent.message?.messageContextInfo?.messageSecret ||
+        sent.message?.pollCreationMessageV3?.messageSecret ||
+        sent.message?.pollCreationMessage?.messageSecret;
+      this.activePolls.set(sent.key.id, {
+        type: 'sandy_action',
+        options,
+        pollEncKey,
+        senderNumber,
+        remoteJid,
+        createdAt: Date.now(),
+      });
+      if (this.activePolls.size > 50) {
+        const oldestKey = this.activePolls.keys().next().value;
+        this.activePolls.delete(oldestKey);
+      }
+    }
+
+    const menuText =
+      `📌 *QUICK ACTIONS FOR SANDY:*\n\n` +
+      `Tap an option in the poll above, or reply with a shortcut:\n\n` +
+      `1️⃣ \`urgent <message>\` — Priority alert in Sandy's VIP inbox\n` +
+      `2️⃣ \`notify\` — Instant ping as soon as Sandy is back online\n` +
+      `3️⃣ \`note: <message>\` — Leave a personal note on Sandy's desk\n` +
+      `4️⃣ \`call back\` — Request an urgent phone call back from Sandy 🤙✨`;
+
+    await this.safeSendMessage(remoteJid, { text: menuText }, quotedMsg ? { quoted: quotedMsg } : {});
+  }
+
+  /**
+   * Handles character selection button / poll votes
+   */
+  async handleCharacterSelectionAction(matchedOption, remoteJid, quotedMsg = null, senderNumber = null) {
+    const sNum = senderNumber || String(remoteJid).replace(/[^0-9]/g, '');
+    const opt = String(matchedOption).toLowerCase();
+    const isBro = opt.includes('brother') || opt.includes('bhai') || opt === '2';
+    const role = isBro ? 'brother' : 'friend';
+    sandyStatusService.setContactCharacter(sNum, role);
+
+    const confText = isBro
+      ? `🤝 *Brother (Bhai) Vibe Activated!*\nAb se main tumse as a caring Brother baat karunga. Tension mat le mere bhai, bata kya scene hai! ✨`
+      : `👤 *Friend (Dost) Vibe Activated!*\nAb se main tumse as a chill Friend baat karungi. Bol yaar kya chal raha hai? ✨`;
+
+    recordAssistantMessage(`wa_${remoteJid}`, confText, 25, 'gemini-3.5-flash-lite');
+    await this.safeSendMessage(remoteJid, { text: confText }, quotedMsg ? { quoted: quotedMsg } : {});
+  }
+
+  /**
+   * Handles Sandy action buttons (urgent request / notify when available / leave note / call back)
+   */
+  async handleSandyContactAction(matchedOption, remoteJid, quotedMsg = null, senderNumber = null, senderName = 'Contact') {
+    const sNum = senderNumber || String(remoteJid).replace(/[^0-9]/g, '');
+    const opt = String(matchedOption).toLowerCase();
+
+    if (opt.includes('urgent') || opt === '1') {
+      const askText = `📬 *Leave an Urgent Talk Request for Sandy:*\nPlease reply with: \`urgent <your message>\` (e.g. \`urgent please call me back asap\`), and I will log it straight into Sandy's Master Console inbox! ✨`;
+      recordAssistantMessage(`wa_${remoteJid}`, askText, 30, 'gemini-3.5-flash-lite');
+      await this.safeSendMessage(remoteJid, { text: askText }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    if (opt.includes('notify') || opt === '2') {
+      const res = sandyStatusService.addAvailabilitySubscriber({
+        senderNumber: sNum,
+        senderName,
+        remoteJid,
+      });
+      const respText = res.alreadySubscribed
+        ? `🔔 *Already on the alert list!*\nJaise hi Sandy online ya free hoga, main tumhe sabse pehle ping kar doongi! ✨`
+        : `🔔 *Notification Alert Activated!*\nNoted! As soon as Sandy texts that he is back online or free, I will send you an instant WhatsApp ping right here! 🚀`;
+      recordAssistantMessage(`wa_${remoteJid}`, respText, 25, 'gemini-3.5-flash-lite');
+      await this.safeSendMessage(remoteJid, { text: respText }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    if (opt.includes('note') || opt === '3') {
+      const noteAsk = `✍️ *Leave a Personal Note for Sandy:*\nPlease reply with: \`note: <your message>\` (or simply type your message), and I will place it directly onto Sandy's personal desk! 📝✨`;
+      recordAssistantMessage(`wa_${remoteJid}`, noteAsk, 25, 'gemini-3.5-flash-lite');
+      await this.safeSendMessage(remoteJid, { text: noteAsk }, quotedMsg ? { quoted: quotedMsg } : {});
+      return;
+    }
+
+    if (opt.includes('call') || opt === '4') {
+      sandyStatusService.addUrgentRequest({
+        senderNumber: sNum,
+        senderName,
+        messageText: 'Requested urgent phone call back 🤙',
+        urgency: 'high',
+      });
+      await this.notifyTelegramOwner(
+        `🤙 *[WHATSAPP CALL BACK REQUEST]*\n*From:* ${senderName} (\`+${sNum}\`)\n*Status:* Contact tapped "Request Call Back" on WhatsApp!`
+      );
+      const callAck = `🤙 *Call Back Request Delivered!*\nMaine Sandy ko direct call-back alert bhej diya hai with high priority. Jaise hi wo free hoga, he will hit you up! ⚡`;
+      recordAssistantMessage(`wa_${remoteJid}`, callAck, 25, 'gemini-3.5-flash-lite');
+      await this.safeSendMessage(remoteJid, { text: callAck }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
   }
@@ -408,15 +638,24 @@ class WhatsAppService {
       if (pollData && pollData.pollEncKey) {
         try {
           const voterJid = msg.key.participant || msg.key.remoteJid;
-          const voteMsg = decryptPollVote(
-            msg.message.pollUpdateMessage.vote,
-            {
-              pollCreatorJid: this.sock?.user?.id || voterJid,
-              pollMsgId: pollId,
-              pollEncKey: pollData.pollEncKey,
-              voterJid,
-            }
-          );
+          let voteMsg = null;
+          const creatorCandidates = [
+            this.sock?.user?.id,
+            this.sock?.user?.lid,
+            voterJid,
+          ].filter(Boolean);
+
+          for (const cand of creatorCandidates) {
+            try {
+              voteMsg = decryptPollVote(msg.message.pollUpdateMessage.vote, {
+                pollCreatorJid: cand,
+                pollMsgId: pollId,
+                pollEncKey: pollData.pollEncKey,
+                voterJid,
+              });
+              if (voteMsg?.selectedOptions?.length > 0) break;
+            } catch {}
+          }
           if (voteMsg?.selectedOptions?.length > 0) {
             const selectedBytes = voteMsg.selectedOptions[0];
             const matchedOption = pollData.options.find((opt) => {
@@ -424,7 +663,13 @@ class WhatsAppService {
               return Buffer.compare(Buffer.from(h), Buffer.from(selectedBytes)) === 0;
             });
             if (matchedOption) {
-              await this.executeOwnerAction(matchedOption, remoteJid, msg);
+              if (pollData.type === 'character_selection') {
+                await this.handleCharacterSelectionAction(matchedOption, remoteJid, msg, pollData.senderNumber);
+              } else if (pollData.type === 'sandy_action') {
+                await this.handleSandyContactAction(matchedOption, remoteJid, msg, pollData.senderNumber);
+              } else {
+                await this.executeOwnerAction(matchedOption, remoteJid, msg);
+              }
               return;
             }
           }
@@ -447,6 +692,10 @@ class WhatsAppService {
       (msg.message.documentMessage?.mimetype?.startsWith('video/') ? msg.message.documentMessage : null);
     const isVideo = Boolean(videoMessage);
 
+    // Extract audio / voice note payload if present
+    const audioMessage = msg.message?.audioMessage;
+    const isAudio = Boolean(audioMessage);
+
     // Extract text content or caption
     const text =
       msg.message.conversation ||
@@ -457,7 +706,7 @@ class WhatsAppService {
       '';
 
     const trimmed = (text || '').trim();
-    if (!trimmed && !isImage && !isVideo) return;
+    if (!trimmed && !isImage && !isVideo && !isAudio) return;
 
     this.messageCount++;
     this.lastActivity = new Date().toISOString();
@@ -469,20 +718,28 @@ class WhatsAppService {
     const isFromMe = Boolean(msg.key.fromMe);
 
     const myPhone = (this.sock?.user?.id || '').split(':')[0].replace(/[^0-9]/g, '');
+    const myLid = (this.sock?.user?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
     const ownerConfigPhone = (config.whatsAppOwnerNumber || '').replace(/[^0-9]/g, '');
     const remoteClean = (remoteJid || '').replace(/[^0-9]/g, '');
 
-    // True self-chat in WhatsApp "Message Yourself":
+    // True self-chat in WhatsApp "Message Yourself" (supports both Phone JID and MD LID):
     const isSelfChat = isFromMe && (
       (Boolean(myPhone) && remoteClean.includes(myPhone)) ||
-      (Boolean(ownerConfigPhone) && remoteClean.includes(ownerConfigPhone))
+      (Boolean(myLid) && remoteClean.includes(myLid)) ||
+      (Boolean(ownerConfigPhone) && remoteClean.includes(ownerConfigPhone)) ||
+      remoteJid === this.sock?.user?.lid ||
+      remoteJid === this.sock?.user?.id ||
+      (!isGroup && (remoteClean === myPhone || remoteClean === myLid || remoteClean === ownerConfigPhone))
     );
 
     const isOwnerSender = isSelfChat ||
       (Boolean(ownerConfigPhone) && senderNumber === ownerConfigPhone) ||
-      (Boolean(myPhone) && senderNumber === myPhone);
+      (Boolean(myPhone) && senderNumber === myPhone) ||
+      (Boolean(myLid) && senderNumber === myLid);
 
     const isSandy = isOwnerSender;
+
+    console.log(`[WhatsApp Incoming] remoteJid=${remoteJid}, senderNumber=${senderNumber}, fromMe=${isFromMe}, isSelfChat=${isSelfChat}, isSandy=${isSandy}, text="${trimmed.slice(0, 60)}"`);
 
     // Self-message guard:
     // If sent from the linked phone to someone else or a group, only respond if explicitly commanded
@@ -638,6 +895,88 @@ class WhatsAppService {
     }
 
     // ==========================================
+    // 🎙️ AUDIO / VOICE NOTE INTAKE HANDLER
+    // ==========================================
+    if (isAudio && audioMessage) {
+      try {
+        await this.sock.sendPresenceUpdate('recording', remoteJid).catch(() => {});
+        const buffer = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          {
+            logger: pino({ level: 'silent' }),
+            reuploadRequest: this.sock.updateMediaMessage,
+          }
+        );
+
+        const durationSec = audioMessage.seconds || 0;
+        const mime = audioMessage.mimetype || 'audio/ogg; codecs=opus';
+        const savedMeta = await mediaManager.saveMedia({
+          senderNumber,
+          senderName,
+          fileBuffer: buffer,
+          fileType: 'audio',
+          mimeType: mime,
+          caption: `Voice Note (${durationSec}s)`,
+          originalMessageId: msg.key?.id,
+        });
+
+        // 🎙️ Transcribe and generate conversational reply with Gemini Multimodal AI
+        const characterRole = sandyStatusService.getContactCharacter(senderNumber) || 'friend';
+        const voiceResult = await voiceNoteService.processVoiceNote({
+          buffer,
+          mimeType: mime,
+          senderName,
+          senderNumber,
+          isSandy,
+          durationSec,
+          characterRole,
+        });
+
+        const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+        recordUserMessage(chatId, `🎙️ [Voice Note (${durationSec}s)]: "${voiceResult.transcription}"`);
+        recordAssistantMessage(chatId, voiceResult.reply, 80, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+
+        if (!isSandy) {
+          sandyStatusService.recordContactInteraction(
+            senderNumber,
+            senderName,
+            `[Voice Note]: ${voiceResult.transcription}`
+          );
+        }
+
+        if (isSandy) {
+          const sandyVoiceReply =
+            `🎙️ *[Voice Note Heard & Transcribed]* (${durationSec}s):\n` +
+            `"${voiceResult.transcription}"\n\n` +
+            `${voiceResult.reply}\n\n` +
+            `_File saved to vault:_ \`${savedMeta.fileName}\` 💾`;
+          await this.safeSendMessage(remoteJid, { text: sandyVoiceReply }, { quoted: msg });
+        } else {
+          if (!isWhatsAppSilentModeActive()) {
+            const contactVoiceReply =
+              `🎙️ *[Heard Voice Note - ${durationSec}s]*: "${voiceResult.transcription}"\n\n` +
+              `${voiceResult.reply}`;
+            await this.safeSendMessage(remoteJid, { text: contactVoiceReply }, { quoted: msg });
+          }
+          this.notifyTelegramOwner(
+            `🎙️ *[WhatsApp Voice Note Transcribed]*\n` +
+            `*From:* ${senderName} (\`+${senderNumber}\`)\n` +
+            `*Duration:* ${durationSec}s\n` +
+            `*Speech:* "${voiceResult.transcription}"\n` +
+            `*Nero Reply:* "${voiceResult.reply}"\n` +
+            `*Saved File:* \`${savedMeta.fileName}\``
+          );
+        }
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      } catch (audioErr) {
+        console.error('[WhatsApp Audio Intake Error]:', audioErr.message);
+      }
+    }
+
+    // ==========================================
     // 📸 IMAGE UNDERSTANDING & VISION PIPELINE
     // ==========================================
     if (isImage) {
@@ -659,6 +998,14 @@ class WhatsAppService {
           mimeType: imageMessage.mimetype || 'image/jpeg',
           caption: promptText,
         });
+
+        // If user explicitly asks to convert this image into a sticker
+        if (/\b(?:sticker|make\s+sticker|turn\s+into\s+sticker|create\s+sticker)\b/i.test(promptText)) {
+          const stickerBuf = await stickerService.createStickerFromBuffer(buffer);
+          await this.safeSendMessage(remoteJid, { sticker: stickerBuf }, { quoted: msg });
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
 
         const visionPrompt = promptText.length > 0
           ? `The user sent this image with note: "${promptText}". Answer their inquiry with deep visual comprehension.`
@@ -694,6 +1041,22 @@ class WhatsAppService {
     }
 
     // ==========================================
+    // 🎨 STICKER INTAKE & GENERATION PIPELINE
+    // ==========================================
+    if (stickerService.isStickerRequest(promptText)) {
+      try {
+        const role = isSandy ? 'friend' : (sandyStatusService.getContactCharacter(senderNumber) || 'friend');
+        const stickerType = stickerService.pickStickerType(promptText, role);
+        const stickerBuf = await stickerService.getPresetSticker(stickerType);
+        await this.safeSendMessage(remoteJid, { sticker: stickerBuf }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      } catch (stkErr) {
+        console.error('[WhatsApp Sticker Error]:', stkErr.message);
+      }
+    }
+
+    // ==========================================
     // 👑 MASTERBOT CONSOLE (SANDY'S PERSONAL CHAT)
     // ==========================================
     if (isSandy) {
@@ -704,9 +1067,117 @@ class WhatsAppService {
         return;
       }
 
-      // 1-tap numeric button shortcut: 1, 2, 3, 4, 5, 6
-      if (/^\[?[1-6]\]?$/.test(promptText)) {
+      // 1-tap numeric button shortcut: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+      if (/^\[?(10|[1-9])\]?$/.test(promptText)) {
         await this.executeOwnerAction(promptText.replace(/[^0-9]/g, ''), remoteJid, msg);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Natural Language Outbound Outreach: "Text <Name/No>: <msg>" or "/wa_send <Name/No> <msg>"
+      const outreachMatch = promptText.match(/^(?:(?:text|message|msg|tell|send\s+(?:a\s+)?(?:text|message)\s+to)\s+([^:\n]+?)(?::|\s+that|\s+to|\s+saying)\s+(.+)$|\/wa_send\s+([^\s]+)\s+(.+)$)/i);
+      if (outreachMatch) {
+        const targetQuery = (outreachMatch[1] || outreachMatch[3]).trim();
+        const rawMessage = (outreachMatch[2] || outreachMatch[4]).trim();
+        const contact = sandyStatusService.findContactByNameOrNumber(targetQuery);
+
+        recordUserMessage('wa_sandy_master', promptText);
+
+        if (!contact) {
+          const notFoundText =
+            `⚠️ *Contact Not Found: "${targetQuery}"*\n\n` +
+            `Boss Sandy! Mujhe "${targetQuery}" naam ya number se koi known contact nahi mila. ` +
+            `Please specify their phone number directly (e.g. \`text 919876543210: ${rawMessage}\`)! 🔍`;
+          recordAssistantMessage('wa_sandy_master', notFoundText, 30, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: notFoundText }, { quoted: msg });
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+
+        const targetJid = `${contact.sender_number}@s.whatsapp.net`;
+        const formattedOutreach = buildOutreachMessage({
+          contactName: contact.sender_name || 'Friend',
+          messageText: rawMessage,
+          senderTitle: 'Sandy',
+        });
+
+        try {
+          await this.safeSendMessage(targetJid, { text: formattedOutreach });
+          recordAssistantMessage(`wa_${targetJid}`, formattedOutreach, 80, 'gemini-3.8-flash');
+
+          const dispatchAck =
+            `✅ *OUTREACH DISPATCHED TO ${contact.sender_name ? contact.sender_name.toUpperCase() : 'CONTACT'}!* 🚀\n\n` +
+            `• *Recipient:* ${contact.sender_name || 'Contact'} (\`+${contact.sender_number}\`)\n` +
+            `• *Relation:* _${contact.relationship || 'Known Contact'}_\n\n` +
+            `*Message Sent:*\n` +
+            `"${rawMessage}"\n\n` +
+            `_Delivered in Nero Personal Assistant format with emojis and professional styling. Standing by for their reply!_ ✨`;
+
+          recordAssistantMessage('wa_sandy_master', dispatchAck, 40, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: dispatchAck }, { quoted: msg });
+        } catch (sendErr) {
+          const failText = `❌ *Failed to deliver message to +${contact.sender_number}:* ${sendErr.message}`;
+          recordAssistantMessage('wa_sandy_master', failText, 25, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: failText }, { quoted: msg });
+        }
+
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Universal Cross-Chat Context: "Read everyone's chat" / "What is everyone talking about"
+      if (/\b(?:read\s+everyone(?:'s)?\s+chat|what\s+is\s+everyone\s+talking\s+about|all\s+chats|summarize\s+(?:all\s+)?chats|sabki\s+chat\s+padh|everyone\s+context)\b/i.test(promptText)) {
+        const universalSummary = sandyStatusService.getRecentChatsSummary(10);
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', universalSummary.summary, 120, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: universalSummary.summary }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Check specific person's chat by Name or Number
+      const readPersonMatch = promptText.match(/(?:read|show|check|kya\s+bola|what\s+did)\s+(?:chat|messages?|talk)\s+(?:of|from)?\s*([a-zA-Z0-9_+ -]+)/i) ||
+                              promptText.match(/what\s+did\s+([a-zA-Z0-9_+ -]+)\s+(?:say|text|message)/i);
+      if (readPersonMatch && readPersonMatch[1]) {
+        const targetQuery = readPersonMatch[1].trim();
+        // Skip if target query is generic words like 'sandy', 'everyone', 'all'
+        if (!/^(?:everyone|all|sandy|me|system|menu)$/i.test(targetQuery)) {
+          const historyResult = sandyStatusService.getContactChatHistory(targetQuery, 10);
+          recordUserMessage('wa_sandy_master', promptText);
+          recordAssistantMessage('wa_sandy_master', historyResult.text, 100, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: historyResult.text }, { quoted: msg });
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+      }
+
+      // Natural Language Emergency Kill Switch: "Stop texting everyone" / "Resume texting"
+      if (/\b(?:stop\s+texting(?:\s+everyone)?|don'?t\s+text(?:\s+anyone)?|mute(?:\s+everyone|\s+all)?|silent\s+mode|freeze\s+(?:bot|chat)|shutup|chup\s+ho\s+ja|kisi\s+ko\s+reply\s+mat\s+karo)\b/i.test(promptText)) {
+        setWhatsAppSilentMode(true);
+        recordUserMessage('wa_sandy_master', promptText);
+        const haltText = "🛑 *KILL SWITCH ACTIVATED: STOP TEXTING EVERYONE* 🔒\n\nNero has entered 100% silent mode for all WhatsApp contacts. I will NOT send any messages, replies, or notifications to anyone until you say \"resume texting\" or \"start texting\"!\n\n_Full control is in your hands, Sandy._";
+        recordAssistantMessage('wa_sandy_master', haltText, 30, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: haltText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      if (/\b(?:resume\s+texting|start\s+texting(?:\s+everyone)?|unmute(?:\s+all)?|unfreeze|resume\s+replies|chalu\s+karo|shuru\s+karo)\b/i.test(promptText)) {
+        setWhatsAppSilentMode(false);
+        recordUserMessage('wa_sandy_master', promptText);
+        const resText = "🟢 *SILENT MODE DEACTIVATED: REPLIES RESUMED* 🚀\n\nNero is now actively replying to WhatsApp contacts again. Standing by for your next instruction!";
+        recordAssistantMessage('wa_sandy_master', resText, 30, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: resText }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 0.5. Executive Daily Digest / Intelligence Recap
+      if (/\b(?:summary|digest|recap|who\s+texted|aaj\s+kya\s+hua|daily\s+report|aaj\s+kisne\s+message\s+kiya)\b/i.test(promptText)) {
+        const digestText = sandyStatusService.getDailyExecutiveDigest();
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', digestText, 100, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: digestText }, { quoted: msg });
         await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
       }
@@ -714,6 +1185,19 @@ class WhatsAppService {
       // 1. Natural Language Status / Routine Update
       const statusUpdate = sandyStatusService.parseNaturalLanguageUpdate(promptText);
       if (statusUpdate.updated) {
+        // If Sandy came back online, check for waiting availability subscribers and broadcast!
+        if (statusUpdate.notifySubscribers) {
+          const subscribers = sandyStatusService.getPendingAvailabilitySubscribers();
+          if (subscribers && subscribers.length > 0) {
+            for (const sub of subscribers) {
+              const alertMsg = `🔔 *Alert from Nero Labs:*\nHey ${sub.sender_name || 'there'}! Sandy is back online and available right now! 🎉\nYou can text him directly now. ✨`;
+              await this.safeSendMessage(sub.remote_jid, { text: alertMsg });
+            }
+            sandyStatusService.markSubscribersNotified(subscribers.map((s) => s.id));
+            statusUpdate.summary += `\n\n📢 *Broadcast:* Dispatched availability alerts to ${subscribers.length} contact(s) waiting for you! 🚀`;
+          }
+        }
+
         recordUserMessage('wa_sandy_master', promptText);
         recordAssistantMessage('wa_sandy_master', statusUpdate.summary, 30, 'gemini-3.8-flash');
         await this.safeSendMessage(remoteJid, { text: statusUpdate.summary }, { quoted: msg });
@@ -885,7 +1369,26 @@ class WhatsAppService {
     // ==========================================
     // 💬 CONTACTS MESSAGING SANDY'S WHATSAPP
     // ==========================================
+    let isAskingAboutSandy = false;
+    let isFirstTimeContact = false;
+
     if (!isSandy) {
+      // 0. EMERGENCY KILL SWITCH: Stop Texting Everyone / Silent Mode
+      if (isWhatsAppSilentModeActive()) {
+        console.log(`[WhatsApp Silent Mode] Dropping message from +${senderNumber} because Sandy activated Stop Texting.`);
+        recordUserMessage(`wa_${remoteJid}`, promptText);
+        if (/\b(?:urgent|emergency|zaroori|important)\b/i.test(promptText)) {
+          sandyStatusService.addUrgentRequest({
+            senderNumber,
+            senderName,
+            messageText: promptText,
+            urgency: 'high',
+          });
+        }
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return; // Zero messages sent! 100% silent!
+      }
+
       // Check if maintenance mode is active
       if (isMaintenanceModeActive()) {
         const maintMsg = "🛠️ *Sandy's AI Assistant is currently in brief maintenance mode.* Replies are paused for a few moments while updates finish. Thanks for your patience! 🚀";
@@ -894,7 +1397,88 @@ class WhatsAppService {
         return;
       }
 
-      // Check if contact is leaving an urgent message / important talk request
+      // Record contact interaction & build smart profile memory:
+      sandyStatusService.recordContactInteraction(senderNumber, senderName, promptText);
+
+      const existingCharacter = sandyStatusService.getContactCharacter(senderNumber);
+      if (!existingCharacter) {
+        isFirstTimeContact = true;
+      }
+
+      // Check if contact replied with character choice directly:
+      const cleanPrompt = promptText.trim().toLowerCase();
+      if (/^(?:1|2|friend|brother|dost|bhai)$/i.test(cleanPrompt)) {
+        await this.handleCharacterSelectionAction(cleanPrompt, remoteJid, msg, senderNumber);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Check if contact asks to switch character/vibe:
+      const changeVibeMatch = promptText.match(/\b(?:change|set|switch)\s+(?:character|vibe|role)(?:\s+to)?\s+(friend|brother|dost|bhai)\b/i);
+      if (changeVibeMatch && changeVibeMatch[1]) {
+        await this.handleCharacterSelectionAction(changeVibeMatch[1], remoteJid, msg, senderNumber);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Check if contact sends urgent message directly:
+      const urgentMatch = promptText.match(/^urgent(?::|\s+)(.+)$/i);
+      if (urgentMatch) {
+        const uMsg = urgentMatch[1].trim();
+        sandyStatusService.addUrgentRequest({
+          senderNumber,
+          senderName,
+          messageText: uMsg,
+          urgency: 'high',
+        });
+        await this.notifyTelegramOwner(
+          `🚨 *[WHATSAPP URGENT INBOX]*\n*From:* ${senderName} (\`+${senderNumber}\`)\n*Message:* "${uMsg}"`
+        );
+        const confirmMsg = "✅ *Urgent request logged!* Maine Sandy ke VIP inbox mein direct deliver kar diya hai. Wo free hote hi dekhega! 📬";
+        recordAssistantMessage(`wa_${remoteJid}`, confirmMsg, 25, 'gemini-3.5-flash-lite');
+        await this.safeSendMessage(remoteJid, { text: confirmMsg }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Check if contact asks for notification when Sandy becomes available:
+      if (/^(?:notify|notify\s+me|remind\s+me|ping\s+me|alert\s+me)$/i.test(cleanPrompt)) {
+        await this.handleSandyContactAction('notify', remoteJid, msg, senderNumber, senderName);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Check if contact leaves a direct note for Sandy
+      const noteMatch = promptText.match(/^(?:note|leave\s+note)(?::|\s+)(.+)$/i);
+      if (noteMatch) {
+        const nMsg = noteMatch[1].trim();
+        sandyStatusService.addUrgentRequest({
+          senderNumber,
+          senderName,
+          messageText: `[Personal Note]: "${nMsg}"`,
+          urgency: 'normal',
+        });
+        await this.notifyTelegramOwner(
+          `📝 *[WHATSAPP CONTACT NOTE]*\n*From:* ${senderName} (\`+${senderNumber}\`)\n*Note:* "${nMsg}"`
+        );
+        const noteAck = `📝 *Note received!* Maine aapka message Sandy ke personal desk pe deliver kar diya hai. ✨`;
+        recordAssistantMessage(`wa_${remoteJid}`, noteAck, 25, 'gemini-3.5-flash-lite');
+        await this.safeSendMessage(remoteJid, { text: noteAck }, { quoted: msg });
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Check if contact requests a call back
+      if (/^(?:call\s+back|request\s+call|tell\s+sandy\s+to\s+call|call\s+me)$/i.test(cleanPrompt)) {
+        await this.handleSandyContactAction('call', remoteJid, msg, senderNumber, senderName);
+        await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Detect if user is asking about Sandy:
+      isAskingAboutSandy = /\b(?:where\s+is\s+sandy|sandy\s+kahan|sandy\s+kidhar|what\s+is\s+sandy\s+doing|kya\s+kar\s+raha\s+hai\s+sandy|talk\s+to\s+sandy|sandy\s+se\s+baat|is\s+sandy\s+free|is\s+sandy\s+online|sandy\s+available|sandy\s+se\s+milna)\b/i.test(promptText);
+
+      // Check if contact is leaving an urgent message / important talk request generically
       if (/\b(?:urgent|emergency|zaroori|urgent\s+hai|important\s+work|call\s+karo|connect\s+karo|tell\s+sandy\s+to\s+call)\b/i.test(promptText)) {
         sandyStatusService.addUrgentRequest({
           senderNumber,
@@ -929,29 +1513,33 @@ class WhatsAppService {
       });
 
       const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
-      const reasoningEffort = isSandy ? 'high' : 'low';
+      const reasoningEffort = isSandy ? 'high' : 'none';
+      const maxTokens = isSandy ? 1000 : (explicitLimit ? Math.min(explicitLimit * 2, 800) : 120);
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages,
         chatId,
         reasoningEffort,
+        maxTokens,
       });
 
       let replyText = completion.text || 'I processed your request but have no response to return.';
 
       // Dynamic reply length intelligence:
-      // 1. "Hy to Hy" rule -> casual greetings capped to 35 words (1-2 punchy sentences)
-      // 2. Standard questions -> 10 to 500 words limit
+      // 1. "Hy to Hy" rule -> casual greetings capped to 30 words (1-2 punchy sentences)
+      // 2. Regular chats / questions -> crisp & punchy (max 50 words) unless explicit limit
       // 3. Explicit limits (e.g. "write a 500 word explanation") -> exact requested limit
-      let maxWords = 500;
+      let maxWords = 50;
       if (explicitLimit) {
         maxWords = explicitLimit;
+      } else if (isSandy) {
+        maxWords = 800;
       } else if (detectedIntent === 'greeting') {
-        maxWords = 35;
+        maxWords = 30;
       }
 
-      const minWords = detectedIntent === 'greeting' ? 1 : 10;
+      const minWords = 1;
 
       // Sanitize response
       try {
@@ -973,6 +1561,17 @@ class WhatsAppService {
 
       // Send response to WhatsApp via safeSendMessage
       await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
+
+      // Follow-up Interactive Live Action Buttons for Contacts:
+      if (!isSandy && !isGroup) {
+        if (isFirstTimeContact) {
+          // If first-time contact, prompt them to choose their preferred vibe (Friend or Brother)
+          await this.sendCharacterSelectionButtons(remoteJid, msg, senderNumber);
+        } else if (isAskingAboutSandy) {
+          // If asking where Sandy is / what he is doing, provide quick action buttons: Urgent or Notify When Available
+          await this.sendSandyActionButtons(remoteJid, msg, senderNumber);
+        }
+      }
     } catch (err) {
       console.error('[WhatsApp AI Generation Error]:', err.message);
       await this.safeSendMessage(

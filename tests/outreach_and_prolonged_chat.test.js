@@ -291,4 +291,150 @@ describe('🚀 Nero Labs — Intelligent Outbound Outreach & Prolonged Multi-Tur
     }
   });
 
+  // -------------------------------------------------------------
+  // Test 8: Sandy's Exact Command & Multi-Device LID Authorization
+  // -------------------------------------------------------------
+  test('Test 8: Recognizes Studio LID (214293836493051) and linked LID as Owner Sandy, dispatches outreach to Minecraft contact', async () => {
+    const originalSafeSend = whatsAppService.safeSendMessage;
+    const originalChat = scaleMaxAdapter.createChatCompletion;
+
+    // Verify LID owner authorization
+    assert.strictEqual(sandyStatusService.isOwnerNumber('214293836493051'), true, 'Studio LID must be recognized as Sandy');
+    assert.strictEqual(sandyStatusService.isOwnerNumber('105107177869409'), true, 'Linked device LID must be recognized as Sandy');
+
+    const sentMessages = [];
+    whatsAppService.safeSendMessage = async (jid, content, options) => {
+      const sent = { jid, text: content.text || '', quoted: options?.quoted };
+      sentMessages.push(sent);
+      return sent;
+    };
+
+    scaleMaxAdapter.createChatCompletion = async ({ messages }) => {
+      return {
+        text: `Hey there! Nero here reaching out for Sandy. 🎮 Sandy wanted to invite you to jump on and play in the Minecraft Realm right now! Feel free to reply right here when you're jumping in! ✨`,
+        tokensUsed: 45,
+      };
+    };
+
+    try {
+      const ownerLidJid = '214293836493051@lid';
+      const prompt = 'Text +91 80918 98350 that comes to play in Minecraft realme ';
+
+      const incomingMsg = {
+        key: { id: `cmd_sandy_${Date.now()}`, remoteJid: ownerLidJid, fromMe: false },
+        message: { conversation: prompt },
+      };
+
+      await whatsAppService.handleIncomingMessage(incomingMsg);
+
+      assert.strictEqual(sentMessages.length, 2, 'Must send message to Minecraft friend AND confirmation report to Sandy');
+
+      // 1. Contact message
+      const friendMsg = sentMessages.find(m => m.jid === '918091898350@s.whatsapp.net');
+      assert.ok(friendMsg, 'Must dispatch message to Minecraft friend +91 80918 98350');
+      assert.match(friendMsg.text, /Minecraft Realm/i);
+      assert.match(friendMsg.text, /Sandy/i);
+
+      // 2. Sandy confirmation
+      const sandyAck = sentMessages.find(m => m.jid === ownerLidJid);
+      assert.ok(sandyAck, 'Must return confirmation report back to Sandy at 214293836493051@lid');
+      assert.match(sandyAck.text, /AI OUTREACH DISPATCHED/i);
+      assert.match(sandyAck.text, /918091898350/);
+
+    } finally {
+      whatsAppService.safeSendMessage = originalSafeSend;
+      scaleMaxAdapter.createChatCompletion = originalChat;
+    }
+  });
+
+  // -------------------------------------------------------------
+  // Test 9: Conversational Prefixes & Varied Outreach Action Verbs
+  // -------------------------------------------------------------
+  test('Test 9: Parses conversational prefixes, varied verbs (ask, ping, dm, tell) and cleans instruction', () => {
+    // Prefix "Yo nero text..."
+    const c1 = outreachService.parseOutreachCommand('Yo nero text +91 80918 98350 that comes to play in Minecraft realme');
+    assert.strictEqual(c1.isOutreach, true);
+    assert.strictEqual(c1.directNumber, '918091898350');
+    assert.strictEqual(c1.instruction, 'comes to play in Minecraft realme');
+
+    // "ask <num> if..."
+    const c2 = outreachService.parseOutreachCommand('ask +91 80918 98350 if he is free to play');
+    assert.strictEqual(c2.isOutreach, true);
+    assert.strictEqual(c2.directNumber, '918091898350');
+    assert.strictEqual(c2.instruction, 'he is free to play');
+
+    // "send a whatsapp to <num> saying..."
+    const c3 = outreachService.parseOutreachCommand('send a whatsapp to 8091898350 saying that dinner is ready');
+    assert.strictEqual(c3.isOutreach, true);
+    assert.strictEqual(c3.directNumber, '918091898350');
+    assert.strictEqual(c3.instruction, 'dinner is ready');
+
+    // "dm <num> we are waiting..."
+    const c4 = outreachService.parseOutreachCommand('dm 8091898350 we are waiting for you in discord');
+    assert.strictEqual(c4.isOutreach, true);
+    assert.strictEqual(c4.directNumber, '918091898350');
+    assert.strictEqual(c4.instruction, 'we are waiting for you in discord');
+  });
+
+  // -------------------------------------------------------------
+  // Test 10: Outreach Recipient Reply Notifies Sandy in Real-Time
+  // -------------------------------------------------------------
+  test('Test 10: Recipient reply to outreach triggers conversation reply AND instant alert to Sandy', async () => {
+    const originalSafeSend = whatsAppService.safeSendMessage;
+    const originalChat = scaleMaxAdapter.createChatCompletion;
+
+    const friendNum = '918091898350';
+    const friendJid = `${friendNum}@s.whatsapp.net`;
+    clearConversation(`wa_${friendJid}`);
+
+    // Register active outreach
+    outreachService.registerDispatchedOutreach({
+      targetNumber: friendNum,
+      targetJid: friendJid,
+      instruction: 'comes to play in Minecraft realme',
+      sentMessage: 'Hey! Sandy invited you to Minecraft Realm!',
+      targetName: 'Minecraft Friend',
+    });
+
+    const sentMessages = [];
+    whatsAppService.safeSendMessage = async (jid, content, options) => {
+      const sent = { jid, text: content.text || '', quoted: options?.quoted };
+      sentMessages.push(sent);
+      return sent;
+    };
+
+    scaleMaxAdapter.createChatCompletion = async () => {
+      return {
+        text: `Awesome! I've let Sandy know you are hopping on right now. See you in the realm! ⛏️`,
+        tokensUsed: 30,
+      };
+    };
+
+    try {
+      const incomingFriendReply = {
+        key: { id: `friend_reply_${Date.now()}`, remoteJid: friendJid, fromMe: false },
+        message: { conversation: "Joining the realm in 2 mins, what is the realm code?" },
+      };
+
+      await whatsAppService.handleIncomingMessage(incomingFriendReply);
+
+      // 1. Reply sent to friend
+      const friendReply = sentMessages.find(m => m.jid === friendJid && m.text.includes('realm'));
+      assert.ok(friendReply, 'Must hold conversation and reply to friend');
+      assert.match(friendReply.text, /Sandy know you are hopping on/i);
+
+      // 2. Alert sent to Sandy
+      const sandyAlert = sentMessages.find(m => m.text && m.text.includes('OUTREACH REPLY RECEIVED'));
+      assert.ok(sandyAlert, 'Must dispatch outreach reply alert to Sandy');
+      assert.match(sandyAlert.text, /Minecraft Friend/i);
+      assert.match(sandyAlert.text, /Joining the realm in 2 mins/i);
+      assert.match(sandyAlert.text, /Nero's Conversational Reply/i);
+
+    } finally {
+      whatsAppService.safeSendMessage = originalSafeSend;
+      scaleMaxAdapter.createChatCompletion = originalChat;
+      clearConversation(`wa_${friendJid}`);
+    }
+  });
+
 });

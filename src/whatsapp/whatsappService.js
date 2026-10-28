@@ -335,9 +335,18 @@ class WhatsAppService {
   }
 
   getPrimaryOwnerJid() {
+    const configured = (config.whatsAppOwnerNumber || '').split(/[,;\s]+/)[0]?.replace(/[^0-9]/g, '');
+    if (configured && configured.length >= 10 && configured.length <= 13) {
+      return `${configured}@s.whatsapp.net`;
+    }
     const owners = sandyStatusService.getOwnerNumbers();
     const phoneOwner = owners.find(
-      (o) => !o.phone_or_lid.includes('@') && o.phone_or_lid.length >= 10 && !o.phone_or_lid.startsWith('145')
+      (o) => !o.phone_or_lid.includes('@') &&
+             o.phone_or_lid.length >= 10 &&
+             o.phone_or_lid.length <= 12 &&
+             !o.phone_or_lid.startsWith('145') &&
+             !o.phone_or_lid.startsWith('214') &&
+             !o.phone_or_lid.startsWith('105')
     );
     if (phoneOwner) {
       return `${phoneOwner.phone_or_lid}@s.whatsapp.net`;
@@ -2334,7 +2343,7 @@ class WhatsAppService {
 
       const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
       const reasoningEffort = isSandy ? 'high' : 'none';
-      const maxTokens = isSandy ? 1000 : (explicitLimit ? Math.min(explicitLimit * 2, 800) : 500);
+      const maxTokens = isSandy ? 1000 : (explicitLimit ? Math.min(explicitLimit * 2, 800) : 600);
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
@@ -2348,9 +2357,9 @@ class WhatsAppService {
 
       // Dynamic reply length intelligence (supports holding prolonged multi-turn conversations):
       // 1. Initial greeting capped to 30 words
-      // 2. Ongoing / extended multi-turn conversations -> natural conversational depth (up to 200 words)
+      // 2. Ongoing / extended multi-turn conversations -> natural conversational depth (up to 300 words)
       // 3. Explicit limits (e.g. "write a 500 word explanation") -> exact requested limit
-      let maxWords = 200;
+      let maxWords = 300;
       if (explicitLimit) {
         maxWords = explicitLimit;
       } else if (isSandy) {
@@ -2384,6 +2393,22 @@ class WhatsAppService {
 
       // Real Interactive Contact Classification & Action Buttons:
       if (!isSandy && !isGroup) {
+        // Check if contact is replying to an active outreach from Sandy
+        const activeOutreach = outreachService.getOutreachRecord(senderNumber);
+        if (activeOutreach) {
+          const ownerJid = this.getPrimaryOwnerJid();
+          const outreachAlert =
+            `📩 *OUTREACH REPLY RECEIVED!*\n\n` +
+            `• *From:* ${activeOutreach.targetName || senderName} (\`+${senderNumber}\`)\n` +
+            `• *Original Note:* _${activeOutreach.instruction}_\n\n` +
+            `💬 *Their Reply:*\n"${promptText}"\n\n` +
+            `🤖 *Nero's Conversational Reply:*\n"${replyText}"`;
+          recordAssistantMessage('wa_sandy_master', outreachAlert, 50, 'gemini-3.8-flash');
+          await this.safeSendMessage(ownerJid, { text: outreachAlert }).catch((e) => {
+            console.warn('[Outreach Alert Send Warning]:', e.message);
+          });
+        }
+
         // Send owner a contact-review notification if new contact or classification needed (never spam contact)
         if (sandyStatusService.shouldNotifyOwnerForReview(senderNumber)) {
           await this.sendOwnerContactReviewNotification(senderNumber, senderName, promptText);

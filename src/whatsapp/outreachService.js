@@ -22,6 +22,34 @@ import { logAudit } from '../db/index.js';
  * - Prepares the chat thread so Nero can hold long, multi-turn conversations if the contact responds
  */
 export class OutreachService {
+  constructor() {
+    this.activeOutreaches = new Map();
+  }
+
+  /**
+   * Registers an active outreach dispatch so replies can trigger notifications to Sandy
+   */
+  registerDispatchedOutreach({ targetNumber, targetJid, instruction, sentMessage, targetName }) {
+    if (!targetNumber) return;
+    const clean = String(targetNumber).replace(/[^0-9]/g, '');
+    this.activeOutreaches.set(clean, {
+      targetNumber: clean,
+      targetJid,
+      instruction,
+      sentMessage,
+      targetName,
+      dispatchedAt: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Retrieves active outreach dispatch for a given phone number
+   */
+  getOutreachRecord(targetNumber) {
+    if (!targetNumber) return null;
+    const clean = String(targetNumber).replace(/[^0-9]/g, '');
+    return this.activeOutreaches.get(clean) || null;
+  }
   /**
    * Normalizes any input phone number into an international E.164-compatible digit string
    * Handles 10-digit Indian numbers, leading zeros, +91, and foreign country codes
@@ -66,8 +94,11 @@ export class OutreachService {
     if (!text || typeof text !== 'string') return { isOutreach: false };
     const trimmed = text.trim();
 
+    // Strip common conversational polite prefixes e.g. "yo nero", "nero please", "can you", "could you"
+    const cleanedText = trimmed.replace(/^(?:(?:please|can\s+you|could\s+you|nero|yo\s+nero|hey\s+nero)\s+)+/i, '').trim();
+
     // 1. Slash commands: /wa_send, /outreach, /text <target> <msg>
-    const slashMatch = trimmed.match(/^(?:\/wa_send|\/outreach|\/text)\s+([^\s]+)\s+([\s\S]+)$/i);
+    const slashMatch = cleanedText.match(/^(?:\/wa_send|\/outreach|\/text)\s+([^\s]+)\s+([\s\S]+)$/i);
     if (slashMatch) {
       const targetQuery = slashMatch[1].trim();
       const instruction = slashMatch[2].trim();
@@ -83,10 +114,10 @@ export class OutreachService {
     // e.g. "9876543210 ko text karo ki kal meeting hai"
     // e.g. "Rahul ko message bhejo saying I reached safely"
     // e.g. "is number pe message kardo 9876543210 ki..."
-    const hindiMatch = trimmed.match(/^([+0-9a-zA-Z._\s-]{3,30}?)\s+(?:ko|pe|par)\s+(?:text|message|msg|bhejo|bhej\s+do|bolo|bol\s+do|keh\s+do)(?:\s+(?:karo|kardo|karna|kariye))?(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
+    const hindiMatch = cleanedText.match(/^([+0-9a-zA-Z._\s-]{3,30}?)\s+(?:ko|pe|par)\s+(?:text|message|msg|bhejo|bhej\s+do|bolo|bol\s+do|keh\s+do)(?:\s+(?:karo|kardo|karna|kariye))?(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
     if (hindiMatch) {
       const targetQuery = hindiMatch[1].trim();
-      const instruction = hindiMatch[2].trim();
+      let instruction = hindiMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -96,10 +127,10 @@ export class OutreachService {
     }
 
     // Hindi prefix pattern: "is number pe text karo <num>: <msg>"
-    const hindiPrefixMatch = trimmed.match(/^(?:is\s+number\s+(?:pe|par)\s+(?:text|message|msg|bolo)\s+)([+0-9\s-]{10,16})(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
+    const hindiPrefixMatch = cleanedText.match(/^(?:is\s+number\s+(?:pe|par)\s+(?:text|message|msg|bolo)\s+)([+0-9\s-]{10,16})(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
     if (hindiPrefixMatch) {
       const targetQuery = hindiPrefixMatch[1].trim();
-      const instruction = hindiPrefixMatch[2].trim();
+      let instruction = hindiPrefixMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -110,13 +141,15 @@ export class OutreachService {
 
     // 3. English standard patterns:
     // e.g. "text 918091785996 that the project is deployed"
+    // e.g. "text +91 80918 98350 that comes to play in Minecraft realme"
     // e.g. "send message to +91 80917 85996: please check email"
     // e.g. "tell Alex to review the deck"
+    // e.g. "ask +91 80918 98350 if he is free"
     // e.g. "whatsapp 9876543210 say hello"
-    const englishMatch = trimmed.match(/^(?:(?:text|message|msg|tell|send\s+(?:a\s+)?(?:text|message|msg)\s+to|whatsapp)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,30}?)(?::|\s+that\b|\s+to\b|\s+saying\b|\s+asking\b|\s*-\s*|\s*,\s*|\s+(?=[a-zA-Z]))\s*([\s\S]+)$/i);
+    const englishMatch = cleanedText.match(/^(?:(?:text|message|msg|tell|ask|ping|dm|write|whatsapp|send\s+(?:a\s+)?(?:text|message|msg|whatsapp|wa|dm)\s+to)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,30}?)(?::|\s+that\b|\s+to\b|\s+saying\b|\s+saying\s+that\b|\s+asking\b|\s+if\b|\s+whether\b|\s*-\s*|\s*,\s*|\s+(?=[a-zA-Z]))\s*([\s\S]+)$/i);
     if (englishMatch) {
       const targetQuery = englishMatch[1].trim();
-      const instruction = englishMatch[2].trim();
+      let instruction = englishMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -128,10 +161,10 @@ export class OutreachService {
     // 4. Phone number directly following action verb:
     // e.g. "text 8091785996 check out the website"
     // e.g. "msg 9876543210 hello there"
-    const phoneDirectMatch = trimmed.match(/^(?:text|message|msg|whatsapp)\s+([+0-9\s-]{9,16})\s+([\s\S]+)$/i);
+    const phoneDirectMatch = cleanedText.match(/^(?:text|message|msg|whatsapp|ping|dm|tell)\s+([+0-9\s-]{9,16})\s+([\s\S]+)$/i);
     if (phoneDirectMatch) {
       const targetQuery = phoneDirectMatch[1].trim();
-      const instruction = phoneDirectMatch[2].trim();
+      let instruction = phoneDirectMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -360,7 +393,16 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
       // 2. Record in recipient's chat memory so Nero has full context when they reply
       recordAssistantMessage(`wa_${targetJid}`, aiMessage, 80, 'gemini-3.8-flash');
 
-      // 3. Send confirmation report to Sandy with the exact message delivered
+      // 3. Register active outreach dispatch for instant reply alerting
+      this.registerDispatchedOutreach({
+        targetNumber,
+        targetJid,
+        instruction,
+        sentMessage: aiMessage,
+        targetName,
+      });
+
+      // 4. Send confirmation report to Sandy with the exact message delivered
       const confirmationReport =
         `🚀 *AI OUTREACH DISPATCHED!* ✨\n\n` +
         `• *Recipient:* ${targetName} (\`+${targetNumber}\`)\n` +

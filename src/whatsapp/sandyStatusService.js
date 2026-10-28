@@ -114,6 +114,13 @@ class SandyStatusService {
     seedOwnerStmt.run('919317741936', 'Sandy Primary Phone (+91 93177 41936)', seedNow);
     seedOwnerStmt.run('918091785996', 'Sandy Secondary Phone (+91 80917 85996)', seedNow);
     seedOwnerStmt.run('8091785996', 'Sandy Secondary Phone (Local)', seedNow);
+    seedOwnerStmt.run('214293836493051', 'Sandy Studio LID (noblelegion.studioes)', seedNow);
+    seedOwnerStmt.run('105107177869409', 'Sandy Multi-Device Linked Device LID', seedNow);
+
+    // Clean up any stray non-owner contact record for Sandy's studio accounts
+    try {
+      db.prepare('DELETE FROM contact_smart_memory WHERE sender_number IN (?, ?)').run('214293836493051', '105107177869409');
+    } catch {}
 
     const configuredOwners = (config.whatsAppOwnerNumber || '')
       .split(/[,;\s]+/)
@@ -893,7 +900,14 @@ class SandyStatusService {
     if (configuredOwners.includes(clean)) return true;
 
     // Hardcoded known Sandy multi-device self-chat LID & Numbers
-    if (clean === '1452084875482' || clean === '919317741936' || clean === '918091785996' || clean === '8091785996') {
+    if (
+      clean === '1452084875482' ||
+      clean === '919317741936' ||
+      clean === '918091785996' ||
+      clean === '8091785996' ||
+      clean === '214293836493051' ||
+      clean === '105107177869409'
+    ) {
       return true;
     }
 

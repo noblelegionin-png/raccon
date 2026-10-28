@@ -4,6 +4,22 @@ import { startBot, stopBot } from './telegram/bot.js';
 import { createWebServer } from './web/server.js';
 import { whatsAppService } from './whatsapp/whatsappService.js';
 
+// Suppress high-volume internal logs from third-party libraries (e.g. libsignal's hardcoded console.info('Closing session:'))
+const _origInfo = console.info;
+console.info = function (...args) {
+  if (typeof args[0] === 'string' && (args[0].includes('Closing session') || args[0].includes('SessionEntry'))) {
+    return;
+  }
+  _origInfo.apply(console, args);
+};
+const _origLog = console.log;
+console.log = function (...args) {
+  if (typeof args[0] === 'string' && (args[0].includes('Closing session') || args[0].includes('SessionEntry'))) {
+    return;
+  }
+  _origLog.apply(console, args);
+};
+
 async function main() {
   console.log('====================================================');
   console.log('⚡ NERO LABS — TELEGRAM AI BOT & MINI APP (PHASE 1)');

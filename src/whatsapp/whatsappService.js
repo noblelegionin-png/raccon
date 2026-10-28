@@ -20,7 +20,7 @@ import {
   recordAssistantMessage,
   clearConversation,
 } from '../conversation/manager.js';
-import { logAudit, getRecentConversation, addNote, getUserNotes } from '../db/index.js';
+import { logAudit, getRecentConversation, addNote, getUserNotes, isWhatsAppMessageProcessed, recordWhatsAppMessageProcessed } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { getBotApi } from '../telegram/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
@@ -51,7 +51,12 @@ import {
  */
 export function isMuteTrigger(text) {
   if (!text) return false;
-  const clean = text.trim().toLowerCase()
+  const raw = text.trim().toLowerCase();
+  // Fast path for direct slash commands or standalone keywords (/mute, !mute, .mute, mute)
+  if (/^[/!.]?mute(?:\b|$)/i.test(raw)) return true;
+
+  const clean = raw
+    .replace(/^[/!.]/, '')
     .replace(/^[!/.]nero\s+/i, '')
     .replace(/^nero\s*[,:]?\s*/i, '')
     .replace(/^(?:bhai|bro|yaar|abe|oye|please|pls)\s+/i, '')
@@ -63,7 +68,7 @@ export function isMuteTrigger(text) {
     return true;
   }
   // Embedded commands in short messages (<40 chars)
-  if (/\b(?:chup\s+ho\s*ja|chuo\s+ho\s*ja|chup\s+kar|chup\s+raho|shut\s*up|shutup|be\s+quiet|stop\s+talking|khamosh\s+ho\s*ja|mute\s+chat)\b/i.test(clean) && clean.length < 40) {
+  if (/\b(?:chup\s+ho\s*ja|chuo\s+ho\s*ja|chup\s+kar|chup\s+raho|shut\s*up|shutup|be\s+quiet|stop\s+talking|khamosh\s+ho\s*ja|mute\s+chat|mute)\b/i.test(clean) && clean.length < 40) {
     return true;
   }
   return false;
@@ -74,7 +79,12 @@ export function isMuteTrigger(text) {
  */
 export function isUnmuteTrigger(text) {
   if (!text) return false;
-  const clean = text.trim().toLowerCase()
+  const raw = text.trim().toLowerCase();
+  // Fast path for direct slash commands or standalone keywords (/unmute, !unmute, unmute, bol)
+  if (/^[/!.]?unmute(?:\b|$)/i.test(raw)) return true;
+
+  const clean = raw
+    .replace(/^[/!.]/, '')
     .replace(/^[!/.]nero\s+/i, '')
     .replace(/^nero\s*[,:]?\s*/i, '')
     .replace(/^(?:bhai|bro|yaar|abe|oye|please|pls)\s+/i, '')
@@ -86,7 +96,7 @@ export function isUnmuteTrigger(text) {
     return true;
   }
   // Embedded commands in short messages (<35 chars)
-  if (/\b(?:ab\s+bol|bol\s+ab|start\s+talking|resume\s+talking|unmute\s+chat|baat\s+karo|chalu\s+ho\s*ja|shuru\s+ho\s*ja)\b/i.test(clean) && clean.length < 35) {
+  if (/\b(?:ab\s+bol|bol\s+ab|start\s+talking|resume\s+talking|unmute\s+chat|baat\s+karo|chalu\s+ho\s*ja|shuru\s+ho\s*ja|unmute|bol)\b/i.test(clean) && clean.length < 35) {
     return true;
   }
   return false;
@@ -100,7 +110,7 @@ class WhatsAppService {
     this.qrDataUrl = null;
     this.pairingCode = null;
     this.connectedUser = null;
-    this.startedAt = null;
+    this.startedAt = Date.now();
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 20;
     this.messageCount = 0;
@@ -684,12 +694,13 @@ class WhatsAppService {
         isPtt: Boolean(audioMessage?.ptt),
       });
 
-      // Send unobtrusive follow-up message to the chat
-      const followUpText = "💬 React to this voice note to get its English transcription.";
-      const followUpMsg = await this.safeSendMessage(remoteJid, { text: followUpText }, { quoted: msg });
-
-      if (followUpMsg?.key?.id) {
-        voiceNoteService.setFollowupMessageId(msgId, followUpMsg.key.id);
+      // Only send follow-up prompt if explicitly enabled by config (disabled by default to prevent unsolicited messages in DMs)
+      if (config.whatsAppVoiceFollowUpPrompt) {
+        const followUpText = "💬 React to this voice note to get its English transcription.";
+        const followUpMsg = await this.safeSendMessage(remoteJid, { text: followUpText }, { quoted: msg });
+        if (followUpMsg?.key?.id) {
+          voiceNoteService.setFollowupMessageId(msgId, followUpMsg.key.id);
+        }
       }
 
       console.log(`[Workflow A] Registered owner outgoing voice note ${msgId} in ${remoteJid}`);
@@ -1024,15 +1035,31 @@ class WhatsAppService {
   async handleIncomingMessage(msg) {
     if (!msg.message) return;
 
-    // Idempotent message deduplication: discard any already processed message ID
+    // Discard stale or historical synced messages to prevent replying to old conversations
+    if (msg.messageTimestamp) {
+      const msgTsSec = typeof msg.messageTimestamp === 'number'
+        ? msg.messageTimestamp
+        : (msg.messageTimestamp?.low || Number(msg.messageTimestamp) || 0);
+      const msgTsMs = msgTsSec * 1000;
+      const now = Date.now();
+      const startup = this.startedAt || now;
+      // Drop any historical message older than 3 minutes or received before this process started (with 30s grace)
+      if (msgTsMs > 0 && (msgTsMs < startup - 30000 || (now - msgTsMs) > 180000)) {
+        console.log(`[WhatsApp Stale Message] Dropping old message ${msg.key?.id} (age: ${Math.round((now - msgTsMs) / 1000)}s)`);
+        return;
+      }
+    }
+
+    // Idempotent message deduplication across memory and SQLite
     const msgId = msg.key?.id;
     if (msgId) {
       if (this.sentMessageIds.has(msgId)) return;
-      if (this.processedMessageIds.has(msgId)) {
+      if (this.processedMessageIds.has(msgId) || isWhatsAppMessageProcessed(msgId)) {
         console.log(`[WhatsApp Deduplication] Dropping duplicate incoming message ID: ${msgId}`);
         return;
       }
       this.processedMessageIds.set(msgId, Date.now());
+      recordWhatsAppMessageProcessed(msgId, msg.key?.remoteJid || '');
       if (this.processedMessageIds.size > 1000) {
         const cutoff = Date.now() - 3600000;
         for (const [id, ts] of this.processedMessageIds.entries()) {
@@ -1152,19 +1179,16 @@ class WhatsAppService {
     const myLid = (this.sock?.user?.lid || this.sock?.authState?.creds?.me?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
     const remoteClean = (remoteJid || '').replace(/[^0-9]/g, '');
 
-    // True self-chat in WhatsApp "Message Yourself" (supports Phone JID, MD LID: 1452084875482, and DB/Config owners):
+    // True self-chat in WhatsApp "Message Yourself" (only when remote chat is the bot's own linked phone or LID):
     const isSelfChat = isFromMe && (
-      sandyStatusService.isOwnerNumber(remoteClean) ||
       (Boolean(myPhone) && remoteClean === myPhone) ||
       (Boolean(myLid) && remoteClean === myLid) ||
       remoteJid === this.sock?.user?.lid ||
-      remoteJid === this.sock?.user?.id ||
-      (!isGroup && (remoteClean === myPhone || remoteClean === myLid || sandyStatusService.isOwnerNumber(remoteClean)))
+      remoteJid === this.sock?.user?.id
     );
 
     const isOwnerSender = isSelfChat ||
       sandyStatusService.isOwnerNumber(senderNumber) ||
-      sandyStatusService.isOwnerNumber(remoteClean) ||
       (Boolean(myPhone) && senderNumber === myPhone) ||
       (Boolean(myLid) && senderNumber === myLid);
 
@@ -1176,31 +1200,62 @@ class WhatsAppService {
     const contextInfo =
       msg.message?.extendedTextMessage?.contextInfo ||
       msg.message?.imageMessage?.contextInfo ||
-      msg.message?.videoMessage?.contextInfo;
+      msg.message?.videoMessage?.contextInfo ||
+      msg.message?.audioMessage?.contextInfo;
     const quotedParticipant = (contextInfo?.participant || '').replace(/[^0-9]/g, '');
     const isReplyToNero = Boolean(
-      quotedParticipant &&
-      (quotedParticipant === myPhone || (Boolean(myLid) && quotedParticipant === myLid))
+      (quotedParticipant && (quotedParticipant === myPhone || (Boolean(myLid) && quotedParticipant === myLid))) ||
+      (contextInfo?.stanzaId && this.sentMessageIds.has(contextInfo.stanzaId))
     );
 
-    // Self-message guard:
-    // If sent from the linked phone to someone else or a group, only respond if explicitly commanded
-    if (isFromMe && !isSelfChat) {
-      // 🎙️ WORKFLOW A: Outgoing Voice Note from Bot Owner (send follow-up prompt & store audio)
+    const lower = trimmed.toLowerCase();
+    const isBotMention = Boolean(
+      lower.includes('@nero') ||
+      lower.includes('@bot') ||
+      lower.startsWith('!nero') ||
+      lower.startsWith('/nero') ||
+      lower.startsWith('.nero') ||
+      lower.startsWith('/ai') ||
+      lower.startsWith('!ai') ||
+      lower.startsWith('nero') ||
+      lower.startsWith('bot') ||
+      /\b(?:@nero|@bot)\b/i.test(trimmed)
+    );
+
+    const isMuteOrUnmute = isMuteTrigger(trimmed) || isUnmuteTrigger(trimmed);
+
+    // Is this a conversation with an external contact or group (not self-chat, not Sandy's private console)?
+    const isExternalChat = !isSelfChat && !sandyStatusService.isOwnerNumber(remoteClean);
+
+    // 🛡️ OWNER / SELF-MESSAGE GUARD IN EXTERNAL CHATS (DMs with contacts & groups):
+    // When Sandy (or the linked device) sends a message/voice note in a chat with an external contact:
+    // Only respond if Sandy explicitly:
+    // 1) Replied to the bot (isReplyToNero)
+    // 2) Tagged/mentioned the bot (@bot, @nero, /nero, nero)
+    // 3) Commanded /mute or /unmute
+    // NONE OTHER!
+    if ((isSandy || isFromMe) && isExternalChat) {
+      // 🎙️ Voice Notes from Sandy in DMs or groups:
       if (isAudio && audioMessage) {
-        await this.handleOwnerOutgoingVoiceNote(msg);
-        return;
+        // Silently save in voiceNoteService so reaction-to-transcription works if someone reacts,
+        // but NEVER post follow-ups or reply conversationally into DMs!
+        await voiceNoteService.saveVoiceNote({
+          messageId: msgId,
+          remoteJid,
+          senderJid: msg.key?.participant || remoteJid,
+          senderNumber: myPhone || senderNumber,
+          senderName: 'Sandy (Owner)',
+          mimeType: audioMessage?.mimetype || 'audio/ogg; codecs=opus',
+          durationSec: audioMessage?.seconds || 0,
+          isFromOwner: true,
+          isPtt: Boolean(audioMessage?.ptt),
+        }).catch(() => {});
+        return; // Silent return!
       }
 
-      const lower = trimmed.toLowerCase();
-      const isExplicitTrigger =
-        lower.startsWith('!nero') ||
-        lower.startsWith('/nero') ||
-        lower.startsWith('.nero') ||
-        lower.startsWith('nero ') ||
-        lower.startsWith('/ai ');
-
-      if (!isExplicitTrigger) {
+      const shouldReplyToSandy = isReplyToNero || isBotMention || isMuteOrUnmute;
+      if (!shouldReplyToSandy) {
+        // Silently ignore normal human conversations between Sandy and others in DMs/groups
         return;
       }
     }
@@ -1213,11 +1268,12 @@ class WhatsAppService {
     // Group message check: only respond if mentioned, commanded, sent media, or replying to Nero
     if (isGroup) {
       const isMentioned =
-        trimmed.toLowerCase().includes('nero') ||
+        isBotMention ||
+        isReplyToNero ||
+        isMuteOrUnmute ||
         trimmed.startsWith('!') ||
         trimmed.startsWith('/') ||
         trimmed.startsWith('.') ||
-        isReplyToNero ||
         isImage ||
         isVideo;
       if (!isMentioned) return;
@@ -1586,9 +1642,9 @@ class WhatsAppService {
           originalMessageId: msg.key?.id,
         });
 
-        // 🎙️ If Sandy (Owner) sends a voice note to Nero (direct chat or self-chat),
+        // 🎙️ If Sandy (Owner) sends a voice note to Nero in self-chat or explicitly replying to bot,
         // transcribe speech and reply conversationally with full context intelligence:
-        if (isSandy) {
+        if (isSandy && (isSelfChat || isReplyToNero)) {
           await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
           const speechResult = await voiceNoteService.transcribeAndTranslateAudio({

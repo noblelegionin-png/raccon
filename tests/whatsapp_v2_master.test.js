@@ -13,10 +13,13 @@ import {
   recordAssistantMessage,
   clearConversation,
 } from '../src/conversation/manager.js';
-import { getDb, getRecentConversation } from '../src/db/index.js';
+import { getDb, getRecentConversation, clearProcessedWhatsAppMessages } from '../src/db/index.js';
 import { scaleMaxAdapter } from '../src/provider/scaleMaxAdapter.js';
 
 describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite', () => {
+  before(() => {
+    clearProcessedWhatsAppMessages();
+  });
 
   // -------------------------------------------------------------
   // Test 1: Owner-number verification and unauthorized access

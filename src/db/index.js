@@ -73,6 +73,13 @@ export function initDatabase() {
       processed_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS wa_processed_messages (
+      message_id TEXT PRIMARY KEY,
+      remote_jid TEXT,
+      processed_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wa_processed_ts ON wa_processed_messages(processed_at);
+
     CREATE TABLE IF NOT EXISTS raw_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       platform_message_id INTEGER NOT NULL,
@@ -493,6 +500,42 @@ export function markUpdateProcessed(updateId) {
       SELECT update_id FROM processed_updates ORDER BY update_id DESC LIMIT 10000
     )
   `).run();
+}
+
+// WhatsApp Message Deduplication & Replay Prevention
+export function clearProcessedWhatsAppMessages() {
+  try {
+    getDb().exec('DELETE FROM wa_processed_messages;');
+  } catch {}
+}
+
+export function isWhatsAppMessageProcessed(messageId) {
+  if (!messageId) return false;
+  try {
+    const row = getDb().prepare('SELECT message_id FROM wa_processed_messages WHERE message_id = ?').get(String(messageId));
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
+export function recordWhatsAppMessageProcessed(messageId, remoteJid = '') {
+  if (!messageId) return;
+  try {
+    const now = new Date().toISOString();
+    getDb().prepare(`
+      INSERT OR IGNORE INTO wa_processed_messages (message_id, remote_jid, processed_at)
+      VALUES (?, ?, ?)
+    `).run(String(messageId), String(remoteJid || ''), now);
+
+    // Keep table prune bounded (clean processed messages older than 10,000 records)
+    getDb().prepare(`
+      DELETE FROM wa_processed_messages
+      WHERE message_id NOT IN (
+        SELECT message_id FROM wa_processed_messages ORDER BY rowid DESC LIMIT 10000
+      )
+    `).run();
+  } catch {}
 }
 
 // Raw Message Archival Store

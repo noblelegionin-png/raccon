@@ -83,7 +83,7 @@ export class OutreachService {
     // e.g. "9876543210 ko text karo ki kal meeting hai"
     // e.g. "Rahul ko message bhejo saying I reached safely"
     // e.g. "is number pe message kardo 9876543210 ki..."
-    const hindiMatch = trimmed.match(/^([+0-9a-zA-Z._\s-]{3,30}?)\s+(?:ko|pe|par)\s+(?:text|message|msg|bhejo|bhej\s+do|bolo|bol\s+do|keh\s+do)(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
+    const hindiMatch = trimmed.match(/^([+0-9a-zA-Z._\s-]{3,30}?)\s+(?:ko|pe|par)\s+(?:text|message|msg|bhejo|bhej\s+do|bolo|bol\s+do|keh\s+do)(?:\s+(?:karo|kardo|karna|kariye))?(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
     if (hindiMatch) {
       const targetQuery = hindiMatch[1].trim();
       const instruction = hindiMatch[2].trim();

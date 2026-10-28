@@ -1539,15 +1539,24 @@ class WhatsAppService {
     if (isAudio && audioMessage) {
       try {
         await this.sock?.sendPresenceUpdate('recording', remoteJid).catch(() => {});
-        const buffer = await downloadMediaMessage(
-          msg,
-          'buffer',
-          {},
-          {
-            logger: pino({ level: 'silent' }),
-            reuploadRequest: this.sock.updateMediaMessage,
-          }
-        );
+        let buffer = null;
+        try {
+          buffer = await downloadMediaMessage(
+            msg,
+            'buffer',
+            {},
+            {
+              logger: pino({ level: 'silent' }),
+              reuploadRequest: this.sock?.updateMediaMessage,
+            }
+          );
+        } catch (dlErr) {
+          console.warn('[Audio Download Warning]:', dlErr.message);
+        }
+
+        if (!buffer || buffer.length === 0) {
+          buffer = Buffer.from('');
+        }
 
         const durationSec = audioMessage.seconds || 0;
         const mime = audioMessage.mimetype || 'audio/ogg; codecs=opus';
@@ -1561,27 +1570,114 @@ class WhatsAppService {
           originalMessageId: msg.key?.id,
         });
 
-        // 🎙️ WORKFLOW B: Register incoming voice note reference & await reaction trigger
-        await voiceNoteService.saveVoiceNote({
-          messageId: msg.key?.id,
-          remoteJid,
-          senderJid,
-          senderNumber,
-          senderName,
-          buffer,
-          mimeType: mime,
-          durationSec,
-          isFromOwner: isSandy,
-          isPtt: Boolean(audioMessage?.ptt),
-        });
+        // 🎙️ If Sandy (Owner) sends a voice note to Nero (direct chat or self-chat),
+        // transcribe speech and reply conversationally with full context intelligence:
+        if (isSandy) {
+          await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
-        if (isSelfChat) {
-          const followUpText = "💬 React with ❤️ to translate to English, or 📝 to transcribe.";
-          const followUpMsg = await this.safeSendMessage(remoteJid, { text: followUpText }, { quoted: msg });
-          if (followUpMsg?.key?.id) {
-            voiceNoteService.setFollowupMessageId(msg.key?.id, followUpMsg.key.id);
+          const speechResult = await voiceNoteService.transcribeAndTranslateAudio({
+            buffer,
+            mimeType: mime,
+            durationSec,
+            model: 'gemini-3.8-flash',
+          });
+
+          await voiceNoteService.saveVoiceNote({
+            messageId: msg.key?.id,
+            remoteJid,
+            senderJid,
+            senderNumber,
+            senderName,
+            buffer,
+            mimeType: mime,
+            durationSec,
+            isFromOwner: true,
+            isPtt: Boolean(audioMessage?.ptt),
+            isTranscribed: 1,
+            transcription: speechResult.originalTranscript,
+            translation: speechResult.englishTranslation,
+            detectedLanguage: speechResult.language,
+            isEnglish: speechResult.isEnglish ? 1 : 0,
+          });
+
+          const spokenText = (speechResult.originalTranscript || speechResult.englishTranslation || '').trim();
+
+          if (!spokenText || spokenText.includes('[No speech detected') || spokenText.includes('[inaudible]')) {
+            const emptyReply = `🎙️ *[Voice Note]* (${durationSec}s): Could not detect clear speech in this audio. Please speak a little closer to the mic and try again.`;
+            await this.safeSendMessage(remoteJid, { text: emptyReply }, { quoted: msg });
+            await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+            return;
           }
+
+          // Check if spoken text is a natural language status update for Sandy
+          const schedMatch = spokenText.match(/^(?:set\s+status\s+to|update\s+status\s+to|status\s+to|status|schedule)\s+(.+)$/i);
+          let actionReply = null;
+          if (schedMatch) {
+            const res = sandyStatusService.parseNaturalLanguageUpdate(schedMatch[1].trim());
+            if (res.updated) {
+              actionReply = `📅 *Status Updated via Voice:*\n${res.summary}`;
+            }
+          }
+
+          const chatId = 'wa_sandy_master';
+          recordUserMessage(chatId, `🎙️ [Voice Note (${durationSec}s)]: "${spokenText}"`);
+
+          let replyContent = actionReply;
+          if (!replyContent) {
+            const { messages, explicitLimit } = buildWhatsAppChatContext({
+              chatId,
+              promptText: spokenText,
+              senderNumber,
+              senderName,
+              isSandy: true,
+            });
+
+            const completion = await scaleMaxAdapter.createChatCompletion({
+              model: 'gemini-3.8-flash',
+              messages,
+              chatId,
+              reasoningEffort: 'high',
+              maxTokens: 1000,
+            });
+
+            replyContent = completion?.text || 'Understood, Sandy.';
+            try {
+              const validated = validateAndSanitizeResponse(replyContent, spokenText, {
+                minWords: 1,
+                maxWords: 800,
+                explicitLimit: Boolean(explicitLimit),
+                isDev: true,
+                isOwner: true,
+              });
+              if (validated?.sanitizedText) replyContent = validated.sanitizedText;
+            } catch {}
+
+            recordAssistantMessage(chatId, replyContent, completion?.tokensUsed || 0, 'gemini-3.8-flash');
+          }
+
+          const sandyVoiceReply =
+            `🎙️ *[Voice Note Heard & Transcribed]* (${durationSec}s):\n` +
+            `"${spokenText}"\n\n` +
+            `${replyContent}\n\n` +
+            `_File saved to vault:_ \`${savedMeta.fileName}\` 💾`;
+
+          await this.safeSendMessage(remoteJid, { text: sandyVoiceReply }, { quoted: msg });
+          logAudit('whatsapp', 'OWNER_VOICE_NOTE_REPLIED', `Sandy voice note ${msg.key?.id} (${durationSec}s): "${spokenText.slice(0, 50)}"`);
         } else {
+          // 🎙️ WORKFLOW B: Register incoming voice note reference from contact & await reaction trigger
+          await voiceNoteService.saveVoiceNote({
+            messageId: msg.key?.id,
+            remoteJid,
+            senderJid,
+            senderNumber,
+            senderName,
+            buffer,
+            mimeType: mime,
+            durationSec,
+            isFromOwner: false,
+            isPtt: Boolean(audioMessage?.ptt),
+          });
+
           sandyStatusService.recordContactInteraction(
             senderNumber,
             senderName,
@@ -1599,6 +1695,8 @@ class WhatsAppService {
         return;
       } catch (audioErr) {
         console.error('[WhatsApp Audio Intake Error]:', audioErr.message);
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
       }
     }
 

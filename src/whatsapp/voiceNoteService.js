@@ -151,6 +151,11 @@ export class VoiceNoteService {
     isFromOwner = false,
     isPtt = true,
     followupMsgId = null,
+    isTranscribed = 0,
+    transcription = null,
+    translation = null,
+    detectedLanguage = null,
+    isEnglish = 0,
   }) {
     this.init();
     if (!messageId || !remoteJid) return null;
@@ -172,11 +177,17 @@ export class VoiceNoteService {
       INSERT INTO whatsapp_voice_notes (
         message_id, remote_jid, sender_jid, sender_number, sender_name,
         file_path, mime_type, duration_sec, is_from_owner, is_ptt,
-        followup_msg_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        followup_msg_id, is_transcribed, transcription, translation,
+        detected_language, is_english, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(message_id) DO UPDATE SET
         file_path = excluded.file_path,
         duration_sec = excluded.duration_sec,
+        is_transcribed = CASE WHEN excluded.is_transcribed = 1 THEN 1 ELSE whatsapp_voice_notes.is_transcribed END,
+        transcription = COALESCE(excluded.transcription, whatsapp_voice_notes.transcription),
+        translation = COALESCE(excluded.translation, whatsapp_voice_notes.translation),
+        detected_language = COALESCE(excluded.detected_language, whatsapp_voice_notes.detected_language),
+        is_english = COALESCE(excluded.is_english, whatsapp_voice_notes.is_english),
         followup_msg_id = COALESCE(excluded.followup_msg_id, whatsapp_voice_notes.followup_msg_id)
     `).run(
       messageId,
@@ -190,6 +201,11 @@ export class VoiceNoteService {
       isFromOwner ? 1 : 0,
       isPtt ? 1 : 0,
       followupMsgId,
+      isTranscribed ? 1 : 0,
+      transcription,
+      translation,
+      detectedLanguage,
+      isEnglish ? 1 : 0,
       now
     );
 

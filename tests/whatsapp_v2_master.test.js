@@ -14,6 +14,7 @@ import {
   clearConversation,
 } from '../src/conversation/manager.js';
 import { getDb, getRecentConversation } from '../src/db/index.js';
+import { scaleMaxAdapter } from '../src/provider/scaleMaxAdapter.js';
 
 describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite', () => {
 
@@ -441,6 +442,7 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
   test('Test 14: Reaction-triggered voice note transcription and English translation', async () => {
     const originalSafeSend = whatsAppService.safeSendMessage;
     const originalTranscribe = voiceNoteService.transcribeAndTranslateAudio;
+    const originalChatCompletion = scaleMaxAdapter.createChatCompletion;
 
     let sentMessages = [];
     whatsAppService.safeSendMessage = async (jid, content, options) => {
@@ -629,9 +631,47 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
       voiceNoteService.setConfiguredEmoji('translate', '❤️');
       voiceNoteService.setConfiguredEmoji('transcribe', '📝');
 
+      // ---------------------------------------------------------
+      // Step H: Owner Sandy sends a voice note to the bot -> Normal conversational reply
+      // ---------------------------------------------------------
+      sentMessages = [];
+      const sandyDirectVnId = `vn_sandy_direct_${Date.now()}`;
+      const sandyAudioMsg = {
+        key: { id: sandyDirectVnId, remoteJid: `${myPhone}@s.whatsapp.net`, fromMe: true },
+        message: {
+          audioMessage: {
+            seconds: 6,
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true,
+          },
+        },
+      };
+
+      // Mock Sandy's spoken voice note
+      voiceNoteService.transcribeAndTranslateAudio = async () => ({
+        language: 'English',
+        isEnglish: true,
+        originalTranscript: 'Nero, what is my current status?',
+        englishTranslation: 'Nero, what is my current status?',
+      });
+
+      scaleMaxAdapter.createChatCompletion = async () => ({
+        text: 'Sandy, your current status is "Gym & Fitness Workout". All systems running smoothly.',
+        tokensUsed: 45,
+      });
+
+      await whatsAppService.handleIncomingMessage(sandyAudioMsg);
+
+      assert.strictEqual(sentMessages.length, 1, 'Sandy voice note to bot must receive an immediate conversational reply');
+      assert.match(sentMessages[0].text, /Voice Note Heard & Transcribed/i, 'Must indicate speech was heard and transcribed');
+      assert.match(sentMessages[0].text, /Nero, what is my current status\?/i, 'Must quote Sandy speech');
+      assert.match(sentMessages[0].text, /Gym & Fitness Workout/i, 'Must include AI conversational answer');
+      assert.strictEqual(sentMessages[0].quoted?.key?.id, sandyDirectVnId, 'Must quote Sandy voice note');
+
     } finally {
       whatsAppService.safeSendMessage = originalSafeSend;
       voiceNoteService.transcribeAndTranslateAudio = originalTranscribe;
+      scaleMaxAdapter.createChatCompletion = originalChatCompletion;
     }
   });
 

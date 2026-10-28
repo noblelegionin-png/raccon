@@ -4,7 +4,7 @@ import { startBot, stopBot } from './telegram/bot.js';
 import { createWebServer } from './web/server.js';
 import { whatsAppService } from './whatsapp/whatsappService.js';
 
-// Suppress high-volume internal logs from third-party libraries (e.g. libsignal's hardcoded console.info('Closing session:'))
+// Suppress high-volume internal logs from third-party libraries (e.g. libsignal's hardcoded console logs)
 const _origInfo = console.info;
 console.info = function (...args) {
   if (typeof args[0] === 'string' && (args[0].includes('Closing session') || args[0].includes('SessionEntry'))) {
@@ -18,6 +18,13 @@ console.log = function (...args) {
     return;
   }
   _origLog.apply(console, args);
+};
+const _origErr = console.error;
+console.error = function (...args) {
+  if (typeof args[0] === 'string' && (args[0].includes('Bad MAC') || args[0].includes('Session error:'))) {
+    return;
+  }
+  _origErr.apply(console, args);
 };
 
 async function main() {

@@ -35,6 +35,7 @@ import { stickerService } from './stickerService.js';
 import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
 import { pdfService } from '../pdf/pdfService.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
+import { detectOwnerDisrespect, handleOwnerProtection } from './ownerProtectionService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
@@ -293,7 +294,7 @@ class WhatsAppService {
 
     // 6. Latency Ping
     if (act === '6' || act === '[6]' || act.includes('ping')) {
-      const pingText = `Pong! 🏓 MasterBot is live on *gemini-3.8-flash* (High Reasoning) with active low-latency dual bridge. 🟢`;
+      const pingText = `Pong! 🏓 MasterBot & Neri are live on *gemini-3.8-flash* (High Reasoning). Extreme Lovely Partner Mode active & devoted for Sandy! ❤️🟢`;
       recordUserMessage('wa_sandy_master', 'Action: Latency Ping');
       recordAssistantMessage('wa_sandy_master', pingText, 20, 'gemini-3.8-flash');
       await this.safeSendMessage(remoteJid, { text: pingText }, quotedMsg ? { quoted: quotedMsg } : {});
@@ -1203,6 +1204,7 @@ class WhatsAppService {
       remoteClean === '214293836493051' ||
       remoteClean === '918091785996' ||
       remoteClean === '8091785996' ||
+      sandyStatusService.isOwnerNumber(remoteClean) ||
       (Boolean(myPhone) && remoteClean === myPhone) ||
       (Boolean(myLid) && remoteClean === myLid)
     );
@@ -1233,6 +1235,22 @@ class WhatsAppService {
       (quotedParticipant && (quotedParticipant === myPhone || (Boolean(myLid) && quotedParticipant === myLid))) ||
       (contextInfo?.stanzaId && this.sentMessageIds.has(contextInfo.stanzaId))
     );
+    const isReplyToSandy = Boolean(
+      quotedParticipant && (
+        quotedParticipant === myPhone ||
+        (Boolean(myLid) && quotedParticipant === myLid) ||
+        sandyStatusService.isOwnerNumber(quotedParticipant)
+      )
+    );
+
+    // 🛡️ Owner Identity & Respect Defense Pre-Check:
+    const ownerDisrespectCheck = !isOwnerSender
+      ? detectOwnerDisrespect(trimmed, {
+          isGroup,
+          isReplyToSandy,
+          isExternalDm: isExternalChat && !isGroup,
+        })
+      : { isDisrespect: false };
 
     const lower = trimmed.toLowerCase();
     const isBotMention = Boolean(
@@ -1288,12 +1306,13 @@ class WhatsAppService {
       return;
     }
 
-    // Group message check: only respond if mentioned, commanded, sent media, or replying to Nero
+    // Group message check: only respond if mentioned, commanded, sent media, replying to Nero, or defending Sandy
     if (isGroup) {
       const isMentioned =
         isBotMention ||
         isReplyToNero ||
         isMuteOrUnmute ||
+        ownerDisrespectCheck.isDisrespect ||
         trimmed.startsWith('!') ||
         trimmed.startsWith('/') ||
         trimmed.startsWith('.') ||
@@ -1301,6 +1320,29 @@ class WhatsAppService {
         isVideo ||
         isPdfDoc;
       if (!isMentioned) return;
+    }
+
+    // 🛡️ OWNER IDENTITY & RESPECT PROTECTION INTERCEPT:
+    // If someone attempts to abuse, insult, or threaten Sandy in any chat, Nero steps in immediately
+    // with a firm, dignified, caring, and supportive warning!
+    if (!isOwnerSender && ownerDisrespectCheck.isDisrespect) {
+      const handledProtection = await handleOwnerProtection({
+        whatsAppService: this,
+        remoteJid,
+        msg,
+        promptText: trimmed,
+        senderNumber,
+        senderName,
+        isGroup,
+        isReplyToSandy,
+        isExternalDm: isExternalChat && !isGroup,
+      });
+      if (handledProtection.handled) {
+        recordUserMessage(`wa_${remoteJid}`, trimmed);
+        recordAssistantMessage(`wa_${remoteJid}`, handledProtection.replyText, 60, 'gemini-3.5-flash-lite');
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
     }
 
     // Strip bot command prefix if used
@@ -1391,9 +1433,12 @@ class WhatsAppService {
 
     if (promptText === '/ping') {
       const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+      const pingText = isSandy
+        ? `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (High Reasoning). Extreme Lovely Partner Mode (Neri) active & devoted for Sandy! ❤️🟢`
+        : `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (Fast/Low Reasoning). 🟢`;
       await this.safeSendMessage(
         remoteJid,
-        { text: `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (${isSandy ? 'High' : 'Fast/Low'} Reasoning). 🟢` },
+        { text: pingText },
         { quoted: msg }
       );
       await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});

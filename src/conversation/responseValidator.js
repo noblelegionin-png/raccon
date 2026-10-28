@@ -167,14 +167,16 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   const isAskingIdentity = /\b(what(?:'s|\s+is)\s+your\s+identity|who\s+am\s+i\s+talking\s+to|kisse\s+baat\s+kar\s+raha\s+hu)\b/i.test(lowerPrompt);
   const isAskingCreator = /\b(who\s+(?:made|created|built|developed)\s+(?:u|you)|who\s+is\s+your\s+creator|kisne\s+banaya)\b/i.test(lowerPrompt);
 
-  if (isAskingIdentity && !text.includes("Nero Labs AI")) {
-    text = `You're talking to Nero Labs AI. ${text}`;
-    modified = true;
-  }
+  if (!options.isOwner) {
+    if (isAskingIdentity && !text.includes("Nero Labs AI")) {
+      text = `You're talking to Nero Labs AI. ${text}`;
+      modified = true;
+    }
 
-  if (isAskingCreator && !text.toLowerCase().includes("sandy")) {
-    text = `${text} I was created by Sandy at Nero Labs!`;
-    modified = true;
+    if (isAskingCreator && !text.toLowerCase().includes("sandy")) {
+      text = `${text} I was created by Sandy at Nero Labs!`;
+      modified = true;
+    }
   }
 
   // 5. Strict Word Count Boundaries (Configurable dev vs global or explicit limit)

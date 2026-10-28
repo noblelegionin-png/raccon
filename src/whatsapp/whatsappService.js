@@ -1315,7 +1315,7 @@ class WhatsAppService {
     // so it won't disturb between chats. Resumes when someone says "bol" or "unmute".
     // =========================================================================
     // True self-chat (Message Yourself) or Sandy master console should NEVER be silenced by casual mute triggers
-    const chatIsMuted = !isSelfChat && isChatMuted(remoteJid);
+    const chatIsMuted = !isSelfChat && !isOwnerConsoleChat && !isSandy && isChatMuted(remoteJid);
 
     if (chatIsMuted) {
       if (
@@ -1338,6 +1338,12 @@ class WhatsAppService {
     }
 
     if (isMuteTrigger(trimmed) || isMuteTrigger(promptText) || (isReplyToNero && isMuteTrigger(trimmed))) {
+      if (isOwnerConsoleChat || isSelfChat || isSandy) {
+        const ownerNote = "👑 *Master Console Active:* Sandy, your direct master console stays active. If you want to stop the bot from texting public contacts, send *\"stop texting everyone\"*! 🤝";
+        await this.safeSendMessage(remoteJid, { text: ownerNote }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
       muteChat(remoteJid, 'user_command', senderNumber);
       const muteReply = "🤫 Got it! Main is chat ke liye chup ho gaya hoon taaki disturb na ho. Jab bhi zaroorat ho, bas *bol* ya *unmute* likh dena! 🤐👍";
       await this.safeSendMessage(remoteJid, { text: muteReply }, { quoted: msg });

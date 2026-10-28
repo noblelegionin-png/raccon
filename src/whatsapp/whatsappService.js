@@ -29,6 +29,7 @@ import { extractExplicitWordLimit, detectUserIntent } from '../conversation/inte
 import { sandyStatusService } from './sandyStatusService.js';
 import { mediaManager } from './mediaManager.js';
 import { buildWhatsAppChatContext, buildWhatsAppDirective, buildOutreachMessage } from './whatsappPersona.js';
+import { outreachService } from './outreachService.js';
 import { voiceNoteService } from './voiceNoteService.js';
 import { stickerService } from './stickerService.js';
 import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
@@ -1609,6 +1610,20 @@ class WhatsAppService {
             return;
           }
 
+          // Check if spoken text is an outbound AI outreach instruction
+          const voiceOutreach = await outreachService.handleOutreachRequest({
+            whatsAppService: this,
+            remoteJid,
+            msg,
+            promptText: spokenText,
+            senderNumber,
+            senderName,
+          });
+          if (voiceOutreach.handled) {
+            await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+            return;
+          }
+
           // Check if spoken text is a natural language status update for Sandy
           const schedMatch = spokenText.match(/^(?:set\s+status\s+to|update\s+status\s+to|status\s+to|status|schedule)\s+(.+)$/i);
           let actionReply = null;
@@ -1815,54 +1830,17 @@ class WhatsAppService {
         return;
       }
 
-      // Natural Language Outbound Outreach: "Text <Name/No>: <msg>" or "/wa_send <Name/No> <msg>"
-      const outreachMatch = promptText.match(/^(?:(?:text|message|msg|tell|send\s+(?:a\s+)?(?:text|message)\s+to)\s+([^:\n]+?)(?::|\s+that|\s+to|\s+saying)\s+(.+)$|\/wa_send\s+([^\s]+)\s+(.+)$)/i);
-      if (outreachMatch) {
-        const targetQuery = (outreachMatch[1] || outreachMatch[3]).trim();
-        const rawMessage = (outreachMatch[2] || outreachMatch[4]).trim();
-        const contact = sandyStatusService.findContactByNameOrNumber(targetQuery);
-
-        recordUserMessage('wa_sandy_master', promptText);
-
-        if (!contact) {
-          const notFoundText =
-            `⚠️ *Contact Not Found: "${targetQuery}"*\n\n` +
-            `Boss Sandy! Mujhe "${targetQuery}" naam ya number se koi known contact nahi mila. ` +
-            `Please specify their phone number directly (e.g. \`text 919876543210: ${rawMessage}\`)! 🔍`;
-          recordAssistantMessage('wa_sandy_master', notFoundText, 30, 'gemini-3.8-flash');
-          await this.safeSendMessage(remoteJid, { text: notFoundText }, { quoted: msg });
-          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
-          return;
-        }
-
-        const targetJid = `${contact.sender_number}@s.whatsapp.net`;
-        const formattedOutreach = buildOutreachMessage({
-          contactName: contact.sender_name || 'Friend',
-          messageText: rawMessage,
-          senderTitle: 'Sandy',
-        });
-
-        try {
-          await this.safeSendMessage(targetJid, { text: formattedOutreach });
-          recordAssistantMessage(`wa_${targetJid}`, formattedOutreach, 80, 'gemini-3.8-flash');
-
-          const dispatchAck =
-            `✅ *OUTREACH DISPATCHED TO ${contact.sender_name ? contact.sender_name.toUpperCase() : 'CONTACT'}!* 🚀\n\n` +
-            `• *Recipient:* ${contact.sender_name || 'Contact'} (\`+${contact.sender_number}\`)\n` +
-            `• *Relation:* _${contact.relationship || 'Known Contact'}_\n\n` +
-            `*Message Sent:*\n` +
-            `"${rawMessage}"\n\n` +
-            `_Delivered in Nero Personal Assistant format with emojis and professional styling. Standing by for their reply!_ ✨`;
-
-          recordAssistantMessage('wa_sandy_master', dispatchAck, 40, 'gemini-3.8-flash');
-          await this.safeSendMessage(remoteJid, { text: dispatchAck }, { quoted: msg });
-        } catch (sendErr) {
-          const failText = `❌ *Failed to deliver message to +${contact.sender_number}:* ${sendErr.message}`;
-          recordAssistantMessage('wa_sandy_master', failText, 25, 'gemini-3.8-flash');
-          await this.safeSendMessage(remoteJid, { text: failText }, { quoted: msg });
-        }
-
-        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      // 🚀 Intelligent Outbound AI Outreach: "text <No/Name> <instruction>" or "/wa_send <No> <msg>"
+      // Crafts the message in Nero's AI voice ("in its own AI way") rather than a raw template
+      const outreachResult = await outreachService.handleOutreachRequest({
+        whatsAppService: this,
+        remoteJid,
+        msg,
+        promptText,
+        senderNumber,
+        senderName,
+      });
+      if (outreachResult.handled) {
         return;
       }
 
@@ -2356,7 +2334,7 @@ class WhatsAppService {
 
       const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
       const reasoningEffort = isSandy ? 'high' : 'none';
-      const maxTokens = isSandy ? 1000 : (explicitLimit ? Math.min(explicitLimit * 2, 800) : 120);
+      const maxTokens = isSandy ? 1000 : (explicitLimit ? Math.min(explicitLimit * 2, 800) : 500);
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
@@ -2368,16 +2346,16 @@ class WhatsAppService {
 
       let replyText = completion.text || 'I processed your request but have no response to return.';
 
-      // Dynamic reply length intelligence:
-      // 1. "Hy to Hy" rule -> casual greetings capped to 30 words (1-2 punchy sentences)
-      // 2. Regular chats / questions -> crisp & punchy (max 50 words) unless explicit limit
+      // Dynamic reply length intelligence (supports holding prolonged multi-turn conversations):
+      // 1. Initial greeting capped to 30 words
+      // 2. Ongoing / extended multi-turn conversations -> natural conversational depth (up to 200 words)
       // 3. Explicit limits (e.g. "write a 500 word explanation") -> exact requested limit
-      let maxWords = 50;
+      let maxWords = 200;
       if (explicitLimit) {
         maxWords = explicitLimit;
       } else if (isSandy) {
         maxWords = 800;
-      } else if (detectedIntent === 'greeting') {
+      } else if (detectedIntent === 'greeting' && (!messages || messages.length <= 3)) {
         maxWords = 30;
       }
 

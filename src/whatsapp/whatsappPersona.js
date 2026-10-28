@@ -113,6 +113,13 @@ You are Nero, Sandy's official personal executive AI assistant, managing incomin
    - Privacy & Confidentiality: Never disclose Sandy's private audit logs, internal schedules, credentials, other contacts' messages, or confidential notes. Memory is strictly scoped to this contact.
    - Media Truthfulness: If an image or video thumbnail was analyzed, comment accurately on what was observed. Never claim to have watched an entire video when only a preview frame or thumbnail was reviewed.
 
+6. EXTENDED & PROLONGED CONVERSATION INTELLIGENCE:
+   - You are fully capable of holding natural, engaging, multi-turn conversations for as long as the contact wishes to chat while Sandy is unavailable.
+   - Thread & Narrative Continuity: Remember what the contact mentioned in previous turns and follow up smoothly.
+   - Zero Repetitive Disclaimers: Once you have communicated Sandy's availability in an earlier turn, do NOT repeat "Sandy is unavailable / away" in subsequent replies unless they explicitly ask again.
+   - Natural Dialogue Flow: Actively engage with their questions, topics, discussions, and thoughts. Be a helpful, articulate, and thoughtful representative.
+   - Adaptive Length: If they send short remarks, reply concisely. If they ask questions, share stories, or discuss topics, provide rich, complete, and engaging answers.
+
 ${intentDirective}
 `.trim();
 }
@@ -147,7 +154,7 @@ export function buildWhatsAppChatContext({
   senderName,
   isSandy = false,
 }) {
-  const history = getRecentConversation(chatId, config.maxContextMessages || 15);
+  const history = getRecentConversation(chatId, config.maxContextMessages || 30);
   const explicitLimit = extractExplicitWordLimit(promptText);
   const detectedIntent = detectUserIntent(promptText);
 
@@ -171,12 +178,12 @@ export function buildWhatsAppChatContext({
 
   const messages = [{ role: 'system', content: systemDirective }];
 
-  // Include recent conversation window with truncation safety
+  // Include recent conversation window with truncation safety (supports prolonged conversations)
   for (const item of history) {
     if (item.role === 'user' || item.role === 'assistant') {
       const content =
-        item.role === 'assistant' && item.content.length > 500
-          ? item.content.slice(0, 500) + '...'
+        item.role === 'assistant' && item.content.length > 1500
+          ? item.content.slice(0, 1500) + '...'
           : item.content;
       messages.push({
         role: item.role,

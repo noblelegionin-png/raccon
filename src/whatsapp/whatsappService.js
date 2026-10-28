@@ -693,6 +693,7 @@ class WhatsAppService {
    * Triggered when someone reacts with ❤️ (translate to English) or 📝 (transcribe only).
    */
   async handleReactionUpdate(reactionEvent) {
+    let reactionDedupeKey = null;
     try {
       const key = reactionEvent?.key;
       const reaction = reactionEvent?.reaction;
@@ -726,14 +727,14 @@ class WhatsAppService {
       const myLid = (this.sock?.user?.lid || this.sock?.authState?.creds?.me?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
 
       // Who reacted?
-      const rxKey = reaction.key || reactionEvent.sourceMsg?.key;
       const isFromMe = Boolean(reactionEvent.sourceMsg?.key?.fromMe) ||
-        Boolean(reaction.key?.fromMe && reaction.key?.id !== targetMsgId) ||
+        Boolean(reaction.key?.fromMe) ||
         Boolean(reactionEvent.fromMe);
 
       const reactorJid =
         reactionEvent.sourceMsg?.key?.participant ||
-        (isFromMe ? (this.sock?.user?.id || myPhone) : (reactionEvent.sourceMsg?.key?.remoteJid || reaction.participant || reactionEvent.participant || reaction.key?.participant || ''));
+        reaction.key?.participant ||
+        (isFromMe ? (this.sock?.user?.id || myPhone) : (reactionEvent.sourceMsg?.key?.remoteJid || reaction.participant || reactionEvent.participant || reaction.key?.remoteJid || ''));
 
       const reactorNumber = String(reactorJid).replace(/[^0-9]/g, '');
 
@@ -760,7 +761,7 @@ class WhatsAppService {
       }
 
       // 5. Deduplicate authorized repeat reactions for same message + action
-      const reactionDedupeKey = `${targetMsgId}:${action}`;
+      reactionDedupeKey = `${targetMsgId}:${action}`;
       const now = Date.now();
       if (this.recentReactions?.has(reactionDedupeKey)) {
         const lastTs = this.recentReactions.get(reactionDedupeKey);
@@ -779,31 +780,47 @@ class WhatsAppService {
       // Typing presence
       await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
-      // 5. Transcribe & Translate via Gemini Multimodal
+      // 6. Transcribe & Translate via Gemini Multimodal
       const result = await voiceNoteService.processReactionForVoiceNote(voiceNote, action);
       if (!result.ok && !result.text) {
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
       }
 
-      // 6. Send reply quoting the target voice note
+      // 7. Send reply quoting the target voice note
       const quotedMsgObj = {
         key: {
           remoteJid: voiceNote.remote_jid,
           id: voiceNote.message_id,
           fromMe: Boolean(voiceNote.is_from_owner),
+          participant: voiceNote.sender_jid || (voiceNote.is_from_owner ? (this.sock?.user?.id || '') : voiceNote.remote_jid),
+        },
+        message: {
+          audioMessage: {
+            seconds: voiceNote.duration_sec || 0,
+            mimetype: voiceNote.mime_type || 'audio/ogg; codecs=opus',
+            ptt: Boolean(voiceNote.is_ptt),
+          },
         },
       };
 
-      await this.safeSendMessage(remoteJid, { text: result.text }, { quoted: quotedMsgObj });
+      try {
+        await this.safeSendMessage(remoteJid, { text: result.text }, { quoted: quotedMsgObj });
+      } catch (quoteErr) {
+        console.warn('[handleReactionUpdate] Failed to send with quote, falling back to plain send:', quoteErr.message);
+        await this.safeSendMessage(remoteJid, { text: result.text });
+      }
       await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
 
-      // 7. Audit & Memory
+      // 8. Audit & Memory
       const chatId = isReactorOwner ? 'wa_sandy_master' : `wa_${remoteJid}`;
       recordAssistantMessage(chatId, result.text, 50, 'gemini-3.8-flash');
       logAudit('whatsapp', 'VOICE_NOTE_REACTION_TRANSCRIBED', `Msg ${voiceNote.message_id} in ${remoteJid} reacted with ${emoji} (${action}) by +${reactorNumber}`);
     } catch (err) {
       console.error('[handleReactionUpdate Error]:', err.message);
+      if (reactionDedupeKey && this.recentReactions) {
+        this.recentReactions.delete(reactionDedupeKey);
+      }
     }
   }
 

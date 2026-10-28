@@ -512,6 +512,7 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
       assert.match(sentMessages[0].text, /I will send the project files tomorrow morning/i);
       assert.match(sentMessages[0].text, /Translated from: Hindi/i);
       assert.strictEqual(sentMessages[0].quoted?.key?.id, ownerVoiceNoteId, 'Must quote the original voice note');
+      assert.ok(sentMessages[0].quoted?.message?.audioMessage, 'Quoted message must contain audioMessage proto to prevent Baileys crash');
 
       // ---------------------------------------------------------
       // Step B: WORKFLOW B — Contact sends an incoming voice note
@@ -572,6 +573,8 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
       assert.match(sentMessages[0].text, /English transcription/i);
       assert.match(sentMessages[0].text, /I will send the project files tomorrow morning/i);
       assert.match(sentMessages[0].text, /Translated from: Hindi/i);
+      assert.strictEqual(sentMessages[0].quoted?.key?.id, contactVoiceNoteId, 'Must quote target contact voice note');
+      assert.ok(sentMessages[0].quoted?.message?.audioMessage, 'Quoted voice note must contain audioMessage proto for Baileys');
 
       // ---------------------------------------------------------
       // Step E: Deduplication — Repeat reaction within 15s is ignored

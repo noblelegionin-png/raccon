@@ -718,22 +718,22 @@ class WhatsAppService {
     const isFromMe = Boolean(msg.key.fromMe);
 
     const myPhone = (this.sock?.user?.id || '').split(':')[0].replace(/[^0-9]/g, '');
-    const myLid = (this.sock?.user?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
-    const ownerConfigPhone = (config.whatsAppOwnerNumber || '').replace(/[^0-9]/g, '');
+    const myLid = (this.sock?.user?.lid || this.sock?.authState?.creds?.me?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
     const remoteClean = (remoteJid || '').replace(/[^0-9]/g, '');
 
-    // True self-chat in WhatsApp "Message Yourself" (supports both Phone JID and MD LID):
+    // True self-chat in WhatsApp "Message Yourself" (supports Phone JID, MD LID: 1452084875482, and DB/Config owners):
     const isSelfChat = isFromMe && (
-      (Boolean(myPhone) && remoteClean.includes(myPhone)) ||
-      (Boolean(myLid) && remoteClean.includes(myLid)) ||
-      (Boolean(ownerConfigPhone) && remoteClean.includes(ownerConfigPhone)) ||
+      sandyStatusService.isOwnerNumber(remoteClean) ||
+      (Boolean(myPhone) && remoteClean === myPhone) ||
+      (Boolean(myLid) && remoteClean === myLid) ||
       remoteJid === this.sock?.user?.lid ||
       remoteJid === this.sock?.user?.id ||
-      (!isGroup && (remoteClean === myPhone || remoteClean === myLid || remoteClean === ownerConfigPhone))
+      (!isGroup && (remoteClean === myPhone || remoteClean === myLid || sandyStatusService.isOwnerNumber(remoteClean)))
     );
 
     const isOwnerSender = isSelfChat ||
-      (Boolean(ownerConfigPhone) && senderNumber === ownerConfigPhone) ||
+      sandyStatusService.isOwnerNumber(senderNumber) ||
+      sandyStatusService.isOwnerNumber(remoteClean) ||
       (Boolean(myPhone) && senderNumber === myPhone) ||
       (Boolean(myLid) && senderNumber === myLid);
 
@@ -844,6 +844,44 @@ class WhatsAppService {
         `• *Memory Store:* SQLite WAL Persistent`;
 
       await this.safeSendMessage(remoteJid, { text: statusText }, { quoted: msg });
+      await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
+    // Owner number management commands (Sandy only)
+    if (isSandy && (promptText.startsWith('/addowner') || promptText.toLowerCase().startsWith('add owner'))) {
+      const match = promptText.match(/(?:\/addowner|add owner)\s+([0-9\+]+)(?:\s+(.+))?/i);
+      if (match) {
+        const rawNum = match[1];
+        const label = match[2] || 'Co-Owner';
+        const clean = rawNum.replace(/[^0-9]/g, '');
+        if (clean.length >= 9) {
+          sandyStatusService.addOwnerNumber(clean, label);
+          await this.safeSendMessage(
+            remoteJid,
+            { text: `👑 *Owner Added!*\n\n+${clean} (${label}) has been granted full Master/Owner privileges on Nero WhatsApp Bridge. 🤝🚀` },
+            { quoted: msg }
+          );
+          await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+      }
+      await this.safeSendMessage(
+        remoteJid,
+        { text: `⚠️ *Usage:* \`/addowner <phone_number_with_country_code> [label]\`\nExample: \`/addowner 919876543210 Second Phone\`` },
+        { quoted: msg }
+      );
+      await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
+    if (isSandy && (promptText === '/owners' || promptText.toLowerCase() === 'list owners')) {
+      const list = sandyStatusService.getOwnerNumbers();
+      let text = `👑 *AUTHORIZED NERO WHATSAPP OWNERS:*\n\n`;
+      for (const o of list) {
+        text += `• \`+${o.phone_or_lid}\` (${o.label})\n`;
+      }
+      await this.safeSendMessage(remoteJid, { text }, { quoted: msg });
       await this.sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
       return;
     }

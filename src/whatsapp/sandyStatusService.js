@@ -1,4 +1,5 @@
 import { getDb, logAudit } from '../db/index.js';
+import { config } from '../config.js';
 
 class SandyStatusService {
   constructor() {
@@ -51,7 +52,33 @@ class SandyStatusService {
         last_seen TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS whatsapp_owner_numbers (
+        phone_or_lid TEXT PRIMARY KEY,
+        label TEXT DEFAULT 'Owner',
+        added_at TEXT NOT NULL
+      );
     `);
+
+    // Seed known owner identifiers (configured owner phone + Sandy's multi-device self-chat LID + secondary phone)
+    const seedOwnerStmt = db.prepare(`
+      INSERT INTO whatsapp_owner_numbers (phone_or_lid, label, added_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(phone_or_lid) DO NOTHING
+    `);
+    const seedNow = new Date().toISOString();
+    seedOwnerStmt.run('1452084875482', 'Sandy Primary Self-Chat LID', seedNow);
+    seedOwnerStmt.run('919317741936', 'Sandy Primary Phone (+91 93177 41936)', seedNow);
+    seedOwnerStmt.run('918091785996', 'Sandy Secondary Phone (+91 80917 85996)', seedNow);
+    seedOwnerStmt.run('8091785996', 'Sandy Secondary Phone (Local)', seedNow);
+
+    const configuredOwners = (config.whatsAppOwnerNumber || '')
+      .split(/[,;\s]+/)
+      .map(p => p.replace(/[^0-9]/g, ''))
+      .filter(Boolean);
+    for (const phone of configuredOwners) {
+      seedOwnerStmt.run(phone, 'Configured Owner', seedNow);
+    }
 
     // Default initial values
     const defaults = {
@@ -383,6 +410,74 @@ class SandyStatusService {
     this.init();
     const db = getDb();
     return db.prepare('SELECT sender_number, sender_name, relationship, notes, message_count, last_seen FROM contact_smart_memory WHERE sender_number = ?').get(String(senderNumber));
+  }
+
+  addOwnerNumber(numberOrLid, label = 'Co-Owner') {
+    this.init();
+    const clean = String(numberOrLid || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO whatsapp_owner_numbers (phone_or_lid, label, added_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(phone_or_lid) DO UPDATE SET label = excluded.label
+    `).run(clean, label, new Date().toISOString());
+    logAudit('owner', 'WHATSAPP_OWNER_ADDED', `Added owner number/LID: +${clean} (${label})`);
+    return true;
+  }
+
+  removeOwnerNumber(numberOrLid) {
+    this.init();
+    const clean = String(numberOrLid || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    db.prepare('DELETE FROM whatsapp_owner_numbers WHERE phone_or_lid = ?').run(clean);
+    logAudit('owner', 'WHATSAPP_OWNER_REMOVED', `Removed owner number/LID: +${clean}`);
+    return true;
+  }
+
+  isOwnerNumber(numberOrLid) {
+    this.init();
+    const clean = String(numberOrLid || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+
+    // Configured env owner numbers
+    const configuredOwners = (config.whatsAppOwnerNumber || '')
+      .split(/[,;\s]+/)
+      .map(p => p.replace(/[^0-9]/g, ''))
+      .filter(Boolean);
+    if (configuredOwners.includes(clean)) return true;
+
+    // Hardcoded known Sandy multi-device self-chat LID & Numbers
+    if (clean === '1452084875482' || clean === '919317741936' || clean === '918091785996' || clean === '8091785996') {
+      return true;
+    }
+
+    // Database lookup
+    const db = getDb();
+    const row = db.prepare('SELECT phone_or_lid FROM whatsapp_owner_numbers WHERE phone_or_lid = ?').get(clean);
+    if (row) return true;
+
+    // Check with/without 91 prefix
+    if (clean.length === 12 && clean.startsWith('91')) {
+      const suffix = clean.slice(2);
+      if (db.prepare('SELECT phone_or_lid FROM whatsapp_owner_numbers WHERE phone_or_lid = ?').get(suffix)) {
+        return true;
+      }
+    } else if (clean.length === 10) {
+      const prefixed = `91${clean}`;
+      if (db.prepare('SELECT phone_or_lid FROM whatsapp_owner_numbers WHERE phone_or_lid = ?').get(prefixed)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  getOwnerNumbers() {
+    this.init();
+    const db = getDb();
+    return db.prepare('SELECT phone_or_lid, label, added_at FROM whatsapp_owner_numbers ORDER BY added_at ASC').all();
   }
 
   /**

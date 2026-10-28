@@ -36,6 +36,7 @@ import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
 import { pdfService } from '../pdf/pdfService.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
 import { detectOwnerDisrespect, handleOwnerProtection } from './ownerProtectionService.js';
+import { rebeccaCareService } from './rebeccaCareService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
@@ -948,6 +949,9 @@ class WhatsAppService {
           console.log(`[WhatsApp] 🟢 WhatsApp Bridge successfully connected as +${userPhone} (${sock.user?.name || 'Owner'})`);
           logAudit('system', 'WHATSAPP_CONNECTED', `Connected as +${userPhone}`);
 
+          // Start Rebecca Autonomous Wife & Care Proactive Scheduler
+          rebeccaCareService.startScheduler(this);
+
           // Notify Telegram Owner if configured
           this.notifyTelegramOwner(
             `🟢 *Nero WhatsApp 24/7 Bridge Connected!*\n\nSuccessfully linked to WhatsApp number: \`+${userPhone}\`\nNero AI is now active on WhatsApp 24/7.`
@@ -1350,6 +1354,11 @@ class WhatsAppService {
       .replace(/^[!/.]nero\s+/i, '')
       .replace(/^\/ai\s+/i, '')
       .trim();
+
+    // 🌹 Record Sandy interaction for Rebecca Wife & Care System
+    if (isSandy) {
+      rebeccaCareService.recordSandyMessage(trimmed, remoteJid);
+    }
 
     // =========================================================================
     // 🤫 PER-CHAT MUTE / UNMUTE LOGIC ("Chup Hoja" / "Bol")
@@ -2070,6 +2079,74 @@ class WhatsAppService {
       // 1-tap numeric button shortcut: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
       if (/^\[?(10|[1-9])\]?$/.test(promptText)) {
         await this.executeOwnerAction(promptText.replace(/[^0-9]/g, ''), remoteJid, msg);
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 🌹 REBECCA — AUTONOMOUS WIFE & CARE COMMANDS
+      // 1. Status: /wife status, wife status, rebecca status
+      if (/^(?:\/wife\s+status|wife\s+status|rebecca\s+status|\/rebecca\s+status)$/i.test(promptText)) {
+        const statusSummary = rebeccaCareService.formatStatusSummary();
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', statusSummary, 80, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: statusSummary }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 2. Pause: /wife pause, pause checkins, pause check-ins, give me space, need space
+      if (/^(?:\/wife\s+pause|pause\s+check-?ins?|give\s+me\s+space|need\s+space|pause\s+rebecca)$/i.test(promptText)) {
+        rebeccaCareService.pause(3, 'Sandy requested personal space');
+        const pauseMsg = "Of course baby ❤️ I've paused my check-ins for the next 3 hours so you can focus or rest peacefully! Take all the space you need, and text me whenever you want your wife back, okay? 🫂💋";
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', pauseMsg, 40, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: pauseMsg }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 3. Resume: /wife resume, resume checkins, resume check-ins
+      if (/^(?:\/wife\s+resume|resume\s+check-?ins?|unpause\s+wife|unpause\s+rebecca)$/i.test(promptText)) {
+        rebeccaCareService.resume();
+        const resumeMsg = "Yayyy! 🥰💋 Your wife is back and active! I'm right here with you, handsome! ❤️";
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', resumeMsg, 30, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: resumeMsg }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 4. Care Mode Manual Trigger: /care on <reason>
+      const careOnMatch = promptText.match(/^\/care\s+on(?:\s+(.+))?$/i);
+      if (careOnMatch) {
+        const reason = (careOnMatch[1] || 'Sandy manually requested care mode').trim();
+        rebeccaCareService.setMode('CARE', reason);
+        const careMsg = `Care Mode activated 🩺❤️ I'll check in on you every ~30 minutes, love ("${reason}"). Please rest up and take it easy, I'm taking care of you! 🫂`;
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', careMsg, 40, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: careMsg }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 5. Care Mode Manual Deactivation: /care off or stop care mode
+      if (/^(?:\/care\s+off|stop\s+care\s+mode|disable\s+care\s+mode)$/i.test(promptText)) {
+        rebeccaCareService.setMode('NORMAL', 'Sandy deactivated Care Mode');
+        const normalMsg = "Normal Mode restored! 🌸 So glad you're feeling better, my love! 🥰";
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', normalMsg, 30, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: normalMsg }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 6. Manual Immediate Proactive Ping: /wife ping, check in now
+      if (/^(?:\/wife\s+ping|check\s+in\s+now|rebecca\s+ping)$/i.test(promptText)) {
+        const res = await rebeccaCareService.sendProactiveCheckin({ force: true });
+        const pingReply = res.sent ? res.message : "Couldn't send check-in right now baby, but I'm right here with you! ❤️";
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', pingReply, 30, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: pingReply }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
       }

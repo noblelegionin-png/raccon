@@ -23,6 +23,7 @@ import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
 import { buildOutreachMessage } from '../whatsapp/whatsappPersona.js';
 import { stickerService } from '../whatsapp/stickerService.js';
 import { isWhatsAppSilentModeActive, setWhatsAppSilentMode } from '../maintenance/maintenanceService.js';
+import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
 
 // Connection capacity & session store
 const MAX_MCP_CONNECTIONS = 10;
@@ -366,6 +367,19 @@ export const MCP_TOOLS = [
         phoneNumber: { type: 'string', description: 'Phone number including country code with no + or spaces (e.g. 919317741936)' },
       },
       required: ['phoneNumber'],
+    },
+  },
+  {
+    name: 'whatsapp_search_product',
+    description: 'Advanced visual & multi-store product search engine across Indian retailers (Amazon India, Flipkart, Meesho, Blinkit) with price comparisons, delivery estimates, reviews, and verified links.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Product name, search query, or description (e.g. "boAt Airdopes 141", "Banarasi silk saree under 2000")' },
+        location: { type: 'string', description: 'Optional delivery city or 6-digit Indian pincode (e.g. "110001", "Delhi", "Mumbai")' },
+        budget: { type: 'number', description: 'Optional maximum price budget in INR' },
+      },
+      required: ['query'],
     },
   },
 ];
@@ -712,6 +726,27 @@ export async function executeMcpTool(toolName, args = {}, auth = {}, botInstance
         phoneNumber: phone,
         pairingCode: code,
         instructions: 'Open WhatsApp -> Linked Devices -> Link with phone number instead -> Enter code.',
+      };
+    }
+
+    case 'whatsapp_search_product': {
+      const { query, location, budget } = args;
+      if (!query || !query.trim()) {
+        throw new Error('Argument "query" is required.');
+      }
+      const fullText = `${query} ${location ? `location ${location}` : ''} ${budget ? `under ${budget}` : ''}`.trim();
+      const result = await visualShoppingEngine.processShoppingRequest({
+        text: fullText,
+        userLanguage: 'English',
+        isSandy: true,
+      });
+      return {
+        ok: result.ok,
+        cached: result.cached,
+        visualData: result.visualData,
+        storeResults: result.storeResults,
+        reliability: result.reliability,
+        report: result.replyText,
       };
     }
 

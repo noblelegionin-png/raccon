@@ -31,6 +31,7 @@ import { mediaManager } from './mediaManager.js';
 import { buildWhatsAppChatContext, buildWhatsAppDirective, buildOutreachMessage } from './whatsappPersona.js';
 import { voiceNoteService } from './voiceNoteService.js';
 import { stickerService } from './stickerService.js';
+import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
 import {
   isMaintenanceModeActive,
@@ -1619,24 +1620,37 @@ class WhatsAppService {
         const prefLang = profile?.preferred_language || 'English';
         const prefTone = profile?.preferred_tone || 'professional';
 
-        const visionPrompt = promptText.length > 0
-          ? `The user sent this image with note: "${promptText}". Thoroughly inspect this image (OCR text, diagrams, screenshots, or objects). Answer their inquiry clearly, accurately, and concisely in ${prefLang} with a ${prefTone} tone.`
-          : `Thoroughly inspect this image (OCR text, diagrams, screenshots, or objects). Provide a concise, clear description of what is visible in ${prefLang} with a ${prefTone} tone.`;
-
         const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
         recordUserMessage(chatId, promptText ? `[User Image: "${promptText}"]` : `[User sent an image]`);
 
-        const visionModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
-        const analysis = await visionService.analyzeImage({
+        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+
+        // 🛍️ Universal Visual Recognition & Smart Shopping Engine
+        // Covers: products, fashion/clothing, sarees, lehengas, shoes, electronics, flowers, hairstyles, nails, objects
+        const visualResult = await visualShoppingEngine.processShoppingRequest({
           buffer,
-          prompt: visionPrompt,
           mimeType: imageMessage.mimetype || 'image/jpeg',
-          chatId,
+          text: promptText,
+          userLanguage: prefLang,
+          isSandy,
         });
 
-        const replyText = analysis.description || (prefLang.toLowerCase().includes('urdu') ? "میں نے آپ کی تصویر دیکھ لی ہے۔ بتائیں میں کس طرح مدد کر سکتا ہوں؟" : "I have inspected your image. Please let me know how I may assist you with it.");
-        recordAssistantMessage(chatId, replyText, 120, visionModel);
+        let replyText = visualResult?.replyText;
+        if (!replyText) {
+          const visionPrompt = promptText.length > 0
+            ? `The user sent this image with note: "${promptText}". Thoroughly inspect this image. Answer their inquiry clearly, accurately, and concisely in ${prefLang} with a ${prefTone} tone.`
+            : `Thoroughly inspect this image. Provide a concise, clear description of what is visible in ${prefLang} with a ${prefTone} tone.`;
 
+          const analysis = await visionService.analyzeImage({
+            buffer,
+            prompt: visionPrompt,
+            mimeType: imageMessage.mimetype || 'image/jpeg',
+            chatId,
+          });
+          replyText = analysis.description || (prefLang.toLowerCase().includes('urdu') ? "میں نے آپ کی تصویر دیکھ لی ہے۔" : "I have inspected your image.");
+        }
+
+        recordAssistantMessage(chatId, replyText, 150, 'gemini-3.8-flash');
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2196,6 +2210,26 @@ class WhatsAppService {
     try {
       const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
       recordUserMessage(chatId, promptText);
+
+      // 🛍️ Smart Shopping & Visual Product Search Engine (Text Queries & Product URLs)
+      if (visualShoppingEngine.isShoppingQuery(promptText)) {
+        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+        const profile = !isSandy ? sandyStatusService.getContactProfile(senderNumber) : null;
+        const prefLang = profile?.preferred_language || 'English';
+
+        const shopResult = await visualShoppingEngine.processShoppingRequest({
+          text: promptText,
+          userLanguage: prefLang,
+          isSandy,
+        });
+
+        if (shopResult?.ok && shopResult?.replyText) {
+          recordAssistantMessage(chatId, shopResult.replyText, 150, 'gemini-3.8-flash');
+          await this.safeSendMessage(remoteJid, { text: shopResult.replyText }, { quoted: msg });
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+      }
 
       const { messages, explicitLimit, detectedIntent } = buildWhatsAppChatContext({
         chatId,

@@ -142,9 +142,12 @@ export class WebSearchService {
       const res = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
         },
       });
 
@@ -155,7 +158,7 @@ export class WebSearchService {
       // Extract results using regex
       const resultBlocks = html.split(/class="result\s+results_links/i).slice(1);
 
-      for (const block of resultBlocks.slice(0, limit)) {
+      for (const block of resultBlocks.slice(0, limit + 4)) {
         // Extract Title and URL
         const titleMatch = block.match(/<a class="result__snippet[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i) ||
                            block.match(/<a class="result__url[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i) ||
@@ -173,6 +176,11 @@ export class WebSearchService {
             if (uddg) rawUrl = decodeURIComponent(uddg[1]);
           }
 
+          // Filter out sponsored ad redirects and tracking pixels
+          if (rawUrl.includes('/y.js?') || rawUrl.includes('ad_provider') || rawUrl.includes('aclick?')) {
+            continue;
+          }
+
           if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
             const title = this.sanitizeText(titleMatch[2]);
             const snippet = snippetMatch ? this.sanitizeText(snippetMatch[1]) : '';
@@ -184,6 +192,7 @@ export class WebSearchService {
               source: new URL(rawUrl).hostname.replace(/^www\./, ''),
               publishedDate: null,
             });
+            if (results.length >= limit) break;
           }
         }
       }

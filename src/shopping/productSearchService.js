@@ -7,6 +7,7 @@
 import { webSearchService } from '../search/webSearchService.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
+import { visualShoppingEngine } from './visualShoppingEngine.js';
 
 export class ProductSearchService {
   /**
@@ -14,16 +15,18 @@ export class ProductSearchService {
    */
   isShoppingQuery(text) {
     if (!text || typeof text !== 'string') return false;
-    const lower = text.toLowerCase();
-    return (
-      /^(?:find|search|compare|recommend|buy|shop)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:best\s+)?(?:product|deal|laptop|phone|monitor|camera|headphone|keyboard|shoe|gift)\b/i.test(lower) ||
-      /\b(?:under\s+\$?\d+|budget\s+of\s+\$?\d+|price\s+range|best\s+price|shopping)\b/i.test(lower) ||
-      /^(?:\/shop|\/product|\/deal)\b/i.test(lower)
-    );
+    return visualShoppingEngine.isShoppingQuery(text);
   }
 
   isProductQuery(text) {
     return this.isShoppingQuery(text);
+  }
+
+  /**
+   * Universal Visual & Product Processing
+   */
+  async processVisualShopping(params) {
+    return visualShoppingEngine.processShoppingRequest(params);
   }
 
   /**

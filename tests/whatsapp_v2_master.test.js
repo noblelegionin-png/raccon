@@ -176,6 +176,14 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
     assert.match(gymAvail.status, /gym/i);
     const gymDirective = sandyStatusService.formatSandyStatusDirective();
     assert.match(gymDirective, /at the gym/i);
+
+    // Verify that long prompts, code snippets, or master prompt instructions NEVER hijack availability status
+    const longPrompt = "ANTIGRAVITY MASTER PROMPT — NERO WHATSAPP PERSONAL ASSISTANT V2\n\nMission\n\nUpgrade my assistant. If the owner says, 'I will be at the gym until 7 PM', do not confuse it.";
+    const longPromptRes = sandyStatusService.parseNaturalLanguageUpdate(longPrompt);
+    assert.strictEqual(longPromptRes.updated, false, 'Long prompts must never be parsed as status updates');
+
+    const questionRes = sandyStatusService.parseNaturalLanguageUpdate("Can you tell me what time Sandy goes to the gym?");
+    assert.strictEqual(questionRes.updated, false, 'Questions must never be parsed as status updates');
   });
 
   // -------------------------------------------------------------

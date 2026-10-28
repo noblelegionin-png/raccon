@@ -363,7 +363,20 @@ class SandyStatusService {
    */
   parseNaturalLanguageUpdate(text) {
     this.init();
+    if (!text || typeof text !== 'string') return { updated: false };
     const clean = text.trim();
+
+    // Guard: A natural language routine update must be a concise statement (< 160 characters and <= 2 lines).
+    // Long prompts, master instructions, code snippets, or documents must NEVER hijack Sandy's availability status!
+    if (clean.length > 160 || clean.split('\n').length > 2) {
+      return { updated: false };
+    }
+
+    // Guard: Conversational questions or inquiries must not trigger status updates
+    if (/^(?:what|who|how|why|when|where|can\s+you|could\s+you|please|is\s+there|tell\s+me)\b/i.test(clean) || clean.endsWith('?')) {
+      return { updated: false };
+    }
+
     const lower = clean.toLowerCase();
 
     // 1. Time / Duration parsing

@@ -1,7 +1,8 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { sandyStatusService } from '../src/whatsapp/sandyStatusService.js';
-import { whatsAppService } from '../src/whatsapp/whatsappService.js';
+import { whatsAppService, isMuteTrigger, isUnmuteTrigger } from '../src/whatsapp/whatsappService.js';
+import { isChatMuted, muteChat, unmuteChat } from '../src/maintenance/maintenanceService.js';
 import {
   buildWhatsAppChatContext,
   buildWhatsAppDirective,
@@ -305,6 +306,125 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
     assert.match(systemPrompt, /Never disclose Sandy's private audit logs|strictly scoped to this contact/i);
     assert.match(systemPrompt, /Privacy & Confidentiality/i);
     assert.doesNotMatch(systemPrompt, /HIGH REASONING MANAGER/i, 'Contacts must not have owner high-reasoning manager prompt');
+  });
+
+  // -------------------------------------------------------------
+  // Test 13: Per-chat "chup hoja" mute, message suppression while muted, and "bol" unmute
+  // -------------------------------------------------------------
+  test('Test 13: Per-chat "chup hoja" mute, silent message suppression, and "bol" unmute', async () => {
+    // 1. Verify phrase triggers
+    assert.strictEqual(isMuteTrigger('chup'), true);
+    assert.strictEqual(isMuteTrigger('chup hoja'), true);
+    assert.strictEqual(isMuteTrigger('chup ho ja'), true);
+    assert.strictEqual(isMuteTrigger('chuo hoja'), true);
+    assert.strictEqual(isMuteTrigger('chup kar'), true);
+    assert.strictEqual(isMuteTrigger('shut up'), true);
+    assert.strictEqual(isMuteTrigger('shutup'), true);
+    assert.strictEqual(isMuteTrigger('be quiet'), true);
+    assert.strictEqual(isMuteTrigger('stop talking'), true);
+    assert.strictEqual(isMuteTrigger('bhai chup hoja'), true);
+    assert.strictEqual(isMuteTrigger('nero shut up'), true);
+    assert.strictEqual(isMuteTrigger('kal main aane wala tha'), false);
+
+    assert.strictEqual(isUnmuteTrigger('bol'), true);
+    assert.strictEqual(isUnmuteTrigger('ab bol'), true);
+    assert.strictEqual(isUnmuteTrigger('bol ab'), true);
+    assert.strictEqual(isUnmuteTrigger('unmute'), true);
+    assert.strictEqual(isUnmuteTrigger('start talking'), true);
+    assert.strictEqual(isUnmuteTrigger('nero bol'), true);
+    assert.strictEqual(isUnmuteTrigger('match kab shuru hoga'), false);
+
+    const testChat1 = '919876500009@s.whatsapp.net';
+    const testChat2 = '919876500010@s.whatsapp.net';
+
+    // Ensure clean initial state
+    unmuteChat(testChat1);
+    unmuteChat(testChat2);
+    assert.strictEqual(isChatMuted(testChat1), false);
+    assert.strictEqual(isChatMuted(testChat2), false);
+
+    let sentMessages = [];
+    const originalSafeSend = whatsAppService.safeSendMessage;
+    whatsAppService.safeSendMessage = async (jid, content) => {
+      sentMessages.push({ jid, text: content.text });
+      return { key: { id: `reply_${Date.now()}` } };
+    };
+
+    try {
+      // Step A: Contact in Chat 1 says "chup hoja"
+      const msgMute = {
+        key: { id: 'm_mute_1', remoteJid: testChat1, fromMe: false },
+        message: { conversation: 'chup hoja' },
+      };
+      await whatsAppService.handleIncomingMessage(msgMute);
+
+      // Verify Chat 1 is muted and received confirmation
+      assert.strictEqual(isChatMuted(testChat1), true, 'Chat 1 must now be in muted state');
+      assert.strictEqual(isChatMuted(testChat2), false, 'Chat 2 must remain UNMUTED (per-chat isolation)');
+      assert.ok(sentMessages.length > 0, 'Must confirm mute once politely');
+      assert.match(sentMessages[sentMessages.length - 1].text, /chup|bol|unmute/i);
+
+      // Step B: Contact in Chat 1 sends messages while muted
+      sentMessages = [];
+      const msgWhileMuted = {
+        key: { id: 'm_mute_2', remoteJid: testChat1, fromMe: false },
+        message: { conversation: 'Hello? Kya chal raha hai?' },
+      };
+      await whatsAppService.handleIncomingMessage(msgWhileMuted);
+
+      // Must NOT send any messages (100% silent, won't disturb chat)
+      assert.strictEqual(sentMessages.length, 0, 'Nero must remain 100% silent in muted chat');
+
+      // Step C: Meanwhile, Chat 2 is unaffected and receives normal responses
+      const msgChat2 = {
+        key: { id: 'm_chat2_1', remoteJid: testChat2, fromMe: false },
+        message: { conversation: '/ping' },
+      };
+      await whatsAppService.handleIncomingMessage(msgChat2);
+      assert.strictEqual(sentMessages.length, 1, 'Chat 2 must respond normally (unaffected)');
+      assert.strictEqual(sentMessages[0].jid, testChat2);
+
+      // Step D: Contact in Chat 1 says "bol"
+      sentMessages = [];
+      const msgUnmute = {
+        key: { id: 'm_unmute_1', remoteJid: testChat1, fromMe: false },
+        message: { conversation: 'bol' },
+      };
+      await whatsAppService.handleIncomingMessage(msgUnmute);
+
+      // Verify Chat 1 is unmuted
+      assert.strictEqual(isChatMuted(testChat1), false, 'Chat 1 must be unmuted');
+      assert.strictEqual(sentMessages.length, 1, 'Must send unmuted confirmation');
+      assert.match(sentMessages[0].text, /active|wapas/i);
+
+      // Step E: Group chat reply to Nero message saying "chup"
+      const groupJid = '123456789-group@g.us';
+      unmuteChat(groupJid);
+
+      // Simulate Nero's phone number as the quoted participant
+      const myPhone = (whatsAppService.sock?.user?.id || '919317741936:0').split(':')[0].replace(/[^0-9]/g, '');
+      const groupReplyMsg = {
+        key: { id: 'm_grp_1', remoteJid: groupJid, participant: '919876500011@s.whatsapp.net', fromMe: false },
+        message: {
+          extendedTextMessage: {
+            text: 'chup',
+            contextInfo: {
+              participant: `${myPhone}@s.whatsapp.net`,
+              stanzaId: 'nero_prev_msg',
+            },
+          },
+        },
+      };
+
+      await whatsAppService.handleIncomingMessage(groupReplyMsg);
+      assert.strictEqual(isChatMuted(groupJid), true, 'Group chat must be muted when someone replies to Nero with chup');
+
+      // Unmute group chat
+      unmuteChat(groupJid);
+      unmuteChat(testChat1);
+    } finally {
+      whatsAppService.safeSendMessage = originalSafeSend;
+    }
   });
 
 });

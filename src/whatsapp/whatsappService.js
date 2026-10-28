@@ -32,7 +32,63 @@ import { buildWhatsAppChatContext, buildWhatsAppDirective, buildOutreachMessage 
 import { voiceNoteService } from './voiceNoteService.js';
 import { stickerService } from './stickerService.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
-import { isMaintenanceModeActive, enableMaintenanceMode, disableMaintenanceMode, isWhatsAppSilentModeActive, setWhatsAppSilentMode } from '../maintenance/maintenanceService.js';
+import {
+  isMaintenanceModeActive,
+  enableMaintenanceMode,
+  disableMaintenanceMode,
+  isWhatsAppSilentModeActive,
+  setWhatsAppSilentMode,
+  isChatMuted,
+  muteChat,
+  unmuteChat,
+  listMutedChats,
+} from '../maintenance/maintenanceService.js';
+
+/**
+ * Detects if a message is telling Nero to shut up / be quiet in this chat
+ */
+export function isMuteTrigger(text) {
+  if (!text) return false;
+  const clean = text.trim().toLowerCase()
+    .replace(/^[!/.]nero\s+/i, '')
+    .replace(/^nero\s*[,:]?\s*/i, '')
+    .replace(/^(?:bhai|bro|yaar|abe|oye|please|pls)\s+/i, '')
+    .replace(/[!.,?]+$/, '')
+    .trim();
+
+  // Exact phrase match
+  if (/^(?:chup\s*(?:ho\s*ja|hoja|kar|raho|reh|re|chap)?|chuo\s*(?:ho\s*ja|hoja)|shut\s*up|shutup|be\s+quiet|stop\s+talking|stay\s+quiet|don'?t\s+(?:talk|speak)|mute(?:\s+this\s+chat|\s+chat|\s+yourself)?|khamosh(?:\s+ho\s*ja|\s+raho)?|shant\s+(?:ho\s*ja|raho)|bakwaas\s+band\s+kar|quiet)$/i.test(clean)) {
+    return true;
+  }
+  // Embedded commands in short messages (<40 chars)
+  if (/\b(?:chup\s+ho\s*ja|chuo\s+ho\s*ja|chup\s+kar|chup\s+raho|shut\s*up|shutup|be\s+quiet|stop\s+talking|khamosh\s+ho\s*ja|mute\s+chat)\b/i.test(clean) && clean.length < 40) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Detects if a message is telling Nero to speak / unmute in this chat
+ */
+export function isUnmuteTrigger(text) {
+  if (!text) return false;
+  const clean = text.trim().toLowerCase()
+    .replace(/^[!/.]nero\s+/i, '')
+    .replace(/^nero\s*[,:]?\s*/i, '')
+    .replace(/^(?:bhai|bro|yaar|abe|oye|please|pls)\s+/i, '')
+    .replace(/[!.,?]+$/, '')
+    .trim();
+
+  // Exact phrase match
+  if (/^(?:bol|ab\s+bol|bol\s+ab|bolo|bolona|bolna|unmute(?:\s+chat)?|talk|speak|speak\s+up|start\s+talking|resume(?:\s+talking)?|chalu\s+ho\s*ja|chalu\s+hoja|shuru\s+ho\s*ja|shuru\s+hoja|baat\s+kar|awaaz\s+nikal)$/i.test(clean)) {
+    return true;
+  }
+  // Embedded commands in short messages (<35 chars)
+  if (/\b(?:ab\s+bol|bol\s+ab|start\s+talking|resume\s+talking|unmute\s+chat|baat\s+karo|chalu\s+ho\s*ja|shuru\s+ho\s*ja)\b/i.test(clean) && clean.length < 35) {
+    return true;
+  }
+  return false;
+}
 
 class WhatsAppService {
   constructor() {
@@ -860,7 +916,7 @@ class WhatsAppService {
     const senderName = msg.pushName || senderNumber || 'Friend';
     const isFromMe = Boolean(msg.key.fromMe);
 
-    const myPhone = (this.sock?.user?.id || '').split(':')[0].replace(/[^0-9]/g, '');
+    const myPhone = (this.sock?.user?.id || this.sock?.authState?.creds?.me?.id || config.whatsAppOwnerNumber || '919317741936').split(':')[0].replace(/[^0-9]/g, '');
     const myLid = (this.sock?.user?.lid || this.sock?.authState?.creds?.me?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
     const remoteClean = (remoteJid || '').replace(/[^0-9]/g, '');
 
@@ -884,6 +940,17 @@ class WhatsAppService {
 
     console.log(`[WhatsApp Incoming] remoteJid=${remoteJid}, senderNumber=${senderNumber}, fromMe=${isFromMe}, isSelfChat=${isSelfChat}, isSandy=${isSandy}, text="${trimmed.slice(0, 60)}"`);
 
+    // Context Info: check if this message is replying to or quoting Nero
+    const contextInfo =
+      msg.message?.extendedTextMessage?.contextInfo ||
+      msg.message?.imageMessage?.contextInfo ||
+      msg.message?.videoMessage?.contextInfo;
+    const quotedParticipant = (contextInfo?.participant || '').replace(/[^0-9]/g, '');
+    const isReplyToNero = Boolean(
+      quotedParticipant &&
+      (quotedParticipant === myPhone || (Boolean(myLid) && quotedParticipant === myLid))
+    );
+
     // Self-message guard:
     // If sent from the linked phone to someone else or a group, only respond if explicitly commanded
     if (isFromMe && !isSelfChat) {
@@ -905,13 +972,14 @@ class WhatsAppService {
       return;
     }
 
-    // Group message check: only respond if mentioned, commanded, or sent media
+    // Group message check: only respond if mentioned, commanded, sent media, or replying to Nero
     if (isGroup) {
       const isMentioned =
         trimmed.toLowerCase().includes('nero') ||
         trimmed.startsWith('!') ||
         trimmed.startsWith('/') ||
         trimmed.startsWith('.') ||
+        isReplyToNero ||
         isImage ||
         isVideo;
       if (!isMentioned) return;
@@ -922,6 +990,36 @@ class WhatsAppService {
       .replace(/^[!/.]nero\s+/i, '')
       .replace(/^\/ai\s+/i, '')
       .trim();
+
+    // =========================================================================
+    // 🤫 PER-CHAT MUTE / UNMUTE LOGIC ("Chup Hoja" / "Bol")
+    // If told to shut up in any chat, Nero goes 100% silent in that specific conversation
+    // so it won't disturb between chats. Resumes when someone says "bol" or "unmute".
+    // =========================================================================
+    const chatIsMuted = isChatMuted(remoteJid);
+
+    if (chatIsMuted) {
+      if (isUnmuteTrigger(trimmed) || isUnmuteTrigger(promptText)) {
+        unmuteChat(remoteJid);
+        const unmuteReply = "🟢 Got it! Main wapas active hoon. Aap continue kar sakte hain! 🤝";
+        await this.safeSendMessage(remoteJid, { text: unmuteReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+      // If currently muted and NOT an unmute trigger, drop message silently!
+      console.log(`[WhatsApp Chat Muted] Dropping message in muted chat ${remoteJid}: "${trimmed.slice(0, 40)}"`);
+      recordUserMessage(isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`, promptText || trimmed);
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
+    if (isMuteTrigger(trimmed) || isMuteTrigger(promptText) || (isReplyToNero && isMuteTrigger(trimmed))) {
+      muteChat(remoteJid, 'user_command', senderNumber);
+      const muteReply = "🤫 Got it! Main is chat ke liye chup ho gaya hoon taaki disturb na ho. Jab bhi zaroorat ho, bas *bol* ya *unmute* likh dena! 🤐👍";
+      await this.safeSendMessage(remoteJid, { text: muteReply }, { quoted: msg });
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
 
     // Show typing presence
     await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
@@ -942,7 +1040,9 @@ class WhatsAppService {
         `• 📏 Dynamic Sizing: "Hy to Hy" brevity, 10–500 words for inquiries, or exact words requested\n` +
         `• \`/status\` — Live telemetry & active model\n` +
         `• \`/ping\` — Real-time response ping\n` +
-        `• \`/clear\` — Wipe conversation context memory\n\n` +
+        `• \`/clear\` — Wipe conversation context memory\n` +
+        `• \`/muted\` — View all muted conversations\n` +
+        `• \`/unmute <chat>\` — Unmute a silenced chat\n\n` +
         `_Nero Labs Executive AI Assistant_`;
 
       await this.safeSendMessage(remoteJid, { text: helpText }, { quoted: msg });
@@ -987,6 +1087,54 @@ class WhatsAppService {
         `• *Memory Store:* SQLite WAL Persistent`;
 
       await this.safeSendMessage(remoteJid, { text: statusText }, { quoted: msg });
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
+    if (promptText === '/muted') {
+      const muted = listMutedChats();
+      if (!muted || muted.length === 0) {
+        await this.safeSendMessage(
+          remoteJid,
+          { text: '🔇 *Muted Chats:* None. Nero is active across all conversations! 🟢' },
+          { quoted: msg }
+        );
+      } else {
+        let txt = `🔇 *CURRENTLY MUTED CHATS (${muted.length}):*\n\n`;
+        muted.forEach((m, idx) => {
+          txt += `${idx + 1}. \`${m.chat_id}\`\n   • Muted by: +${m.muted_by} (${m.reason})\n   • Since: ${m.created_at.slice(0, 16)}\n\n`;
+        });
+        txt += `_To unmute a chat: \`/unmute <chat_id>\` or text "bol" in that chat._`;
+        await this.safeSendMessage(remoteJid, { text: txt }, { quoted: msg });
+      }
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
+    if (promptText.startsWith('/unmute')) {
+      const parts = promptText.split(/\s+/);
+      const target = parts[1]?.trim() || remoteJid;
+      const targetJid = target.includes('@') ? target : `${target.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+      unmuteChat(targetJid);
+      await this.safeSendMessage(
+        remoteJid,
+        { text: `🟢 Chat \`${targetJid}\` has been unmuted! Nero is active there again.` },
+        { quoted: msg }
+      );
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
+    if (promptText.startsWith('/mute') && promptText !== '/muted') {
+      const parts = promptText.split(/\s+/);
+      const target = parts[1]?.trim() || remoteJid;
+      const targetJid = target.includes('@') ? target : `${target.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+      muteChat(targetJid, 'command', senderNumber);
+      await this.safeSendMessage(
+        remoteJid,
+        { text: `🤫 Chat \`${targetJid}\` is now muted. Text "bol" or "/unmute" to resume.` },
+        { quoted: msg }
+      );
       await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
       return;
     }
@@ -1378,7 +1526,7 @@ class WhatsAppService {
       }
 
       // Natural Language Emergency Kill Switch: "Stop texting everyone" / "Resume texting"
-      if (/\b(?:stop\s+texting(?:\s+everyone)?|don'?t\s+text(?:\s+anyone)?|mute(?:\s+everyone|\s+all)?|silent\s+mode|freeze\s+(?:bot|chat)|shutup|chup\s+ho\s+ja|kisi\s+ko\s+reply\s+mat\s+karo)\b/i.test(promptText)) {
+      if (/\b(?:stop\s+texting(?:\s+everyone)?|don'?t\s+text(?:\s+anyone)?|mute(?:\s+everyone|\s+all)|silent\s+mode|freeze\s+(?:bot|chat)|kisi\s+ko\s+reply\s+mat\s+karo)\b/i.test(promptText)) {
         setWhatsAppSilentMode(true);
         recordUserMessage('wa_sandy_master', promptText);
         const haltText = "🛑 *KILL SWITCH ACTIVATED: STOP TEXTING EVERYONE* 🔒\n\nNero has entered 100% silent mode for all WhatsApp contacts. I will NOT send any messages, replies, or notifications to anyone until you say \"resume texting\" or \"start texting\"!\n\n_Full control is in your hands, Sandy._";

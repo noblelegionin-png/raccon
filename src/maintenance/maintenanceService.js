@@ -47,6 +47,80 @@ export function setWhatsAppSilentMode(active = true) {
 }
 
 /**
+ * Per-Chat Mute Management (WhatsApp):
+ * If told to shut up in any chat ("chup hoja", "shut up"), Nero mutes that specific
+ * conversation so it won't disturb ongoing chats. It resumes only when told "bol", "talk", "unmute".
+ */
+function ensureMutedChatsTable() {
+  try {
+    const db = getDb();
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS whatsapp_muted_chats (
+        chat_id TEXT PRIMARY KEY,
+        muted_by TEXT DEFAULT 'user',
+        reason TEXT DEFAULT 'chup',
+        created_at TEXT NOT NULL
+      );
+    `);
+  } catch {}
+}
+
+export function isChatMuted(chatId) {
+  if (!chatId) return false;
+  ensureMutedChatsTable();
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT chat_id FROM whatsapp_muted_chats WHERE chat_id = ?').get(String(chatId));
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
+export function muteChat(chatId, reason = 'chup', mutedBy = 'user') {
+  if (!chatId) return false;
+  ensureMutedChatsTable();
+  try {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO whatsapp_muted_chats (chat_id, muted_by, reason, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(chat_id) DO UPDATE SET reason = excluded.reason, created_at = excluded.created_at
+    `).run(String(chatId), String(mutedBy), String(reason), now);
+    logAudit('whatsapp', 'CHAT_MUTED', `Chat ${chatId} muted by ${mutedBy} (${reason})`);
+    return true;
+  } catch (err) {
+    console.warn('[muteChat Error]:', err.message);
+    return false;
+  }
+}
+
+export function unmuteChat(chatId) {
+  if (!chatId) return false;
+  ensureMutedChatsTable();
+  try {
+    const db = getDb();
+    db.prepare('DELETE FROM whatsapp_muted_chats WHERE chat_id = ?').run(String(chatId));
+    logAudit('whatsapp', 'CHAT_UNMUTED', `Chat ${chatId} unmuted`);
+    return true;
+  } catch (err) {
+    console.warn('[unmuteChat Error]:', err.message);
+    return false;
+  }
+}
+
+export function listMutedChats() {
+  ensureMutedChatsTable();
+  try {
+    const db = getDb();
+    return db.prepare('SELECT * FROM whatsapp_muted_chats ORDER BY created_at DESC').all();
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Log a broadcast delivery attempt to SQLite audit table
  */
 function logBroadcastAttempt(sessionId, chatId, chatTitle, status, errorMessage = null) {

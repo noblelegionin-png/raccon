@@ -1183,18 +1183,37 @@ class WhatsAppService {
     const isSelfChat = isFromMe && (
       (Boolean(myPhone) && remoteClean === myPhone) ||
       (Boolean(myLid) && remoteClean === myLid) ||
+      remoteClean === '1452084875482' ||
       remoteJid === this.sock?.user?.lid ||
       remoteJid === this.sock?.user?.id
     );
 
-    const isOwnerSender = isSelfChat ||
+    // Is this chat an authorized owner console?
+    // ONLY Sandy's private self-chat OR a direct 1-on-1 DM between Sandy's authorized secondary device and the bot!
+    const isOwnerConsoleChat = !isGroup && (
+      isSelfChat ||
+      remoteClean === '1452084875482' ||
+      remoteClean === '214293836493051' ||
+      remoteClean === '918091785996' ||
+      remoteClean === '8091785996' ||
+      (Boolean(myPhone) && remoteClean === myPhone) ||
+      (Boolean(myLid) && remoteClean === myLid)
+    );
+
+    const isExternalChat = !isOwnerConsoleChat;
+
+    // Is the sender Sandy operating on an authorized owner console?
+    // In external chats (DMs with contacts or groups), a message is NEVER treated as an owner console prompt!
+    const isSandy = isOwnerConsoleChat && (
+      isFromMe ||
       sandyStatusService.isOwnerNumber(senderNumber) ||
       (Boolean(myPhone) && senderNumber === myPhone) ||
-      (Boolean(myLid) && senderNumber === myLid);
+      (Boolean(myLid) && senderNumber === myLid)
+    );
 
-    const isSandy = isOwnerSender;
+    const isOwnerSender = isSandy || (isFromMe && !isGroup);
 
-    console.log(`[WhatsApp Incoming] remoteJid=${remoteJid}, senderNumber=${senderNumber}, fromMe=${isFromMe}, isSelfChat=${isSelfChat}, isSandy=${isSandy}, text="${trimmed.slice(0, 60)}"`);
+    console.log(`[WhatsApp Incoming] remoteJid=${remoteJid}, senderNumber=${senderNumber}, fromMe=${isFromMe}, isSelfChat=${isSelfChat}, isOwnerConsole=${isOwnerConsoleChat}, isSandy=${isSandy}, text="${trimmed.slice(0, 60)}"`);
 
     // Context Info: check if this message is replying to or quoting Nero
     const contextInfo =
@@ -1224,9 +1243,6 @@ class WhatsAppService {
 
     const isMuteOrUnmute = isMuteTrigger(trimmed) || isUnmuteTrigger(trimmed);
 
-    // Is this a conversation with an external contact or group (not self-chat, not Sandy's private console)?
-    const isExternalChat = !isSelfChat && !sandyStatusService.isOwnerNumber(remoteClean);
-
     // 🛡️ OWNER / SELF-MESSAGE GUARD IN EXTERNAL CHATS (DMs with contacts & groups):
     // When Sandy (or the linked device) sends a message/voice note in a chat with an external contact:
     // Only respond if Sandy explicitly:
@@ -1234,7 +1250,7 @@ class WhatsAppService {
     // 2) Tagged/mentioned the bot (@bot, @nero, /nero, nero)
     // 3) Commanded /mute or /unmute
     // NONE OTHER!
-    if ((isSandy || isFromMe) && isExternalChat) {
+    if (isFromMe && isExternalChat) {
       // 🎙️ Voice Notes from Sandy in DMs or groups:
       if (isAudio && audioMessage) {
         // Silently save in voiceNoteService so reaction-to-transcription works if someone reacts,
@@ -1326,24 +1342,33 @@ class WhatsAppService {
 
     // Built-in commands (Strictly WhatsApp AI persona — zero Telegram references)
     if (promptText === '/start' || promptText === '/help') {
-      const helpText =
-        `⚡ *NERO LABS — WHATSAPP EXECUTIVE AI ASSISTANT*\n\n` +
-        `Hello ${senderName}! I am Nero, Sandy's personal AI executive assistant connected 24/7 with dual-engine intelligence:\n\n` +
-        `*Engines & Architecture:*\n` +
-        `• ⚡ *Fast Talk Engine (Contacts):* \`gemini-3.5-flash-lite\` (Ultra-low latency, blazing fast)\n` +
-        `• 👑 *Master Console (Sandy):* \`gemini-3.8-flash\` (High Reasoning manager & senior coder)\n\n` +
-        `*Capabilities:*\n` +
-        `• 💬 Research & Conversation: In-depth research, reasoning, problem solving, and discussions\n` +
-        `• 📸 Vision Vault: Send any image, diagram, or screenshot — inspected, explained, and stored\n` +
-        `• 📹 Video Vault: Send any video — securely saved to Sandy's archive vault\n` +
-        `• 👑 MasterBot Console: When Sandy texts himself, manage live routine, code fixes, gaming status, and priority inbox\n` +
-        `• 📏 Dynamic Sizing: "Hy to Hy" brevity, 10–500 words for inquiries, or exact words requested\n` +
-        `• \`/status\` — Live telemetry & active model\n` +
-        `• \`/ping\` — Real-time response ping\n` +
-        `• \`/clear\` — Wipe conversation context memory\n` +
-        `• \`/muted\` — View all muted conversations\n` +
-        `• \`/unmute <chat>\` — Unmute a silenced chat\n\n` +
-        `_Nero Labs Executive AI Assistant_`;
+      const helpText = isSandy
+        ? `⚡ *NERO LABS — WHATSAPP MASTER CONSOLE*\n\n` +
+          `Hello Sandy! Connected to your private MasterBot console with dual-engine intelligence:\n\n` +
+          `*Engines & Architecture:*\n` +
+          `• 👑 *Master Console Engine:* \`gemini-3.8-flash\` (High Reasoning manager & senior coder)\n` +
+          `• ⚡ *Fast Talk Engine (Contacts):* \`gemini-3.5-flash-lite\` (Ultra-low latency, blazing fast)\n\n` +
+          `*Capabilities:*\n` +
+          `• 💬 Research & Conversation: In-depth research, reasoning, problem solving, and discussions\n` +
+          `• 📸 Vision Vault: Send any image, diagram, or screenshot — inspected, explained, and stored\n` +
+          `• 📹 Video Vault: Send any video — securely saved to Sandy's archive vault\n` +
+          `• 👑 MasterBot Console: When Sandy texts himself, manage live routine, code fixes, gaming status, and priority inbox\n` +
+          `• 📏 Dynamic Sizing: "Hy to Hy" brevity, 10–500 words for inquiries, or exact words requested\n` +
+          `• \`/status\` — Live telemetry & active model\n` +
+          `• \`/ping\` — Real-time response ping\n` +
+          `• \`/clear\` — Wipe conversation context memory\n` +
+          `• \`/muted\` — View all muted conversations\n` +
+          `• \`/unmute <chat>\` — Unmute a silenced chat\n\n` +
+          `_Nero Labs Executive AI Assistant_`
+        : `⚡ *NERO LABS — EXECUTIVE AI ASSISTANT*\n\n` +
+          `Hello ${senderName}! I am Nero, Sandy's official personal executive AI assistant.\n\n` +
+          `*Capabilities:*\n` +
+          `• 💬 Intelligent Discussions, Information & Inquiries\n` +
+          `• 📸 Image, Screenshot & Document Review\n` +
+          `• 📝 \`note <message>\` — Deliver a priority note to Sandy\n` +
+          `• 🔔 \`notify\` — Get alerted when Sandy is back online\n` +
+          `• 🤫 \`/mute\` & \`/unmute\` — Silence or resume assistant in this chat\n\n` +
+          `_Nero Labs Executive Assistant_`;
 
       await this.safeSendMessage(remoteJid, { text: helpText }, { quoted: msg });
       await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});

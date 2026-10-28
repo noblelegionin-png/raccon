@@ -300,7 +300,7 @@ describe('🚀 Nero Labs — Intelligent Outbound Outreach & Prolonged Multi-Tur
 
     // Verify LID owner authorization
     assert.strictEqual(sandyStatusService.isOwnerNumber('214293836493051'), true, 'Studio LID must be recognized as Sandy');
-    assert.strictEqual(sandyStatusService.isOwnerNumber('105107177869409'), true, 'Linked device LID must be recognized as Sandy');
+    assert.strictEqual(sandyStatusService.isOwnerNumber('105107177869409'), false, 'External contact LID must NOT be recognized as Owner Sandy');
 
     const sentMessages = [];
     whatsAppService.safeSendMessage = async (jid, content, options) => {

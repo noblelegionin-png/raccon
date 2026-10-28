@@ -115,11 +115,11 @@ class SandyStatusService {
     seedOwnerStmt.run('918091785996', 'Sandy Secondary Phone (+91 80917 85996)', seedNow);
     seedOwnerStmt.run('8091785996', 'Sandy Secondary Phone (Local)', seedNow);
     seedOwnerStmt.run('214293836493051', 'Sandy Studio LID (noblelegion.studioes)', seedNow);
-    seedOwnerStmt.run('105107177869409', 'Sandy Multi-Device Linked Device LID', seedNow);
 
-    // Clean up any stray non-owner contact record for Sandy's studio accounts
+    // Explicitly purge any external contact numbers mistakenly added to owner list in persistent volume
     try {
-      db.prepare('DELETE FROM contact_smart_memory WHERE sender_number IN (?, ?)').run('214293836493051', '105107177869409');
+      db.prepare("DELETE FROM whatsapp_owner_numbers WHERE phone_or_lid IN ('105107177869409', '99897382551743')").run();
+      db.prepare('DELETE FROM contact_smart_memory WHERE sender_number = ?').run('214293836493051');
     } catch {}
 
     const configuredOwners = (config.whatsAppOwnerNumber || '')
@@ -905,8 +905,7 @@ class SandyStatusService {
       clean === '919317741936' ||
       clean === '918091785996' ||
       clean === '8091785996' ||
-      clean === '214293836493051' ||
-      clean === '105107177869409'
+      clean === '214293836493051'
     ) {
       return true;
     }
@@ -1231,10 +1230,11 @@ class SandyStatusService {
 
     return `[OWNER VERIFIED AVAILABILITY & STATUS]
 ${statusLine}
-${desc ? `• Schedule Note: ${desc}` : ''}
-• Rules for Communicating Availability:
-  - If a contact asks where Sandy is, what he is doing, or if he is free: Answer accurately based ONLY on the verified status above.
-  - If the status is unknown or neutral: State neutrally that Sandy is currently unavailable and his messages are logged for review.
+• Rules for Communicating Availability to External Contacts:
+  - STRICT PRIVACY: In normal chats with contacts, NEVER share Sandy's private personal life, personal hobbies, gaming routines, or internal schedule notes (e.g. NEVER mention Minecraft, gaming, personal chores, or private details).
+  - If a contact asks where Sandy is, what he is doing, or if he is free: Answer professionally and neutrally that Sandy is currently occupied/away and will review their message when back.
+  - If an expected return time is set${timeFormatted ? ` (${timeFormatted} IST)` : ''}, you may mention when he is expected to be available. Do not volunteer personal activity details.
+  - Under no circumstances invent reasons for absence or volunteer personal details.
   - Urgent or important business inquiries: Inform the contact that you have recorded their request for Sandy's priority review.`;
   }
 }

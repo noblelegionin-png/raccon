@@ -76,6 +76,7 @@ import { videoSearchService } from '../media/videoSearchService.js';
 import { productSearchService } from '../shopping/productSearchService.js';
 import { websiteSafetyService } from '../security/websiteSafetyService.js';
 import { documentService } from '../documents/documentService.js';
+import { pdfService } from '../pdf/pdfService.js';
 
 export function renderGroupControlMessage(chatId, chatTitle = 'This Group') {
   const masterSwitch = getConfig('master_switch', 'true') === 'true';
@@ -1949,11 +1950,35 @@ export function registerBotHandlers(bot) {
     await ctx.reply(comparison, { parse_mode: 'Markdown', link_preview_options: { is_disabled: false } }).catch(() => ctx.reply(comparison));
   });
 
-  // /pdf <query or url> — Educational Document Discovery & Download
-  bot.command(['pdf', 'doc', 'paper', 'notes'], async (ctx) => {
+  // /pdf <query or url> or /pdf_gen <prompt> — Educational Discovery, Download & High-Reasoning Generative PDF Creation
+  bot.command(['pdf', 'doc', 'paper', 'notes', 'pdf_gen', 'create_pdf', 'makepdf'], async (ctx) => {
     const input = ctx.match?.trim();
     if (!input) {
-      return ctx.reply('📚 *Educational Documents & PDFs*\n\nUsage: `/pdf <topic or url>`\nExample: `/pdf machine learning lecture notes` or `/pdf https://example.com/syllabus.pdf`', { parse_mode: 'Markdown' });
+      return ctx.reply('📚 *Educational Documents & PDFs*\n\nUsage:\n• `/pdf <topic or url>`: Discover educational PDFs or summarize online documents.\n• `/pdf_gen <topic>`: Generate a multi-page PDF document (up to 50 pages) with high-reasoning structure.\n\nExample: `/pdf_gen 10 pages on AI agents and reasoning frameworks`', { parse_mode: 'Markdown' });
+    }
+
+    const cmdText = (ctx.message?.text || '').trim();
+    const isExplicitGen = cmdText.startsWith('/pdf_gen') || cmdText.startsWith('/create_pdf') || cmdText.startsWith('/makepdf') || pdfService.isPdfGenerationRequest(input);
+
+    if (isExplicitGen) {
+      await ctx.replyWithChatAction('upload_document').catch(() => {});
+      try {
+        const targetPages = pdfService.extractTargetPages(input);
+        const result = await pdfService.generatePdfFromPrompt({
+          prompt: input,
+          targetPages,
+        });
+        if (result && result.buffer) {
+          return await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
+            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount}\n\n${result.summary}`.slice(0, 1024),
+            parse_mode: 'Markdown',
+            reply_parameters: { message_id: ctx.message.message_id },
+          });
+        }
+      } catch (genErr) {
+        console.error('[Telegram PDF Generation Error]:', genErr.message);
+        return ctx.reply(`⚠️ Failed to generate PDF document: ${genErr.message}`);
+      }
     }
 
     await ctx.replyWithChatAction('typing').catch(() => {});
@@ -1977,7 +2002,7 @@ export function registerBotHandlers(bot) {
         for (const d of docSearch.documents) {
           reply += `• [${d.title}](${d.url})\n  ${d.snippet.slice(0, 140)}...\n\n`;
         }
-        reply += `_Tip: Send \`/pdf <url>\` with any link above to download and summarize it!_`;
+        reply += `_Tip: Send \`/pdf <url>\` with any link above to download and summarize it, or \`/pdf_gen <topic>\` to create a new PDF report!_`;
       } else {
         reply += 'No public study documents found matching this query.';
       }
@@ -2453,6 +2478,31 @@ export function registerBotHandlers(bot) {
       }
     }
 
+    // 📄 High-Reasoning PDF Analysis for incoming Telegram documents
+    if (ctx.message.document && (ctx.message.document.mime_type === 'application/pdf' || ctx.message.document.file_name?.toLowerCase().endsWith('.pdf'))) {
+      await ctx.replyWithChatAction('typing').catch(() => {});
+      try {
+        const file = await ctx.getFile();
+        const fileUrl = `https://api.telegram.org/file/bot${ctx.api.token || config.telegramBotToken}/${file.file_path}`;
+        const resp = await fetch(fileUrl);
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        const docName = ctx.message.document.file_name || 'document.pdf';
+        const userQuery = ctx.message.caption || 'Provide a comprehensive executive summary and analytical breakdown of this document.';
+        const analysis = await pdfService.analyzePdf({
+          buffer,
+          userQuery,
+          filename: docName,
+        });
+        return await ctx.reply(`📄 *[PDF Analysis: ${docName}]*\n\n${analysis.summary || analysis.analysisText}\n\n_Pages analyzed: ${analysis.pages || analysis.pageCount}_`, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+      } catch (pdfErr) {
+        console.error('[Telegram PDF Analysis Error]:', pdfErr.message);
+        return ctx.reply(`⚠️ Failed to analyze PDF document: ${pdfErr.message}`);
+      }
+    }
+
     let mediaTypeLabel = 'file';
     if (ctx.message.voice) mediaTypeLabel = 'voice note 🎙️';
     else if (ctx.message.audio) mediaTypeLabel = 'audio track 🎵';
@@ -2664,6 +2714,28 @@ export function registerBotHandlers(bot) {
           } catch {}
           return ctx.reply(summary, { parse_mode: 'Markdown' });
         }
+      }
+    }
+
+    // 0j-2. Generative Multi-Page PDF Creation (up to 50 pages, High Reasoning)
+    if (pdfService.isPdfGenerationRequest(text)) {
+      await ctx.replyWithChatAction('upload_document').catch(() => {});
+      try {
+        const targetPages = pdfService.extractTargetPages(text);
+        const result = await pdfService.generatePdfFromPrompt({
+          prompt: text,
+          targetPages,
+        });
+        if (result && result.buffer) {
+          return await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
+            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount}\n\n${result.summary}`.slice(0, 1024),
+            parse_mode: 'Markdown',
+            reply_parameters: { message_id: ctx.message.message_id },
+          });
+        }
+      } catch (genErr) {
+        console.error('[Telegram PDF Generation Error]:', genErr.message);
+        return ctx.reply(`⚠️ Failed to generate PDF document: ${genErr.message}`);
       }
     }
 

@@ -46,10 +46,15 @@ class MediaManager {
   async saveMediaBuffer({ buffer, senderNumber, senderName = 'Unknown', fileType = 'image', mimeType = 'image/jpeg', caption = '', analysis = '' }) {
     this.init();
     const cleanSender = String(senderNumber).replace(/[^0-9]/g, '') || 'unknown';
-    const subFolder = fileType === 'video' ? 'videos' : 'images';
+    const isDoc = fileType === 'pdf' || fileType === 'document';
+    const subFolder = fileType === 'video' ? 'videos' : isDoc ? 'documents' : 'images';
     const dir = this.getMediaDir(cleanSender, subFolder);
 
-    const ext = fileType === 'video' ? 'mp4' : (mimeType.includes('png') ? 'png' : 'jpg');
+    const ext = fileType === 'video'
+      ? 'mp4'
+      : isDoc
+      ? 'pdf'
+      : (mimeType.includes('png') ? 'png' : 'jpg');
     const timestamp = Date.now();
     const fileName = `${timestamp}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
     const filePath = path.join(dir, fileName);

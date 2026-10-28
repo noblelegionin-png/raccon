@@ -33,6 +33,7 @@ import { outreachService } from './outreachService.js';
 import { voiceNoteService } from './voiceNoteService.js';
 import { stickerService } from './stickerService.js';
 import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
+import { pdfService } from '../pdf/pdfService.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
 import {
   isMaintenanceModeActive,
@@ -1154,6 +1155,12 @@ class WhatsAppService {
     const audioMessage = msg.message?.audioMessage;
     const isAudio = Boolean(audioMessage);
 
+    // Extract document / PDF payload if present
+    const documentMessage = msg.message?.documentMessage;
+    const docMime = (documentMessage?.mimetype || '').toLowerCase();
+    const docFileName = documentMessage?.fileName || documentMessage?.title || 'document.pdf';
+    const isPdfDoc = Boolean(documentMessage && (docMime.includes('pdf') || docFileName.toLowerCase().endsWith('.pdf')));
+
     // Extract text content or caption
     const text =
       msg.message.conversation ||
@@ -1164,7 +1171,7 @@ class WhatsAppService {
       '';
 
     const trimmed = (text || '').trim();
-    if (!trimmed && !isImage && !isVideo && !isAudio) return;
+    if (!trimmed && !isImage && !isVideo && !isAudio && !isPdfDoc) return;
 
     this.messageCount++;
     this.lastActivity = new Date().toISOString();
@@ -1291,7 +1298,8 @@ class WhatsAppService {
         trimmed.startsWith('/') ||
         trimmed.startsWith('.') ||
         isImage ||
-        isVideo;
+        isVideo ||
+        isPdfDoc;
       if (!isMentioned) return;
     }
 
@@ -1837,6 +1845,33 @@ class WhatsAppService {
           caption: promptText,
         });
 
+        // If user attaches an image and asks to generate a PDF report with it
+        if (pdfService.isPdfGenerationRequest(promptText)) {
+          console.log(`[WhatsApp PDF Engine] Generating PDF report with attached image from ${senderName}...`);
+          await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+          const targetPages = pdfService.extractTargetPages(promptText);
+          const pdfResult = await pdfService.generatePdfFromPrompt({
+            prompt: promptText,
+            targetPages,
+            images: [{ buffer, caption: promptText ? `Figure: ${promptText.slice(0, 50)}` : 'Attached Figure' }],
+          });
+          const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+          recordUserMessage(chatId, `[User requested PDF with attached image: "${promptText}"]`);
+          recordAssistantMessage(chatId, `Generated PDF: ${pdfResult.filename} (${pdfResult.pageCount} pages)`, 300, 'gemini-3.8-flash');
+          await this.safeSendMessage(
+            remoteJid,
+            {
+              document: pdfResult.buffer,
+              mimetype: 'application/pdf',
+              fileName: pdfResult.filename,
+              caption: `📄 *${pdfResult.title}*\n📊 *Pages:* ${pdfResult.pageCount}\n\n${pdfResult.summary}`.slice(0, 1024),
+            },
+            { quoted: msg }
+          );
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+
         // If user explicitly asks to convert this image into a sticker
         if (/\b(?:sticker|make\s+sticker|turn\s+into\s+sticker|create\s+sticker)\b/i.test(promptText)) {
           const stickerBuf = await stickerService.createStickerFromBuffer(buffer);
@@ -1888,6 +1923,65 @@ class WhatsAppService {
         await this.safeSendMessage(
           remoteJid,
           { text: `📸 Image analysis notice: (${imgErr.message}). Could you try re-sending?` },
+          { quoted: msg }
+        );
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+    }
+
+    // ==========================================
+    // 📄 PDF INTAKE & HIGH-REASONING ANALYSIS PIPELINE
+    // ==========================================
+    if (isPdfDoc) {
+      try {
+        console.log(`[WhatsApp PDF Engine] Downloading, archiving and analyzing incoming PDF from ${senderName} (+${senderNumber}): ${docFileName}...`);
+        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+
+        const buffer = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage }
+        );
+
+        // Permanently archive PDF into user's documents vault
+        const savedMeta = await mediaManager.saveMediaBuffer({
+          buffer,
+          senderNumber,
+          senderName,
+          fileType: 'pdf',
+          mimeType: documentMessage?.mimetype || 'application/pdf',
+          caption: promptText || docFileName,
+          fileName: docFileName,
+        });
+
+        const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+        recordUserMessage(chatId, `[User sent PDF document: "${docFileName}" with query: "${promptText || 'Summarize and analyze this document thoroughly'}"]`);
+
+        // High-reasoning PDF analysis via pdfService (Gemini 3.8 Flash, reasoningEffort: high)
+        const userQuery = promptText && promptText.trim().length > 0
+          ? promptText.trim()
+          : 'Please provide a comprehensive executive summary and analytical breakdown of this document.';
+
+        const analysis = await pdfService.analyzePdf({
+          buffer,
+          userQuery,
+          filename: docFileName,
+          chatId,
+        });
+
+        const responseText = `📄 *[PDF Analysis: ${docFileName}]*\n\n${analysis.summary || analysis.analysisText}\n\n_Pages analyzed: ${analysis.pages || analysis.pageCount} | Saved to vault: \`${savedMeta.fileName}\`_ 💾`;
+
+        recordAssistantMessage(chatId, responseText, 250, 'gemini-3.8-flash');
+        await this.safeSendMessage(remoteJid, { text: responseText }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      } catch (pdfErr) {
+        console.error('[WhatsApp PDF Intake Error]:', pdfErr.message);
+        await this.safeSendMessage(
+          remoteJid,
+          { text: `📄 *PDF Analysis Notice:* Error processing your PDF document (${pdfErr.message}). Please verify the file is readable and uncorrupted.` },
           { quoted: msg }
         );
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -2402,6 +2496,47 @@ class WhatsAppService {
     try {
       const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
       recordUserMessage(chatId, promptText);
+
+      // 📄 Generative Multi-Page PDF Engine (Up to 50 pages, High Reasoning, with image attachment capability)
+      if (pdfService.isPdfGenerationRequest(promptText)) {
+        console.log(`[WhatsApp PDF Engine] Generating multi-page PDF document for ${senderName}: "${promptText.slice(0, 60)}"...`);
+        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+
+        const targetPages = pdfService.extractTargetPages(promptText);
+
+        // Check if user requested to attach a recent image from vault
+        const attachedImages = [];
+        if (/\b(?:image|photo|picture|pic|diagram|chart|graph|figure)\b/i.test(promptText)) {
+          const recentMedia = mediaManager.getMediaHistory(senderNumber, 1);
+          if (recentMedia.length > 0 && recentMedia[0].file_type === 'image' && fs.existsSync(recentMedia[0].file_path)) {
+            attachedImages.push({
+              path: recentMedia[0].file_path,
+              caption: recentMedia[0].caption || 'Referenced Figure',
+            });
+          }
+        }
+
+        const pdfResult = await pdfService.generatePdfFromPrompt({
+          prompt: promptText,
+          targetPages,
+          images: attachedImages,
+        });
+
+        recordAssistantMessage(chatId, `Generated PDF: ${pdfResult.filename} (${pdfResult.pageCount} pages)`, 300, 'gemini-3.8-flash');
+
+        await this.safeSendMessage(
+          remoteJid,
+          {
+            document: pdfResult.buffer,
+            mimetype: 'application/pdf',
+            fileName: pdfResult.filename,
+            caption: `📄 *${pdfResult.title}*\n📊 *Pages:* ${pdfResult.pageCount}\n\n${pdfResult.summary}`.slice(0, 1024),
+          },
+          { quoted: msg }
+        );
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
 
       // 🛍️ Smart Shopping & Visual Product Search Engine (Text Queries & Product URLs)
       if (visualShoppingEngine.isShoppingQuery(promptText)) {

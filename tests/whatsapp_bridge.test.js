@@ -174,10 +174,11 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
   });
 
   await t.test('12. Dedicated Gemini 3.8 Flash & High Reasoning Verification', async () => {
-    const { getActiveModelId } = await import('../src/models/catalogue.js');
+    const { getActiveModelId, setActiveModelId } = await import('../src/models/catalogue.js');
     const { getAgentRouting, updateAgentRouting } = await import('../src/models/modelRouter.js');
     const { getConfig, setConfig } = await import('../src/db/index.js');
 
+    setConfig('active_model_id', 'gemini-3.8-flash');
     setConfig('reasoning_effort', 'high');
     updateAgentRouting('chat', { model: 'gemini-3.8-flash', reasoning: 'high' });
 

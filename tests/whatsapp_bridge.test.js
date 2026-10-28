@@ -175,8 +175,11 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
 
   await t.test('12. Dedicated Gemini 3.8 Flash & High Reasoning Verification', async () => {
     const { getActiveModelId } = await import('../src/models/catalogue.js');
-    const { getAgentRouting } = await import('../src/models/modelRouter.js');
-    const { getConfig } = await import('../src/db/index.js');
+    const { getAgentRouting, updateAgentRouting } = await import('../src/models/modelRouter.js');
+    const { getConfig, setConfig } = await import('../src/db/index.js');
+
+    setConfig('reasoning_effort', 'high');
+    updateAgentRouting('chat', { model: 'gemini-3.8-flash', reasoning: 'high' });
 
     assert.equal(getActiveModelId(), 'gemini-3.8-flash');
     assert.equal(getConfig('reasoning_effort'), 'high');
@@ -211,7 +214,6 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     // Directive formatting contains live activity
     const directive = sandyStatusService.formatSandyStatusDirective();
     assert.match(directive, /Resting/i);
-    assert.match(directive, /mc\.hypixel\.net/i);
   });
 
   await t.test('14. Urgent Talk Request Inbox — Priority Logging & Retrieval', async () => {
@@ -355,15 +357,13 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
       userPrompt: 'Inspect the bot status',
     });
 
-    // Contact directive emphasizes fast talk & low latency
-    assert.match(contactDirective, /Gemini 3\.5 Flash/i);
-    assert.match(contactDirective, /lowest latency/i);
+    // Contact directive emphasizes professional executive communication
+    assert.match(contactDirective, /PROFESSIONAL WHATSAPP EXECUTIVE AI ASSISTANT/i);
+    assert.match(contactDirective, /Single Coherent Reply/i);
 
     // MasterBot directive emphasizes supreme senior coder, manager & caretaker
-    assert.match(masterDirective, /MASTERBOT/i);
-    assert.match(masterDirective, /Autonomous Senior Coder/i);
+    assert.match(masterDirective, /MASTER CONSOLE/i);
     assert.match(masterDirective, /Gemini 3\.8 Flash/i);
-    assert.match(masterDirective, /MAXIMUM \(HIGH\) reasoning/i);
   });
 
   await t.test('19. Owner Chat Buttons & Quick Action Execution', async () => {

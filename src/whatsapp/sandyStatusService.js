@@ -46,8 +46,13 @@ class SandyStatusService {
       CREATE TABLE IF NOT EXISTS contact_smart_memory (
         sender_number TEXT PRIMARY KEY,
         sender_name TEXT,
-        relationship TEXT,
+        relationship TEXT DEFAULT 'Unknown / classify later',
         notes TEXT,
+        preferred_language TEXT DEFAULT 'en',
+        preferred_tone TEXT DEFAULT 'professional',
+        custom_instructions TEXT DEFAULT '',
+        review_status TEXT DEFAULT 'pending',
+        review_notified_at TEXT,
         message_count INTEGER DEFAULT 1,
         last_seen TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -58,7 +63,45 @@ class SandyStatusService {
         label TEXT DEFAULT 'Owner',
         added_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS owner_availability_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        status TEXT NOT NULL,
+        description TEXT,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        timezone TEXT DEFAULT 'Asia/Kolkata',
+        source TEXT DEFAULT 'owner_dm',
+        is_active INTEGER DEFAULT 1,
+        restore_status TEXT DEFAULT 'available',
+        restore_description TEXT DEFAULT 'Available and online',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
+
+    // Safe migration of existing columns if contact_smart_memory already existed
+    try {
+      const tableInfo = db.prepare("PRAGMA table_info(contact_smart_memory)").all();
+      const existingCols = new Set(tableInfo.map(c => c.name));
+      if (!existingCols.has('preferred_language')) {
+        db.exec("ALTER TABLE contact_smart_memory ADD COLUMN preferred_language TEXT DEFAULT 'en'");
+      }
+      if (!existingCols.has('preferred_tone')) {
+        db.exec("ALTER TABLE contact_smart_memory ADD COLUMN preferred_tone TEXT DEFAULT 'professional'");
+      }
+      if (!existingCols.has('custom_instructions')) {
+        db.exec("ALTER TABLE contact_smart_memory ADD COLUMN custom_instructions TEXT DEFAULT ''");
+      }
+      if (!existingCols.has('review_status')) {
+        db.exec("ALTER TABLE contact_smart_memory ADD COLUMN review_status TEXT DEFAULT 'pending'");
+      }
+      if (!existingCols.has('review_notified_at')) {
+        db.exec("ALTER TABLE contact_smart_memory ADD COLUMN review_notified_at TEXT");
+      }
+    } catch (e) {
+      // Column migration fallback
+    }
 
     // Seed known owner identifiers (configured owner phone + Sandy's multi-device self-chat LID + secondary phone)
     const seedOwnerStmt = db.prepare(`
@@ -115,6 +158,179 @@ class SandyStatusService {
     return status;
   }
 
+  /**
+   * Helper to compute target Date in a specific timezone (default IST / UTC+5:30)
+   */
+  computeNextTimeTarget(targetHour, targetMinute = 0, ampm = null, tzOffsetMinutes = 330) {
+    const now = new Date();
+    // Local time in specified timezone
+    const localNow = new Date(now.getTime() + tzOffsetMinutes * 60000);
+
+    let hour24 = parseInt(targetHour, 10);
+    if (ampm) {
+      const lower = ampm.toLowerCase();
+      if (lower === 'pm' && hour24 < 12) hour24 += 12;
+      if (lower === 'am' && hour24 === 12) hour24 = 0;
+    }
+
+    const targetLocal = new Date(localNow);
+    targetLocal.setUTCHours(hour24, parseInt(targetMinute, 10) || 0, 0, 0);
+
+    // If target local time is before or equal to current local time, it is next day
+    if (targetLocal.getTime() <= localNow.getTime()) {
+      targetLocal.setUTCDate(targetLocal.getUTCDate() + 1);
+    }
+
+    // Convert back to UTC Date
+    return new Date(targetLocal.getTime() - tzOffsetMinutes * 60000);
+  }
+
+  /**
+   * Authoritative Availability Schedule Engine
+   */
+  setAvailabilitySchedule({
+    status,
+    description = '',
+    startTime = new Date().toISOString(),
+    endTime = null,
+    timezone = 'Asia/Kolkata',
+    source = 'owner_dm',
+    restoreStatus = 'available',
+    restoreDescription = 'Available and online',
+  }) {
+    this.init();
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    // Deactivate previous active schedules
+    db.prepare('UPDATE owner_availability_schedule SET is_active = 0, updated_at = ? WHERE is_active = 1').run(now);
+
+    const stmt = db.prepare(`
+      INSERT INTO owner_availability_schedule (
+        status, description, start_time, end_time, timezone, source, is_active,
+        restore_status, restore_description, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+    `);
+
+    const info = stmt.run(
+      status,
+      description,
+      startTime,
+      endTime,
+      timezone,
+      source,
+      restoreStatus,
+      restoreDescription,
+      now,
+      now
+    );
+
+    // Sync legacy status table for compatibility
+    this.updateField('availability', status);
+    this.updateField('activity', description || status);
+    if (endTime) {
+      const endDt = new Date(endTime);
+      const timeFmt = endDt.toLocaleTimeString('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      this.updateField('eta', `${timeFmt} (${timezone})`);
+    } else {
+      this.updateField('eta', status === 'available' ? 'Available now' : 'Unavailable');
+    }
+
+    logAudit('owner', 'AVAILABILITY_SCHEDULE_SET', `Status: ${status}, End: ${endTime || 'indefinite'}`);
+    return info.lastInsertRowid;
+  }
+
+  getAuthoritativeAvailability() {
+    this.init();
+    const db = getDb();
+    const active = db.prepare(`
+      SELECT * FROM owner_availability_schedule
+      WHERE is_active = 1
+      ORDER BY id DESC
+      LIMIT 1
+    `).get();
+
+    if (!active) {
+      return {
+        status: 'available',
+        description: 'Available and online',
+        startTime: null,
+        endTime: null,
+        timezone: 'Asia/Kolkata',
+        isActive: false,
+        isExpired: false,
+      };
+    }
+
+    // Check expiration
+    if (active.end_time) {
+      const endMs = new Date(active.end_time).getTime();
+      if (!isNaN(endMs) && endMs <= Date.now()) {
+        // Expired! Restore status automatically
+        const now = new Date().toISOString();
+        db.prepare('UPDATE owner_availability_schedule SET is_active = 0, updated_at = ? WHERE id = ?').run(now, active.id);
+
+        const restoredStatus = active.restore_status || 'available';
+        const restoredDesc = active.restore_description || 'Available and online';
+
+        db.prepare(`
+          INSERT INTO owner_availability_schedule (
+            status, description, start_time, end_time, timezone, source, is_active,
+            restore_status, restore_description, created_at, updated_at
+          ) VALUES (?, ?, ?, NULL, ?, 'auto_restoration', 1, 'available', 'Available and online', ?, ?)
+        `).run(
+          restoredStatus,
+          restoredDesc,
+          now,
+          active.timezone || 'Asia/Kolkata',
+          now,
+          now
+        );
+
+        this.updateField('availability', restoredStatus);
+        this.updateField('activity', restoredDesc);
+        this.updateField('eta', 'Available now');
+
+        logAudit('system', 'AVAILABILITY_SCHEDULE_RESTORED', `Expired ${active.status} -> Restored ${restoredStatus}`);
+
+        return {
+          status: restoredStatus,
+          description: restoredDesc,
+          startTime: now,
+          endTime: null,
+          timezone: active.timezone || 'Asia/Kolkata',
+          isActive: true,
+          isExpired: true,
+          previousStatus: active.status,
+        };
+      }
+    }
+
+    return {
+      status: active.status,
+      description: active.description,
+      startTime: active.start_time,
+      endTime: active.end_time,
+      timezone: active.timezone || 'Asia/Kolkata',
+      isActive: true,
+      isExpired: false,
+    };
+  }
+
+  clearAvailabilitySchedule() {
+    return this.setAvailabilitySchedule({
+      status: 'available',
+      description: 'Available and online',
+      startTime: new Date().toISOString(),
+      endTime: null,
+    });
+  }
+
   updateField(key, value) {
     this.init();
     const db = getDb();
@@ -150,106 +366,133 @@ class SandyStatusService {
     const clean = text.trim();
     const lower = clean.toLowerCase();
 
-    // Intelligent ETA Extraction
-    let detectedEta = null;
-    const durationMatch = clean.match(/\b(?:in|for)\s+(\d+)\s*(mins?|minutes?|hours?|hrs?|ghante?)\b/i);
-    if (durationMatch) {
+    // 1. Time / Duration parsing
+    let targetEndTime = null;
+    let timeLabel = '';
+
+    const timeMatch = clean.match(/\b(?:till|until|at|around|upto)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+    const durationMatch = clean.match(/\b(?:for|in)\s+(\d+)\s*(mins?|minutes?|hours?|hrs?|ghante?)\b/i);
+
+    if (timeMatch) {
+      const h = parseInt(timeMatch[1], 10);
+      const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+      const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : null;
+      targetEndTime = this.computeNextTimeTarget(h, m, ampm);
+      timeLabel = targetEndTime.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }) + ' (IST)';
+    } else if (durationMatch) {
       const amount = parseInt(durationMatch[1], 10);
       const unit = durationMatch[2].toLowerCase();
       const isHour = unit.startsWith('hour') || unit.startsWith('hr') || unit.startsWith('ghant');
       const addMs = amount * (isHour ? 3600000 : 60000);
-      const etaDate = new Date(Date.now() + addMs);
-      const timeStr = etaDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      detectedEta = `${timeStr} (in ~${amount} ${isHour ? 'hour' + (amount > 1 ? 's' : '') : 'mins'})`;
-      this.updateStatusKey('eta', detectedEta);
-    } else {
-      const timeMatch = clean.match(/\b(?:till|at|around)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i);
-      if (timeMatch) {
-        detectedEta = timeMatch[1].toUpperCase().trim();
-        this.updateStatusKey('eta', detectedEta);
-      }
+      targetEndTime = new Date(Date.now() + addMs);
+      timeLabel = targetEndTime.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }) + ' (IST)';
     }
-    const etaSuffix = detectedEta ? `\n⏱️ Return ETA: **${detectedEta}**` : '';
 
-    // 0. Gym & Fitness Workout
-    if (/\b(?:gym|workout|exercise|running|fitness|kasrat)\b/i.test(lower)) {
-      this.updateActivity(`Gym & Fitness Workout (${clean})`, 'gym_workout');
+    const etaSuffix = timeLabel ? ` until **${timeLabel}**` : '';
+
+    // 2. Sleeping / resting
+    if (/\b(?:sleeping|sleep|so\s+raha|so\s+ne\s+ja\s+raha|nap|resting|wake\s+me)\b/i.test(lower)) {
+      this.setAvailabilitySchedule({
+        status: 'sleeping',
+        description: `Resting / Sleeping${timeLabel ? ` until ${timeLabel}` : ''}`,
+        endTime: targetEndTime ? targetEndTime.toISOString() : null,
+        restoreStatus: 'available',
+        restoreDescription: 'Available and online',
+      });
       return {
         updated: true,
-        type: 'gym',
-        summary: `Got it Sandy! Status updated to **Gym & Workout**. I'll let people know you're working out! 🏋️${etaSuffix}`,
+        type: 'sleeping',
+        summary: `Status updated to **Resting / Sleeping**${etaSuffix}. The assistant will accurately communicate that you are resting and will automatically restore your status when the schedule ends.`,
       };
     }
 
-    // 1. Explicit status / activity pattern
-    // e.g. "I am playing Minecraft on Hypixel", "Abhi minecraft khel raha hu"
+    // 3. Gym & Fitness Workout
+    if (/\b(?:gym|workout|exercise|running|fitness|kasrat)\b/i.test(lower)) {
+      this.setAvailabilitySchedule({
+        status: 'gym',
+        description: `Gym & Fitness Workout${timeLabel ? ` until ${timeLabel}` : ''}`,
+        endTime: targetEndTime ? targetEndTime.toISOString() : null,
+        restoreStatus: 'available',
+        restoreDescription: 'Available and online',
+      });
+      return {
+        updated: true,
+        type: 'gym',
+        summary: `Status updated to **Gym & Fitness**${etaSuffix}. Contacts will be informed accurately.`,
+      };
+    }
+
+    // 4. Busy / Focused Work / Meetings
+    if (/\b(?:coding|code|working|programming|project|busy|meeting|studying|study|exam)\b/i.test(lower)) {
+      this.setAvailabilitySchedule({
+        status: 'busy',
+        description: `Focused work / busy${timeLabel ? ` until ${timeLabel}` : ''}`,
+        endTime: targetEndTime ? targetEndTime.toISOString() : null,
+        restoreStatus: 'available',
+        restoreDescription: 'Available and online',
+      });
+      return {
+        updated: true,
+        type: 'busy',
+        summary: `Status updated to **Focused Work / Busy**${etaSuffix}.`,
+      };
+    }
+
+    // 5. Gaming / Minecraft
     if (/\b(?:playing|khel\s+raha|gaming|game|minecraft|valorant|gta|bgmi|roblox|realm|server)\b/i.test(lower)) {
       let gameDetails = 'Minecraft';
-      if (/minecraft/i.test(lower)) gameDetails = 'Minecraft';
-      else if (/valorant/i.test(lower)) gameDetails = 'Valorant';
+      if (/valorant/i.test(lower)) gameDetails = 'Valorant';
       else if (/bgmi/i.test(lower)) gameDetails = 'BGMI';
       else if (/roblox/i.test(lower)) gameDetails = 'Roblox';
 
-      // Check if server or realm code is provided
       const serverMatch = clean.match(/(?:server|realm|ip|code|mc|gamertag|username)[:\s]+([^\n,]+)/i);
       if (serverMatch && serverMatch[1]) {
         this.updateGameInfo(`Server / Info: ${serverMatch[1].trim()}`);
       }
 
-      this.updateActivity(`Playing ${gameDetails} (${clean})`, 'gaming');
+      this.setAvailabilitySchedule({
+        status: 'busy',
+        description: `Gaming (${gameDetails})${timeLabel ? ` until ${timeLabel}` : ''}`,
+        endTime: targetEndTime ? targetEndTime.toISOString() : null,
+        restoreStatus: 'available',
+      });
+
       return {
         updated: true,
         type: 'gaming',
-        summary: `Updated your status to **Gaming / ${gameDetails}**. I'll let people know if they ask where you are! 🎮${etaSuffix}`,
+        summary: `Status updated to **Gaming (${gameDetails})**${etaSuffix}.`,
       };
     }
 
-    // 2. Sleeping / resting
-    if (/\b(?:sleeping|sleep|so\s+raha|so\s+ne\s+ja\s+raha|nap|resting|wake\s+me)\b/i.test(lower)) {
-      this.updateActivity(`Resting / Sleeping (${clean})`, 'sleeping');
-      return {
-        updated: true,
-        type: 'sleeping',
-        summary: `Got it Sandy! Updated your status to **Resting / Sleeping**. I'll handle messages and tell callers you're resting. 😴${etaSuffix}`,
-      };
-    }
-
-    // 3. Studying / College / Exams
-    if (/\b(?:study|studying|exam|padh\s+raha|college|revision|assignment)\b/i.test(lower)) {
-      this.updateActivity(`Studying / Exam Prep (${clean})`, 'studying');
-      return {
-        updated: true,
-        type: 'studying',
-        summary: `Noted! Status updated to **Studying / Academic Prep**. Focus on your studies, I've got your back! 📚${etaSuffix}`,
-      };
-    }
-
-    // 4. Coding / Work / Research
-    if (/\b(?:coding|code|working|programming|project|nero\s+labs|research|busy\s+with)\b/i.test(lower)) {
-      this.updateActivity(`Busy working on projects & research (${clean})`, 'busy_working');
-      return {
-        updated: true,
-        type: 'working',
-        summary: `Status set to **Focus / Working**. I'll let people know you're locked in right now. 💻${etaSuffix}`,
-      };
-    }
-
-    // 5. Free / Available / Chilling / Back Online
-    if (/\b(?:free\s+now|free\s+hu|chill\s+kar\s+raha|available|online\s+now|i(?:'m|\s+am)\s+(?:back|online|free)|main\s+wapas\s+aa\s+gaya|wapas\s+aa\s+gaya|back\s+now)\b/i.test(lower)) {
-      this.updateActivity('Online, available and free to talk', 'available');
-      this.updateStatusKey('eta', 'Right now (Online)');
+    // 6. Free / Available / Back Online
+    if (/\b(?:free\s+now|free\s+hu|chill\s+kar\s+raha|available|online\s+now|i(?:'m|\s+am)\s+(?:back|online|free)|main\s+wapas\s+aa\s+gaya|wapas\s+aa\s+gaya|back\s+now|awake)\b/i.test(lower)) {
+      this.clearAvailabilitySchedule();
       return {
         updated: true,
         type: 'available',
         notifySubscribers: true,
-        summary: `Status updated to **Available & Free to talk**! ✨`,
+        summary: `Status updated to **Available & Online**.`,
       };
     }
 
-    // 6. Direct status commands
+    // 7. Direct status commands
     if (lower.startsWith('status:')) {
       const act = clean.slice(7).trim();
-      this.updateActivity(act, 'custom');
+      this.setAvailabilitySchedule({
+        status: 'custom',
+        description: act,
+        endTime: null,
+      });
       return { updated: true, summary: `Custom status saved: "${act}"` };
     }
 
@@ -373,43 +616,231 @@ class SandyStatusService {
   }
 
   /**
-   * Smart Contact Memory: Auto-extracts relationships and updates contact history
+   * Smart Contact Memory: Updates contact history, last seen, and checks language preference
    */
   recordContactInteraction(senderNumber, senderName = 'Contact', messageText = '') {
     this.init();
     const db = getDb();
     const now = new Date().toISOString();
-    const sNum = String(senderNumber);
+    const sNum = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!sNum) return;
 
-    // Look for relation hints (e.g., "Sandy ka bhai hu", "college friend", etc.)
-    let detectedRelation = null;
-    const relMatch = messageText.match(/\b(?:i(?:'m|\s+am)\s+(?:sandy'?s\s+)?([a-z\s]+?)(?:from|\.|$)|(?:sandy\s+ka\s+)([a-z\s]+?)(?:hu|\.|$))\b/i);
-    if (relMatch) {
-      detectedRelation = (relMatch[1] || relMatch[2] || '').trim();
-    }
+    const existing = db.prepare(`
+      SELECT sender_name, relationship, notes, preferred_language, preferred_tone, review_status, message_count
+      FROM contact_smart_memory
+      WHERE sender_number = ?
+    `).get(sNum);
 
-    const existing = db.prepare('SELECT sender_name, relationship, notes, message_count FROM contact_smart_memory WHERE sender_number = ?').get(sNum);
     if (existing) {
-      const newName = (senderName && senderName !== sNum && senderName !== 'Friend') ? senderName : existing.sender_name;
-      const newRel = detectedRelation || existing.relationship || 'Contact';
+      const newName = (senderName && senderName !== sNum && senderName !== 'Friend' && senderName !== 'Contact')
+        ? senderName
+        : existing.sender_name;
       db.prepare(`
         UPDATE contact_smart_memory
-        SET sender_name = ?, relationship = ?, message_count = message_count + 1, last_seen = ?, updated_at = ?
+        SET sender_name = ?, message_count = message_count + 1, last_seen = ?, updated_at = ?
         WHERE sender_number = ?
-      `).run(newName, newRel, now, now, sNum);
+      `).run(newName, now, now, sNum);
     } else {
-      const rel = detectedRelation || 'Friend / Contact';
       db.prepare(`
-        INSERT INTO contact_smart_memory (sender_number, sender_name, relationship, notes, message_count, last_seen, updated_at)
-        VALUES (?, ?, ?, '', 1, ?, ?)
-      `).run(sNum, senderName, rel, now, now);
+        INSERT INTO contact_smart_memory (
+          sender_number, sender_name, relationship, notes, preferred_language, preferred_tone,
+          custom_instructions, review_status, message_count, last_seen, updated_at
+        ) VALUES (?, ?, 'Unknown / classify later', '', 'en', 'professional', '', 'pending', 1, ?, ?)
+      `).run(sNum, senderName, now, now);
+    }
+
+    // Auto-detect and update language if explicitly requested or clear script
+    if (messageText) {
+      this.detectAndUpdateLanguagePreference(sNum, messageText);
     }
   }
 
   getContactProfile(senderNumber) {
     this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return null;
     const db = getDb();
-    return db.prepare('SELECT sender_number, sender_name, relationship, notes, message_count, last_seen FROM contact_smart_memory WHERE sender_number = ?').get(String(senderNumber));
+    const row = db.prepare(`
+      SELECT sender_number, sender_name, relationship, notes, preferred_language, preferred_tone,
+             custom_instructions, review_status, review_notified_at, message_count, last_seen, updated_at
+      FROM contact_smart_memory
+      WHERE sender_number = ?
+    `).get(clean);
+    if (!row) {
+      return {
+        sender_number: clean,
+        sender_name: clean,
+        relationship: 'Contact',
+        notes: '',
+        preferred_language: 'English',
+        preferred_tone: 'professional',
+        custom_instructions: '',
+        review_status: 'pending',
+        review_notified_at: null,
+        message_count: 0,
+        last_seen: null,
+        updated_at: null,
+      };
+    }
+    return row;
+  }
+
+  setContactRelationship(senderNumber, relationship) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO contact_smart_memory (
+        sender_number, sender_name, relationship, preferred_language, preferred_tone,
+        custom_instructions, review_status, message_count, last_seen, updated_at
+      ) VALUES (?, 'Contact', ?, 'en', 'professional', '', 'reviewed', 1, ?, ?)
+      ON CONFLICT(sender_number) DO UPDATE SET
+        relationship = excluded.relationship,
+        review_status = 'reviewed',
+        updated_at = excluded.updated_at
+    `).run(clean, String(relationship || 'Other').trim(), now, now);
+    logAudit('owner', 'CONTACT_RELATIONSHIP_SET', `+${clean} -> ${relationship}`);
+    return true;
+  }
+
+  setContactLanguagePreference(senderNumber, language) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    const validLang = String(language || 'en').toLowerCase().trim();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO contact_smart_memory (
+        sender_number, sender_name, relationship, preferred_language, preferred_tone,
+        custom_instructions, review_status, message_count, last_seen, updated_at
+      ) VALUES (?, 'Contact', 'Unknown / classify later', ?, 'professional', '', 'pending', 1, ?, ?)
+      ON CONFLICT(sender_number) DO UPDATE SET
+        preferred_language = excluded.preferred_language,
+        updated_at = excluded.updated_at
+    `).run(clean, validLang, now, now);
+    logAudit('contact', 'LANGUAGE_PREFERENCE_UPDATED', `+${clean} -> ${validLang}`);
+    return true;
+  }
+
+  setContactTonePreference(senderNumber, tone) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    const validTone = String(tone || 'professional').toLowerCase().trim();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO contact_smart_memory (
+        sender_number, sender_name, relationship, preferred_language, preferred_tone,
+        custom_instructions, review_status, message_count, last_seen, updated_at
+      ) VALUES (?, 'Contact', 'Unknown / classify later', 'en', ?, '', 'pending', 1, ?, ?)
+      ON CONFLICT(sender_number) DO UPDATE SET
+        preferred_tone = excluded.preferred_tone,
+        updated_at = excluded.updated_at
+    `).run(clean, validTone, now, now);
+    logAudit('contact', 'TONE_PREFERENCE_UPDATED', `+${clean} -> ${validTone}`);
+    return true;
+  }
+
+  setContactCustomInstructions(senderNumber, instructions) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE contact_smart_memory
+      SET custom_instructions = ?, updated_at = ?
+      WHERE sender_number = ?
+    `).run(String(instructions || '').trim(), now, clean);
+    return true;
+  }
+
+  detectAndUpdateLanguagePreference(senderNumber, text) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean || !text) return null;
+
+    const lower = text.toLowerCase();
+
+    // 1. Explicit requests (English, Urdu, Hindi, Hinglish)
+    if (/\b(?:talk|speak|reply|chat|converse|respond)\s+(?:to\s+me\s+)?in\s+english\b/i.test(lower) ||
+        /\b(?:english\s+please|in\s+english|can\s+we\s+speak\s+english)\b/i.test(lower)) {
+      this.setContactLanguagePreference(clean, 'en');
+      return 'en';
+    }
+
+    if (/\b(?:talk|speak|reply|chat|converse|respond)\s+(?:to\s+me\s+)?in\s+urdu\b/i.test(lower) ||
+        /\b(?:urdu\s+me(?:in)?\s+baat\s+karo|urdu\s+please|in\s+urdu)\b/i.test(lower)) {
+      this.setContactLanguagePreference(clean, 'ur');
+      return 'ur';
+    }
+
+    if (/\b(?:talk|speak|reply|chat|converse|respond)\s+(?:to\s+me\s+)?in\s+hindi\b/i.test(lower) ||
+        /\b(?:hindi\s+me(?:in)?\s+baat\s+karo|hindi\s+please|in\s+hindi)\b/i.test(lower)) {
+      this.setContactLanguagePreference(clean, 'hi');
+      return 'hi';
+    }
+
+    if (/\b(?:talk|speak|reply|chat|converse|respond)\s+(?:to\s+me\s+)?in\s+hinglish\b/i.test(lower) ||
+        /\b(?:hinglish\s+me(?:in)?\s+baat\s+karo|in\s+hinglish)\b/i.test(lower)) {
+      this.setContactLanguagePreference(clean, 'hinglish');
+      return 'hinglish';
+    }
+
+    // 2. Script detection if contact has not explicitly set a preference
+    const profile = this.getContactProfile(clean);
+    if (!profile?.preferred_language || profile.preferred_language === 'en') {
+      if (/[\u0600-\u06FF]/.test(text)) {
+        this.setContactLanguagePreference(clean, 'ur');
+        return 'ur';
+      }
+      if (/[\u0900-\u097F]/.test(text)) {
+        this.setContactLanguagePreference(clean, 'hi');
+        return 'hi';
+      }
+    }
+
+    return profile?.preferred_language || 'en';
+  }
+
+  shouldNotifyOwnerForReview(senderNumber) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+
+    // Do not review owner numbers or known Sandy LIDs
+    if (this.isOwnerNumber(clean)) return false;
+
+    const db = getDb();
+    const row = db.prepare('SELECT review_status, review_notified_at FROM contact_smart_memory WHERE sender_number = ?').get(clean);
+    if (!row) return true; // Brand new contact
+    if (row.review_status === 'reviewed') return false; // Already classified
+
+    // If pending, check cooldown (24 hours)
+    if (row.review_notified_at) {
+      const notifiedMs = new Date(row.review_notified_at).getTime();
+      const hoursSince = (Date.now() - notifiedMs) / 3600000;
+      if (hoursSince < 24) return false;
+    }
+
+    return true;
+  }
+
+  markOwnerReviewNotified(senderNumber) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return;
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO contact_smart_memory (sender_number, sender_name, review_status, review_notified_at, last_seen, updated_at)
+      VALUES (?, ?, 'pending', ?, ?, ?)
+      ON CONFLICT(sender_number) DO UPDATE SET review_notified_at = excluded.review_notified_at, updated_at = excluded.updated_at
+    `).run(clean, clean, now, now, now);
   }
 
   addOwnerNumber(numberOrLid, label = 'Co-Owner') {
@@ -738,23 +1169,46 @@ class SandyStatusService {
   }
 
   /**
-   * Builds prompt context for contacts asking about Sandy
+   * Builds prompt context for contacts asking about Sandy using authoritative schedule
    */
   formatSandyStatusDirective() {
-    const s = this.getStatus();
-    return `[SANDY'S REAL-TIME LIVE ROUTINE & AVAILABILITY]
-Sandy is your creator and the owner of this WhatsApp number. When people ask where Sandy is, what he is doing, or if he is free, use this live context:
-• Current Activity: "${s.activity || 'Working on tech & AI'}"
-• Current Availability: "${s.availability || 'busy'}"
-• Estimated Return ETA: "${s.eta || 'Available soon'}"
-• Gaming Realm / Server Info: "${s.game_info || 'Minecraft Server: Ask Sandy'}"
-• Important Instructions: "${s.contact_instructions || 'If urgent, offer to take a priority talk request.'}"
+    const auth = this.getAuthoritativeAvailability();
+    const status = auth.status || 'unavailable';
+    const desc = auth.description || '';
+    const endTime = auth.endTime ? new Date(auth.endTime) : null;
+    let timeFormatted = '';
+    if (endTime) {
+      timeFormatted = endTime.toLocaleTimeString('en-US', {
+        timeZone: auth.timezone || 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
 
-INSTRUCTION ON ANSWERING WHERE SANDY IS:
-- If someone asks "Where is Sandy?", "Sandy kahan hai?", "Sandy se baat karni hai", "Is he free?", "Where are you bro?":
-  Answer naturally based on his live activity AND estimated return ETA above (e.g. if he is playing Minecraft or at Gym, say "Sandy abhi Gym gaya hai, will be back around ${s.eta || 'soon'}!").
-- If they have important work or urgent questions: Tell them: "Agar koi urgent baat hai to mujhe bata do, main Sandy ke priority inbox mein direct mark kar deti hoon!"
-- If they state their work, confirm that you have flagged an urgent talk request for Sandy.`;
+    let statusLine = '';
+    if (status === 'sleeping') {
+      statusLine = `• Current Real-World Status: Sandy is resting / sleeping${timeFormatted ? ` until ${timeFormatted} (IST)` : ''}.
+• MANDATORY: Under no circumstances state that Sandy is working, coding, or at the gym. He is resting/sleeping.`;
+    } else if (status === 'gym') {
+      statusLine = `• Current Real-World Status: Sandy is at the gym / working out${timeFormatted ? ` until ${timeFormatted} (IST)` : ''}.
+• MANDATORY: Sandy is at the gym. Do not state he is sleeping or working.`;
+    } else if (status === 'busy') {
+      statusLine = `• Current Real-World Status: Sandy is busy / in focused work${timeFormatted ? ` until ${timeFormatted} (IST)` : ''}.`;
+    } else if (status === 'available') {
+      statusLine = `• Current Real-World Status: Sandy is online and available.`;
+    } else {
+      statusLine = `• Current Real-World Status: Sandy is currently unavailable.
+• MANDATORY: Never invent a reason for absence (do not guess that he is at the gym, coding, or sleeping unless explicitly stated above). If asked, state neutrally: "Sandy is currently unavailable. I will make sure your message is available for his review."`;
+    }
+
+    return `[OWNER VERIFIED AVAILABILITY & STATUS]
+${statusLine}
+${desc ? `• Schedule Note: ${desc}` : ''}
+• Rules for Communicating Availability:
+  - If a contact asks where Sandy is, what he is doing, or if he is free: Answer accurately based ONLY on the verified status above.
+  - If the status is unknown or neutral: State neutrally that Sandy is currently unavailable and his messages are logged for review.
+  - Urgent or important business inquiries: Inform the contact that you have recorded their request for Sandy's priority review.`;
   }
 }
 

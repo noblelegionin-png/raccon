@@ -16,7 +16,9 @@ export class VoiceNoteService {
    * @param {string} params.senderNumber - Sender phone digits
    * @param {boolean} params.isSandy - Whether sender is Sandy
    * @param {number} params.durationSec - Audio duration in seconds
-   * @param {string} params.characterRole - 'friend' or 'brother'
+   * @param {string} [params.preferredLanguage='English'] - Preferred language of the contact
+   * @param {string} [params.preferredTone='professional'] - Preferred tone
+   * @param {string} [params.relationship='Contact'] - Relationship label
    * @returns {Promise<{transcription: string, reply: string, summary: string}>}
    */
   async processVoiceNote({
@@ -26,12 +28,16 @@ export class VoiceNoteService {
     senderNumber = '',
     isSandy = false,
     durationSec = 0,
-    characterRole = 'friend',
+    preferredLanguage = 'English',
+    preferredTone = 'professional',
+    relationship = 'Contact',
   }) {
     if (!config.scaleMaxApiKey) {
       return {
         transcription: 'Audio transcription unavailable (API key not configured).',
-        reply: 'Maine aapka voice note sun liya hai! Sandy ko notification bhej di hai. 🎙️⚡',
+        reply: isSandy
+          ? 'Sandy, your voice note has been received and securely archived.'
+          : 'Thank you for your voice message. I have received it and Sandy will review it when available.',
         summary: `Voice note received (${durationSec}s)`,
       };
     }
@@ -39,30 +45,30 @@ export class VoiceNoteService {
     const base64Audio = buffer.toString('base64');
     const cleanMime = mimeType ? mimeType.split(';')[0].trim() : 'audio/ogg';
 
-    // Persona directives based on sender and character choice
+    // Persona directives adhering strictly to V2 Professional Communication Engine
     const personaStyle = isSandy
-      ? "You are Nero, Sandy's elite AI manager, senior coder, and executive assistant. Sandy is your creator and boss. Reply with utmost respect, sharp intelligence, and executive support."
-      : characterRole === 'brother'
-      ? "You are Nero, acting as a supportive, caring, loyal Brother (Bhai) to the sender. Use desi brotherly Hinglish slang (bhai, tension mat le, scene sorted hai, etc.)."
-      : "You are Nero, Sandy's street-smart, witty AI companion acting as a close Friend (Dost). Use natural Indian English & Hinglish street slang (yaar, bro, mast, scene kya hai, etc.).";
+      ? "You are Nero, Sandy's executive AI assistant. Provide senior executive support, precise transcription, and concise acknowledgment."
+      : `You are Nero, Sandy's professional, mature, and respectful personal assistant. The sender is a ${relationship}.
+Tone: ${preferredTone}.
+Language: Respond in ${preferredLanguage || 'English'}.
+Maintain high professionalism, no unsolicited slang or cringe expressions, and keep the response natural, respectful, and concise (1-2 sentences).`;
 
     const promptText =
       `You are Nero, Sandy's personal AI executive assistant on WhatsApp. ` +
-      `The sender is ${senderName} (${isSandy ? 'Boss Sandy' : `Phone +${senderNumber}`}). ` +
-      `They just sent an audio voice note (${durationSec} seconds long).\n\n` +
+      `The sender is ${senderName} (${isSandy ? 'Sandy (Owner)' : `Phone +${senderNumber}`}). ` +
+      `They sent an audio voice message (${durationSec} seconds long).\n\n` +
       `Style Guide:\n` +
       `${personaStyle}\n\n` +
       `CRITICAL INSTRUCTIONS:\n` +
       `1. Listen attentively to the speech in this audio.\n` +
-      `2. Transcribe the speech as faithfully as possible (accurately detecting Hindi, English, Hinglish, or regional terms).\n` +
+      `2. Transcribe the speech as faithfully as possible (accurately transcribing English, Urdu, Hindi, or Hinglish as spoken).\n` +
       `   - If it is pure background noise or silence, transcribe as "[Unintelligible background sound or silence]".\n` +
-      `3. Generate a conversational reply directly answering or acknowledging their spoken words.\n` +
-      `   - Keep the reply concise (1 to 3 punchy sentences).\n` +
-      `   - Include chill, vibrant emojis (🎙️, ⚡, 🤙, 🔥, etc.).\n` +
-      `   - Never write boring robotic boilerplate.\n\n` +
+      `3. Generate a concise, natural, professional reply directly answering or acknowledging their spoken words.\n` +
+      `   - Keep the reply concise (1 to 2 clear sentences).\n` +
+      `   - Do NOT use unsolicited slang, repetitive filler, or double greetings.\n\n` +
       `Format your output strictly as follows:\n` +
       `TRANSCRIPT: <the exact spoken words>\n` +
-      `REPLY: <your conversational response in character>`;
+      `REPLY: <your response>`;
 
     const targetModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
 
@@ -114,7 +120,7 @@ export class VoiceNoteService {
       } else if (!transcription) {
         transcription = `[Voice message: ${durationSec}s]`;
       } else if (!reply) {
-        reply = `Maine aapka voice note sun liya hai! "${transcription}" — noted bro! 🎙️⚡`;
+        reply = `Thank you. I have received your voice note: "${transcription}".`;
       }
 
       // Cleanup formatting
@@ -134,15 +140,15 @@ export class VoiceNoteService {
   _fallbackResponse(senderName, durationSec, isSandy) {
     if (isSandy) {
       return {
-        transcription: `[Sandy Voice Note: ${durationSec}s]`,
-        reply: `Boss Sandy! Maine aapka voice note (${durationSec}s) archive kar liya hai aur process mein rakh diya hai. 🎙️⚡`,
-        summary: `Sandy voice note (${durationSec}s)`,
+        transcription: `[Voice Note: ${durationSec}s]`,
+        reply: `Sandy, your voice message (${durationSec}s) has been received and archived securely.`,
+        summary: `Voice message (${durationSec}s)`,
       };
     }
 
     return {
       transcription: `[Voice Note received: ${durationSec}s]`,
-      reply: `Suna maine aapka voice note! Sandy tak deliver ho chuka hai, free hote hi update dega. 🎙️🤙`,
+      reply: `Thank you for your voice message. I have received it and Sandy will review it when available.`,
       summary: `Voice note received (${durationSec}s)`,
     };
   }

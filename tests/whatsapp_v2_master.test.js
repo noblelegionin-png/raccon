@@ -435,4 +435,201 @@ describe('🚀 Nero WhatsApp Personal Assistant V2 — Master Verification Suite
     }
   });
 
+  // -------------------------------------------------------------
+  // Test 14: Reaction-to-Transcription and English Translation (Workflows A & B)
+  // -------------------------------------------------------------
+  test('Test 14: Reaction-triggered voice note transcription and English translation', async () => {
+    const originalSafeSend = whatsAppService.safeSendMessage;
+    const originalTranscribe = voiceNoteService.transcribeAndTranslateAudio;
+
+    let sentMessages = [];
+    whatsAppService.safeSendMessage = async (jid, content, options) => {
+      const sent = {
+        key: { id: `m_sent_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, remoteJid: jid },
+        text: content.text || '',
+        quoted: options?.quoted,
+        jid,
+      };
+      sentMessages.push(sent);
+      return sent;
+    };
+
+    // Mock single-pass Gemini Multimodal audio transcription & translation
+    let mockTranscribeResponse = {
+      language: 'Hindi',
+      isEnglish: false,
+      originalTranscript: 'Main kal subah project files bhej dunga.',
+      englishTranslation: 'I will send the project files tomorrow morning.',
+    };
+
+    voiceNoteService.transcribeAndTranslateAudio = async () => mockTranscribeResponse;
+
+    try {
+      const contactJid = '919876543210@s.whatsapp.net';
+      const contactNumber = '919876543210';
+      const myPhone = (whatsAppService.sock?.user?.id || '919317741936:0').split(':')[0].replace(/[^0-9]/g, '');
+
+      // ---------------------------------------------------------
+      // Step A: WORKFLOW A — Bot owner sends an outgoing voice note
+      // ---------------------------------------------------------
+      sentMessages = [];
+      const ownerVoiceNoteId = `vn_owner_${Date.now()}`;
+      const dummyAudioBuffer = Buffer.from('OggS_dummy_audio_data_for_workflow_a');
+
+      await voiceNoteService.saveVoiceNote({
+        messageId: ownerVoiceNoteId,
+        remoteJid: contactJid,
+        senderJid: `${myPhone}@s.whatsapp.net`,
+        senderNumber: myPhone,
+        senderName: 'Sandy (Owner)',
+        buffer: dummyAudioBuffer,
+        mimeType: 'audio/ogg; codecs=opus',
+        durationSec: 8,
+        isFromOwner: true,
+      });
+
+      // Send follow-up prompt
+      const followUpMsg = await whatsAppService.safeSendMessage(
+        contactJid,
+        { text: '💬 React to this voice note to get its English transcription.' },
+        { quoted: { key: { id: ownerVoiceNoteId, remoteJid: contactJid } } }
+      );
+      voiceNoteService.setFollowupMessageId(ownerVoiceNoteId, followUpMsg.key.id);
+
+      assert.strictEqual(sentMessages.length, 1, 'Follow-up prompt message must be sent for outgoing voice note');
+      assert.match(sentMessages[0].text, /React to this voice note to get its English transcription/i);
+
+      // Recipient contact reacts with ❤️ to the voice note
+      sentMessages = [];
+      await whatsAppService.handleReactionUpdate({
+        key: { id: ownerVoiceNoteId, remoteJid: contactJid },
+        reaction: { text: '❤️', key: { id: 'rx_1', remoteJid: contactJid, participant: contactJid, fromMe: false } },
+        sourceMsg: { key: { id: 'rx_1', remoteJid: contactJid, participant: contactJid, fromMe: false } },
+      });
+
+      assert.strictEqual(sentMessages.length, 1, 'Transcription reply must be sent in chat');
+      assert.match(sentMessages[0].text, /English transcription/i);
+      assert.match(sentMessages[0].text, /I will send the project files tomorrow morning/i);
+      assert.match(sentMessages[0].text, /Translated from: Hindi/i);
+      assert.strictEqual(sentMessages[0].quoted?.key?.id, ownerVoiceNoteId, 'Must quote the original voice note');
+
+      // ---------------------------------------------------------
+      // Step B: WORKFLOW B — Contact sends an incoming voice note
+      // ---------------------------------------------------------
+      sentMessages = [];
+      const contactVoiceNoteId = `vn_contact_${Date.now()}`;
+      const contactAudioMsg = {
+        key: { id: contactVoiceNoteId, remoteJid: contactJid, fromMe: false },
+        message: {
+          audioMessage: {
+            seconds: 14,
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true,
+          },
+        },
+      };
+
+      // Register contact voice note in DB & vault
+      await voiceNoteService.saveVoiceNote({
+        messageId: contactVoiceNoteId,
+        remoteJid: contactJid,
+        senderJid: contactJid,
+        senderNumber: contactNumber,
+        senderName: 'Alex Partner',
+        buffer: dummyAudioBuffer,
+        mimeType: 'audio/ogg; codecs=opus',
+        durationSec: 14,
+        isFromOwner: false,
+      });
+
+      // Crucial requirement: No automatic transcription should be sent to the contact!
+      assert.strictEqual(sentMessages.length, 0, 'No automatic reply should be sent on incoming voice note');
+
+      // ---------------------------------------------------------
+      // Step C: Security Guard — Unauthorized user tries to react
+      // ---------------------------------------------------------
+      sentMessages = [];
+      const unauthorizedHackerJid = '919999888877@s.whatsapp.net';
+      await whatsAppService.handleReactionUpdate({
+        key: { id: contactVoiceNoteId, remoteJid: contactJid },
+        reaction: { text: '❤️', key: { id: 'rx_hack', remoteJid: contactJid, participant: unauthorizedHackerJid, fromMe: false } },
+        sourceMsg: { key: { id: 'rx_hack', remoteJid: contactJid, participant: unauthorizedHackerJid, fromMe: false } },
+      });
+
+      assert.strictEqual(sentMessages.length, 0, 'Unauthorized user reaction must be denied and ignored');
+
+      // ---------------------------------------------------------
+      // Step D: Sandy (owner) reacts with ❤️ (Translate to English)
+      // ---------------------------------------------------------
+      sentMessages = [];
+      await whatsAppService.handleReactionUpdate({
+        key: { id: contactVoiceNoteId, remoteJid: contactJid },
+        reaction: { text: '❤️', key: { id: 'rx_owner_1', remoteJid: contactJid, fromMe: true } },
+        sourceMsg: { key: { id: 'rx_owner_1', remoteJid: contactJid, fromMe: true } },
+      });
+
+      assert.strictEqual(sentMessages.length, 1, 'Owner reaction must trigger translation reply');
+      assert.match(sentMessages[0].text, /English transcription/i);
+      assert.match(sentMessages[0].text, /I will send the project files tomorrow morning/i);
+      assert.match(sentMessages[0].text, /Translated from: Hindi/i);
+
+      // ---------------------------------------------------------
+      // Step E: Deduplication — Repeat reaction within 15s is ignored
+      // ---------------------------------------------------------
+      sentMessages = [];
+      await whatsAppService.handleReactionUpdate({
+        key: { id: contactVoiceNoteId, remoteJid: contactJid },
+        reaction: { text: '❤️', key: { id: 'rx_owner_dup', remoteJid: contactJid, fromMe: true } },
+        sourceMsg: { key: { id: 'rx_owner_dup', remoteJid: contactJid, fromMe: true } },
+      });
+      assert.strictEqual(sentMessages.length, 0, 'Duplicate reaction within 15 seconds must be ignored');
+
+      // ---------------------------------------------------------
+      // Step F: Transcribe Only with 📝 (Source language without translation)
+      // ---------------------------------------------------------
+      sentMessages = [];
+      const englishVnId = `vn_eng_${Date.now()}`;
+      await voiceNoteService.saveVoiceNote({
+        messageId: englishVnId,
+        remoteJid: contactJid,
+        senderJid: contactJid,
+        senderNumber: contactNumber,
+        senderName: 'Alex Partner',
+        buffer: dummyAudioBuffer,
+        mimeType: 'audio/ogg; codecs=opus',
+        durationSec: 5,
+        isFromOwner: false,
+      });
+
+      await whatsAppService.handleReactionUpdate({
+        key: { id: englishVnId, remoteJid: contactJid },
+        reaction: { text: '📝', key: { id: 'rx_owner_transcribe', remoteJid: contactJid, fromMe: true } },
+        sourceMsg: { key: { id: 'rx_owner_transcribe', remoteJid: contactJid, fromMe: true } },
+      });
+
+      assert.strictEqual(sentMessages.length, 1, 'Transcribe-only reaction must reply');
+      assert.match(sentMessages[0].text, /Transcription:/i);
+      assert.match(sentMessages[0].text, /Main kal subah project files bhej dunga/i);
+
+      // ---------------------------------------------------------
+      // Step G: Custom Emoji Configuration (/transcribe_emoji)
+      // ---------------------------------------------------------
+      voiceNoteService.setConfiguredEmoji('translate', '🔥');
+      assert.strictEqual(voiceNoteService.getConfiguredEmoji('translate'), '🔥', 'Translate emoji must update to 🔥');
+      assert.strictEqual(voiceNoteService.getActionForEmoji('🔥'), 'translate', '🔥 must trigger translation');
+
+      voiceNoteService.setConfiguredEmoji('transcribe', '✍️');
+      assert.strictEqual(voiceNoteService.getConfiguredEmoji('transcribe'), '✍️', 'Transcribe emoji must update to ✍️');
+      assert.strictEqual(voiceNoteService.getActionForEmoji('✍️'), 'transcribe_only', '✍️ must trigger transcribe-only');
+
+      // Reset to defaults
+      voiceNoteService.setConfiguredEmoji('translate', '❤️');
+      voiceNoteService.setConfiguredEmoji('transcribe', '📝');
+
+    } finally {
+      whatsAppService.safeSendMessage = originalSafeSend;
+      voiceNoteService.transcribeAndTranslateAudio = originalTranscribe;
+    }
+  });
+
 });

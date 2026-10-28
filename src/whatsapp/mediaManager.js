@@ -38,6 +38,11 @@ class MediaManager {
     return mediaDir;
   }
 
+  async saveMedia(params) {
+    const buffer = params.fileBuffer || params.buffer;
+    return this.saveMediaBuffer({ ...params, buffer });
+  }
+
   async saveMediaBuffer({ buffer, senderNumber, senderName = 'Unknown', fileType = 'image', mimeType = 'image/jpeg', caption = '', analysis = '' }) {
     this.init();
     const cleanSender = String(senderNumber).replace(/[^0-9]/g, '') || 'unknown';

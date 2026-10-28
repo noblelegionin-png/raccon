@@ -107,6 +107,7 @@ class WhatsAppService {
     this.sentMessageIds = new Set();
     this.processedMessageIds = new Map();
     this.activePolls = new Map();
+    this.recentReactions = new Map();
   }
 
   async sendMasterBotMenu(remoteJid, quotedMsg = null) {
@@ -628,6 +629,183 @@ class WhatsAppService {
     }
   }
 
+  /**
+   * Workflow A: Bot Owner's Outgoing Voice Note Handler
+   * When Sandy sends a voice note to any chat, archive it and send an unobtrusive follow-up:
+   * "💬 React to this voice note to get its English transcription."
+   */
+  async handleOwnerOutgoingVoiceNote(msg) {
+    try {
+      const remoteJid = msg.key?.remoteJid;
+      const msgId = msg.key?.id;
+      if (!remoteJid || !msgId) return;
+
+      const audioMessage = msg.message?.audioMessage;
+      const durationSec = audioMessage?.seconds || 0;
+      const mime = audioMessage?.mimetype || 'audio/ogg; codecs=opus';
+      const myPhone = (this.sock?.user?.id || this.sock?.authState?.creds?.me?.id || config.whatsAppOwnerNumber || '919317741936').split(':')[0].replace(/[^0-9]/g, '');
+
+      let buffer = null;
+      try {
+        buffer = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          {
+            logger: pino({ level: 'silent' }),
+            reuploadRequest: this.sock?.updateMediaMessage,
+          }
+        );
+      } catch (dlErr) {
+        console.warn('[Owner Voice Note Download Warning]:', dlErr.message);
+      }
+
+      await voiceNoteService.saveVoiceNote({
+        messageId: msgId,
+        remoteJid,
+        senderJid: msg.key?.participant || remoteJid,
+        senderNumber: myPhone,
+        senderName: 'Sandy (Owner)',
+        buffer,
+        mimeType: mime,
+        durationSec,
+        isFromOwner: true,
+        isPtt: Boolean(audioMessage?.ptt),
+      });
+
+      // Send unobtrusive follow-up message to the chat
+      const followUpText = "💬 React to this voice note to get its English transcription.";
+      const followUpMsg = await this.safeSendMessage(remoteJid, { text: followUpText }, { quoted: msg });
+
+      if (followUpMsg?.key?.id) {
+        voiceNoteService.setFollowupMessageId(msgId, followUpMsg.key.id);
+      }
+
+      console.log(`[Workflow A] Registered owner outgoing voice note ${msgId} in ${remoteJid}`);
+    } catch (err) {
+      console.error('[handleOwnerOutgoingVoiceNote Error]:', err.message);
+    }
+  }
+
+  /**
+   * Reaction-to-Transcription & Translation Handler (Workflows A & B)
+   * Triggered when someone reacts with ❤️ (translate to English) or 📝 (transcribe only).
+   */
+  async handleReactionUpdate(reactionEvent) {
+    try {
+      const key = reactionEvent?.key;
+      const reaction = reactionEvent?.reaction;
+      if (!key || !reaction) return;
+
+      const targetMsgId = key.id;
+      const remoteJid = key.remoteJid;
+      const emoji = reaction.text;
+
+      // 1. If reaction was removed / empty, ignore safely
+      if (!emoji || !emoji.trim()) {
+        return;
+      }
+
+      // 2. Action mapping check
+      const action = voiceNoteService.getActionForEmoji(emoji);
+      if (!action) {
+        // Not a configured transcription emoji (e.g. 👍, 😂) -> ignore safely
+        return;
+      }
+
+      // 3. Lookup target voice note from database
+      const voiceNote = voiceNoteService.getVoiceNote(targetMsgId);
+      if (!voiceNote) {
+        // Target was not a registered voice note -> ignore safely
+        return;
+      }
+
+      // 4. Identity & Authorization Verification
+      const myPhone = (this.sock?.user?.id || this.sock?.authState?.creds?.me?.id || config.whatsAppOwnerNumber || '919317741936').split(':')[0].replace(/[^0-9]/g, '');
+      const myLid = (this.sock?.user?.lid || this.sock?.authState?.creds?.me?.lid || '').split(':')[0].replace(/[^0-9]/g, '');
+
+      // Who reacted?
+      const rxKey = reaction.key || reactionEvent.sourceMsg?.key;
+      const isFromMe = Boolean(reactionEvent.sourceMsg?.key?.fromMe) ||
+        Boolean(reaction.key?.fromMe && reaction.key?.id !== targetMsgId) ||
+        Boolean(reactionEvent.fromMe);
+
+      const reactorJid =
+        reactionEvent.sourceMsg?.key?.participant ||
+        (isFromMe ? (this.sock?.user?.id || myPhone) : (reactionEvent.sourceMsg?.key?.remoteJid || reaction.participant || reactionEvent.participant || reaction.key?.participant || ''));
+
+      const reactorNumber = String(reactorJid).replace(/[^0-9]/g, '');
+
+      const isReactorOwner = isFromMe ||
+        sandyStatusService.isOwnerNumber(reactorNumber) ||
+        (Boolean(myPhone) && reactorNumber === myPhone) ||
+        (Boolean(myLid) && reactorNumber === myLid);
+
+      // Workflow Permissions check:
+      if (voiceNote.is_from_owner === 1) {
+        // Workflow A: Owner sent this voice note.
+        // Any chat participant (or owner) can react to receive English transcription!
+        if (remoteJid !== voiceNote.remote_jid) {
+          return;
+        }
+      } else {
+        // Workflow B: Another contact sent this voice note.
+        // ONLY Sandy (the owner) can react to trigger transcription.
+        // Strictly prevent other users from accessing or leaking another person's private voice note.
+        if (!isReactorOwner) {
+          console.log(`[Voice Reaction Guard] Non-owner +${reactorNumber} reacted to voice note from +${voiceNote.sender_number}. Denied.`);
+          return;
+        }
+      }
+
+      // 5. Deduplicate authorized repeat reactions for same message + action
+      const reactionDedupeKey = `${targetMsgId}:${action}`;
+      const now = Date.now();
+      if (this.recentReactions?.has(reactionDedupeKey)) {
+        const lastTs = this.recentReactions.get(reactionDedupeKey);
+        if (now - lastTs < 15000) {
+          return;
+        }
+      }
+      this.recentReactions?.set(reactionDedupeKey, now);
+      if (this.recentReactions?.size > 500) {
+        const cutoff = now - 60000;
+        for (const [k, ts] of this.recentReactions.entries()) {
+          if (ts < cutoff) this.recentReactions.delete(k);
+        }
+      }
+
+      // Typing presence
+      await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+
+      // 5. Transcribe & Translate via Gemini Multimodal
+      const result = await voiceNoteService.processReactionForVoiceNote(voiceNote, action);
+      if (!result.ok && !result.text) {
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 6. Send reply quoting the target voice note
+      const quotedMsgObj = {
+        key: {
+          remoteJid: voiceNote.remote_jid,
+          id: voiceNote.message_id,
+          fromMe: Boolean(voiceNote.is_from_owner),
+        },
+      };
+
+      await this.safeSendMessage(remoteJid, { text: result.text }, { quoted: quotedMsgObj });
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+
+      // 7. Audit & Memory
+      const chatId = isReactorOwner ? 'wa_sandy_master' : `wa_${remoteJid}`;
+      recordAssistantMessage(chatId, result.text, 50, 'gemini-3.8-flash');
+      logAudit('whatsapp', 'VOICE_NOTE_REACTION_TRANSCRIBED', `Msg ${voiceNote.message_id} in ${remoteJid} reacted with ${emoji} (${action}) by +${reactorNumber}`);
+    } catch (err) {
+      console.error('[handleReactionUpdate Error]:', err.message);
+    }
+  }
+
   async safeSendMessage(jid, content, options = {}) {
     if (!this.sock) return null;
     const sent = await this.sock.sendMessage(jid, content, options);
@@ -794,6 +972,17 @@ class WhatsAppService {
         }
       });
 
+      // Handle emoji reactions (Workflow A & B: Reaction-to-Transcription)
+      sock.ev.on('messages.reaction', async (reactions) => {
+        try {
+          for (const rx of reactions) {
+            await this.handleReactionUpdate(rx);
+          }
+        } catch (err) {
+          console.error('[WhatsApp Reaction Event Error]:', err.message);
+        }
+      });
+
       this.isInitializing = false;
       return true;
     } catch (err) {
@@ -826,6 +1015,21 @@ class WhatsAppService {
 
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || remoteJid === 'status@broadcast') return;
+
+    // Handle reaction messages (reactionMessage in messages.upsert)
+    if (msg.message?.reactionMessage) {
+      const rx = msg.message.reactionMessage;
+      await this.handleReactionUpdate({
+        key: rx.key,
+        reaction: {
+          key: msg.key,
+          text: rx.text,
+          senderTimestampMs: rx.senderTimestampMs,
+        },
+        sourceMsg: msg,
+      });
+      return;
+    }
 
     // Handle Interactive WhatsApp Poll Button Clicks
     if (msg.message?.pollUpdateMessage) {
@@ -954,6 +1158,12 @@ class WhatsAppService {
     // Self-message guard:
     // If sent from the linked phone to someone else or a group, only respond if explicitly commanded
     if (isFromMe && !isSelfChat) {
+      // 🎙️ WORKFLOW A: Outgoing Voice Note from Bot Owner (send follow-up prompt & store audio)
+      if (isAudio && audioMessage) {
+        await this.handleOwnerOutgoingVoiceNote(msg);
+        return;
+      }
+
       const lower = trimmed.toLowerCase();
       const isExplicitTrigger =
         lower.startsWith('!nero') ||
@@ -1139,6 +1349,49 @@ class WhatsAppService {
       return;
     }
 
+    if (promptText.startsWith('/transcribe_emoji')) {
+      const parts = promptText.split(/\s+/);
+      const subAction = parts[1]?.toLowerCase();
+      const newEmoji = parts[2]?.trim();
+
+      if (subAction === 'translate' && newEmoji) {
+        voiceNoteService.setConfiguredEmoji('translate', newEmoji);
+        await this.safeSendMessage(
+          remoteJid,
+          { text: `✅ *Translate Emoji Updated:*\nReacting with ${newEmoji} will now transcribe & translate voice notes to English.` },
+          { quoted: msg }
+        );
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      if (subAction === 'transcribe' && newEmoji) {
+        voiceNoteService.setConfiguredEmoji('transcribe', newEmoji);
+        await this.safeSendMessage(
+          remoteJid,
+          { text: `✅ *Transcribe Emoji Updated:*\nReacting with ${newEmoji} will now transcribe voice notes in their original language.` },
+          { quoted: msg }
+        );
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      const curTranslate = voiceNoteService.getConfiguredEmoji('translate', '❤️');
+      const curTranscribe = voiceNoteService.getConfiguredEmoji('transcribe', '📝');
+
+      const configText =
+        `🎙️ *VOICE NOTE REACTION CONFIGURATION*\n\n` +
+        `• *Translate & Transcribe (English):* ${curTranslate}\n` +
+        `• *Transcribe Only (Source Language):* ${curTranscribe}\n\n` +
+        `_To change triggers:_\n` +
+        `• \`/transcribe_emoji translate <emoji>\` (e.g. \`/transcribe_emoji translate 🌟\`)\n` +
+        `• \`/transcribe_emoji transcribe <emoji>\` (e.g. \`/transcribe_emoji transcribe ✍️\`)`;
+
+      await this.safeSendMessage(remoteJid, { text: configText }, { quoted: msg });
+      await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      return;
+    }
+
     // Owner number management commands (Sandy only)
     if (isSandy && (promptText.startsWith('/addowner') || promptText.toLowerCase().startsWith('add owner'))) {
       const match = promptText.match(/(?:\/addowner|add owner)\s+([0-9\+]+)(?:\s+(.+))?/i);
@@ -1290,53 +1543,38 @@ class WhatsAppService {
           originalMessageId: msg.key?.id,
         });
 
-        // 🎙️ Transcribe and generate conversational reply with Gemini Multimodal AI
-        const profile = !isSandy ? sandyStatusService.getContactProfile(senderNumber) : null;
-        const voiceResult = await voiceNoteService.processVoiceNote({
+        // 🎙️ WORKFLOW B: Register incoming voice note reference & await reaction trigger
+        await voiceNoteService.saveVoiceNote({
+          messageId: msg.key?.id,
+          remoteJid,
+          senderJid,
+          senderNumber,
+          senderName,
           buffer,
           mimeType: mime,
-          senderName,
-          senderNumber,
-          isSandy,
           durationSec,
-          preferredLanguage: profile?.preferred_language || 'English',
-          preferredTone: profile?.preferred_tone || 'professional',
-          relationship: profile?.relationship || 'Contact',
+          isFromOwner: isSandy,
+          isPtt: Boolean(audioMessage?.ptt),
         });
 
-        const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
-        recordUserMessage(chatId, `🎙️ [Voice Note (${durationSec}s)]: "${voiceResult.transcription}"`);
-        recordAssistantMessage(chatId, voiceResult.reply, 80, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
-
-        if (!isSandy) {
+        if (isSelfChat) {
+          const followUpText = "💬 React with ❤️ to translate to English, or 📝 to transcribe.";
+          const followUpMsg = await this.safeSendMessage(remoteJid, { text: followUpText }, { quoted: msg });
+          if (followUpMsg?.key?.id) {
+            voiceNoteService.setFollowupMessageId(msg.key?.id, followUpMsg.key.id);
+          }
+        } else {
           sandyStatusService.recordContactInteraction(
             senderNumber,
             senderName,
-            `[Voice Note]: ${voiceResult.transcription}`
+            `[Sent Voice Note (${durationSec}s)]`
           );
-        }
-
-        if (isSandy) {
-          const sandyVoiceReply =
-            `🎙️ *[Voice Note Heard & Transcribed]* (${durationSec}s):\n` +
-            `"${voiceResult.transcription}"\n\n` +
-            `${voiceResult.reply}\n\n` +
-            `_File saved to vault:_ \`${savedMeta.fileName}\` 💾`;
-          await this.safeSendMessage(remoteJid, { text: sandyVoiceReply }, { quoted: msg });
-        } else {
-          if (!isWhatsAppSilentModeActive()) {
-            const contactVoiceReply =
-              `🎙️ *[Voice Note - ${durationSec}s]*: "${voiceResult.transcription}"\n\n` +
-              `${voiceResult.reply}`;
-            await this.safeSendMessage(remoteJid, { text: contactVoiceReply }, { quoted: msg });
-          }
           this.notifyTelegramOwner(
-            `🎙️ *[WhatsApp Voice Note Transcribed]*\n` +
+            `🎙️ *[WhatsApp Voice Note Received]*\n` +
             `*From:* ${senderName} (\`+${senderNumber}\`)\n` +
             `*Duration:* ${durationSec}s\n` +
-            `*Speech:* "${voiceResult.transcription}"\n` +
-            `*Nero Reply:* "${voiceResult.reply}"\n` +
-            `*Saved File:* \`${savedMeta.fileName}\``
+            `*Saved File:* \`${savedMeta.fileName}\`\n\n` +
+            `_React with ❤️ in WhatsApp to get English transcription, or 📝 to transcribe only._`
           );
         }
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});

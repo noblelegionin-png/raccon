@@ -1,25 +1,454 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from '../config.js';
+import { getDb, logAudit } from '../db/index.js';
 import { sandyStatusService } from './sandyStatusService.js';
 
 /**
- * WhatsApp Voice Note Processing Service
- * Transcribes audio voice notes and generates natural conversational replies
- * using Gemini Multimodal AI via ScaleMax.
+ * WhatsApp Voice Note & Reaction Transcription Service
+ * 
+ * Supports:
+ * - Workflow A: Bot owner sends outgoing voice note -> Contact reacts with ❤️/📝 -> English transcription replied.
+ * - Workflow B: Contact sends incoming voice note -> Owner reacts with ❤️/📝 -> Spoken & translated English text replied.
+ * - Multi-language transcription (Hindi, Urdu, English, Hinglish, Punjabi, etc.) via Gemini Multimodal.
+ * - Persistent audio archiving and SQLite reference mapping across Railway restarts.
  */
 export class VoiceNoteService {
+  constructor() {
+    this.initialized = false;
+  }
+
+  init() {
+    if (this.initialized) return;
+    try {
+      const db = getDb();
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS whatsapp_voice_notes (
+          message_id TEXT PRIMARY KEY,
+          remote_jid TEXT NOT NULL,
+          sender_jid TEXT NOT NULL,
+          sender_number TEXT NOT NULL,
+          sender_name TEXT,
+          file_path TEXT NOT NULL,
+          mime_type TEXT,
+          duration_sec INTEGER DEFAULT 0,
+          is_from_owner INTEGER DEFAULT 0,
+          is_ptt INTEGER DEFAULT 1,
+          is_transcribed INTEGER DEFAULT 0,
+          transcription TEXT,
+          translation TEXT,
+          detected_language TEXT,
+          is_english INTEGER DEFAULT 0,
+          followup_msg_id TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_wvn_remote ON whatsapp_voice_notes(remote_jid);
+        CREATE INDEX IF NOT EXISTS idx_wvn_followup ON whatsapp_voice_notes(followup_msg_id);
+
+        CREATE TABLE IF NOT EXISTS whatsapp_reaction_config (
+          action TEXT PRIMARY KEY,
+          emoji TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+      this.initialized = true;
+    } catch (err) {
+      console.warn('[VoiceNoteService Init Warning]:', err.message);
+    }
+  }
+
   /**
-   * Process incoming voice note buffer and return transcription and conversational reply
+   * Normalizes emoji strings by stripping presentation selectors (\uFE0E, \uFE0F)
+   */
+  normalizeEmoji(str) {
+    if (!str) return '';
+    return String(str).replace(/[\uFE0E\uFE0F]/g, '').trim();
+  }
+
+  /**
+   * Retrieve configured reaction emoji for an action ('translate' or 'transcribe')
+   */
+  getConfiguredEmoji(action, fallback = '❤️') {
+    this.init();
+    try {
+      const db = getDb();
+      const row = db.prepare('SELECT emoji FROM whatsapp_reaction_config WHERE action = ?').get(action);
+      return row ? row.emoji : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  /**
+   * Configure reaction trigger emoji
+   */
+  setConfiguredEmoji(action, emoji) {
+    this.init();
+    try {
+      const db = getDb();
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO whatsapp_reaction_config (action, emoji, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(action) DO UPDATE SET emoji = excluded.emoji, updated_at = excluded.updated_at
+      `).run(action, String(emoji).trim(), now);
+      logAudit('owner', 'VOICE_REACTION_EMOJI_SET', `Action: ${action} -> Emoji: ${emoji}`);
+      return true;
+    } catch (err) {
+      console.warn('[setConfiguredEmoji Error]:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Map an incoming reaction emoji to its requested transcription action
+   * @param {string} rawEmoji
+   * @returns {'translate' | 'transcribe_only' | null}
+   */
+  getActionForEmoji(rawEmoji) {
+    if (!rawEmoji) return null;
+    const clean = this.normalizeEmoji(rawEmoji);
+    const translateEmoji = this.normalizeEmoji(this.getConfiguredEmoji('translate', '❤️'));
+    const transcribeEmoji = this.normalizeEmoji(this.getConfiguredEmoji('transcribe', '📝'));
+
+    // ❤️ (Red Heart) or configured translate emoji -> Transcribe and translate to English
+    if (clean === translateEmoji || clean === '❤️' || clean === '❤') {
+      return 'translate';
+    }
+
+    // 📝 (Memo) or configured transcribe emoji -> Transcribe only in source language
+    if (clean === transcribeEmoji || clean === '📝') {
+      return 'transcribe_only';
+    }
+
+    return null;
+  }
+
+  /**
+   * Get storage directory for voice notes
+   */
+  getVoiceNoteDir(senderNumber) {
+    const dbDir = path.dirname(config.databasePath);
+    const vnDir = path.join(dbDir, 'whatsapp_media', 'voice_notes', String(senderNumber).replace(/[^0-9]/g, ''));
+    if (!fs.existsSync(vnDir)) {
+      fs.mkdirSync(vnDir, { recursive: true });
+    }
+    return vnDir;
+  }
+
+  /**
+   * Store incoming or outgoing voice note reference and audio buffer on disk
+   */
+  async saveVoiceNote({
+    messageId,
+    remoteJid,
+    senderJid,
+    senderNumber,
+    senderName = 'Contact',
+    buffer,
+    mimeType = 'audio/ogg; codecs=opus',
+    durationSec = 0,
+    isFromOwner = false,
+    isPtt = true,
+    followupMsgId = null,
+  }) {
+    this.init();
+    if (!messageId || !remoteJid) return null;
+
+    const cleanSender = String(senderNumber).replace(/[^0-9]/g, '') || 'unknown';
+    const dir = this.getVoiceNoteDir(cleanSender);
+    const safeMsgId = String(messageId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : 'ogg';
+    const filePath = path.join(dir, `${safeMsgId}.${ext}`);
+
+    if (buffer && buffer.length > 0) {
+      await fs.promises.writeFile(filePath, buffer);
+    }
+
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO whatsapp_voice_notes (
+        message_id, remote_jid, sender_jid, sender_number, sender_name,
+        file_path, mime_type, duration_sec, is_from_owner, is_ptt,
+        followup_msg_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(message_id) DO UPDATE SET
+        file_path = excluded.file_path,
+        duration_sec = excluded.duration_sec,
+        followup_msg_id = COALESCE(excluded.followup_msg_id, whatsapp_voice_notes.followup_msg_id)
+    `).run(
+      messageId,
+      remoteJid,
+      senderJid || remoteJid,
+      cleanSender,
+      senderName,
+      filePath,
+      mimeType,
+      durationSec,
+      isFromOwner ? 1 : 0,
+      isPtt ? 1 : 0,
+      followupMsgId,
+      now
+    );
+
+    logAudit('whatsapp', 'VOICE_NOTE_REGISTERED', `Msg ${messageId} (${durationSec}s) from +${cleanSender} (owner=${isFromOwner})`);
+
+    return {
+      messageId,
+      remoteJid,
+      senderNumber: cleanSender,
+      senderName,
+      filePath,
+      durationSec,
+      isFromOwner,
+      followupMsgId,
+    };
+  }
+
+  /**
+   * Look up a voice note record by message ID or its follow-up message ID
+   */
+  getVoiceNote(messageId) {
+    this.init();
+    if (!messageId) return null;
+    try {
+      const db = getDb();
+      return db.prepare(`
+        SELECT * FROM whatsapp_voice_notes
+        WHERE message_id = ? OR followup_msg_id = ?
+        LIMIT 1
+      `).get(String(messageId), String(messageId));
+    } catch (err) {
+      console.warn('[getVoiceNote Error]:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Link follow-up prompt message ID to the original voice note
+   */
+  setFollowupMessageId(voiceNoteMsgId, followupMsgId) {
+    this.init();
+    if (!voiceNoteMsgId || !followupMsgId) return;
+    try {
+      const db = getDb();
+      db.prepare('UPDATE whatsapp_voice_notes SET followup_msg_id = ? WHERE message_id = ?').run(
+        String(followupMsgId),
+        String(voiceNoteMsgId)
+      );
+    } catch {}
+  }
+
+  /**
+   * Transcribe and translate speech from audio buffer using Gemini Multimodal AI
+   * Outputs both original spoken language transcription and natural English translation in a single pass.
+   */
+  async transcribeAndTranslateAudio({
+    buffer,
+    mimeType = 'audio/ogg',
+    durationSec = 0,
+    model = 'gemini-3.8-flash',
+  }) {
+    if (!config.scaleMaxApiKey) {
+      return {
+        language: 'Unknown',
+        isEnglish: true,
+        originalTranscript: `[Audio transcription unavailable: API key not configured]`,
+        englishTranslation: `[Audio transcription unavailable: API key not configured]`,
+      };
+    }
+
+    const base64Audio = buffer.toString('base64');
+    const cleanMime = mimeType ? mimeType.split(';')[0].trim() : 'audio/ogg';
+
+    const systemPrompt =
+      `You are an expert speech recognition and natural language translation AI engine.\n` +
+      `Listen attentively to the audio in this voice note (${durationSec} seconds long).\n\n` +
+      `CRITICAL INSTRUCTIONS:\n` +
+      `1. Accurately detect the primary spoken language (e.g., Hindi, Urdu, English, Hinglish, Punjabi, Spanish, etc.).\n` +
+      `2. Transcribe the exact spoken words in the original language as faithfully as possible.\n` +
+      `   - Preserve proper nouns, person names, technical terms, and numbers.\n` +
+      `   - If speech is unclear, muffled, or inaudible, mark it as [inaudible] or [uncertain] rather than guessing or fabricating missing words.\n` +
+      `   - If the audio is complete silence or background noise, transcribe as "[No speech detected / inaudible]".\n` +
+      `3. Provide a natural, fluent, and accurate English translation of the spoken content.\n` +
+      `   - If the original speech is already in English, the English translation should be identical to the original transcription.\n` +
+      `   - Maintain the exact tone, context, and meaning without inventing details.\n` +
+      `4. State whether the original audio is primarily English (true/false).\n\n` +
+      `Format your output strictly as follows with these exact prefixes:\n` +
+      `LANGUAGE: <Detected primary language, e.g. Hindi>\n` +
+      `IS_ENGLISH: <true or false>\n` +
+      `ORIGINAL: <the exact spoken words in original language>\n` +
+      `ENGLISH: <the natural English translation>`;
+
+    try {
+      const response = await fetch(`${config.scaleMaxBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.scaleMaxApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: systemPrompt },
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:${cleanMime};base64,${base64Audio}` },
+                },
+              ],
+            },
+          ],
+          max_tokens: 450,
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`[transcribeAndTranslateAudio] ScaleMax HTTP ${response.status}: ${errText.slice(0, 100)}`);
+        return this._fallbackReactionResponse(durationSec);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '';
+
+      const langMatch = content.match(/LANGUAGE:\s*([^\n]+)/i);
+      const isEnglishMatch = content.match(/IS_ENGLISH:\s*(true|false)/i);
+      const originalMatch = content.match(/ORIGINAL:\s*([\s\S]*?)(?=ENGLISH:|$)/i);
+      const englishMatch = content.match(/ENGLISH:\s*([\s\S]*?)$/i);
+
+      const language = langMatch ? langMatch[1].trim() : 'English';
+      const isEnglish = isEnglishMatch ? isEnglishMatch[1].toLowerCase() === 'true' : /english/i.test(language);
+      let originalTranscript = originalMatch ? originalMatch[1].trim() : '';
+      let englishTranslation = englishMatch ? englishMatch[1].trim() : '';
+
+      if (!originalTranscript && !englishTranslation) {
+        originalTranscript = content.trim();
+        englishTranslation = content.trim();
+      } else if (!englishTranslation) {
+        englishTranslation = originalTranscript;
+      } else if (!originalTranscript) {
+        originalTranscript = englishTranslation;
+      }
+
+      // Clean quotation marks if wrapped
+      originalTranscript = originalTranscript.replace(/^["']|["']$/g, '').trim();
+      englishTranslation = englishTranslation.replace(/^["']|["']$/g, '').trim();
+
+      return {
+        language,
+        isEnglish,
+        originalTranscript,
+        englishTranslation,
+      };
+    } catch (err) {
+      console.error('[transcribeAndTranslateAudio Error]:', err.message);
+      return this._fallbackReactionResponse(durationSec);
+    }
+  }
+
+  _fallbackReactionResponse(durationSec) {
+    return {
+      language: 'Unknown',
+      isEnglish: true,
+      originalTranscript: `[Voice Note audio processed: ${durationSec}s]`,
+      englishTranslation: `[Voice Note audio processed: ${durationSec}s]`,
+    };
+  }
+
+  /**
+   * Process a reaction on a voice note and return the formatted reply message
    * @param {Object} params
-   * @param {Buffer} params.buffer - Audio file buffer
-   * @param {string} params.mimeType - Audio mime type (e.g. 'audio/ogg; codecs=opus')
-   * @param {string} params.senderName - Sender display name
-   * @param {string} params.senderNumber - Sender phone digits
-   * @param {boolean} params.isSandy - Whether sender is Sandy
-   * @param {number} params.durationSec - Audio duration in seconds
-   * @param {string} [params.preferredLanguage='English'] - Preferred language of the contact
-   * @param {string} [params.preferredTone='professional'] - Preferred tone
-   * @param {string} [params.relationship='Contact'] - Relationship label
-   * @returns {Promise<{transcription: string, reply: string, summary: string}>}
+   * @param {Object} params.voiceNote - Voice note database row
+   * @param {'translate' | 'transcribe_only'} params.action - Requested action
+   * @returns {Promise<{ ok: boolean, text: string, error?: string }>}
+   */
+  async processReactionForVoiceNote(voiceNote, action = 'translate') {
+    this.init();
+    if (!voiceNote) {
+      return { ok: false, error: 'Voice note not found' };
+    }
+
+    // Check if audio file still exists on disk
+    if (!voiceNote.file_path || !fs.existsSync(voiceNote.file_path)) {
+      return {
+        ok: false,
+        text: `⚠️ *Voice Note Media Expired:*\nThe audio for this voice note is no longer accessible on disk. Please resend the voice note to transcribe it.`,
+      };
+    }
+
+    // Deduplication & Cache Check: if already transcribed in SQLite, use cached data
+    let originalTranscript = voiceNote.transcription;
+    let englishTranslation = voiceNote.translation;
+    let language = voiceNote.detected_language || 'English';
+    let isEnglish = Boolean(voiceNote.is_english);
+
+    if (!voiceNote.is_transcribed || !originalTranscript) {
+      const buffer = await fs.promises.readFile(voiceNote.file_path);
+      const result = await this.transcribeAndTranslateAudio({
+        buffer,
+        mimeType: voiceNote.mime_type || 'audio/ogg',
+        durationSec: voiceNote.duration_sec || 0,
+        model: 'gemini-3.8-flash',
+      });
+
+      originalTranscript = result.originalTranscript;
+      englishTranslation = result.englishTranslation;
+      language = result.language;
+      isEnglish = result.isEnglish;
+
+      // Cache in SQLite
+      const db = getDb();
+      db.prepare(`
+        UPDATE whatsapp_voice_notes
+        SET is_transcribed = 1,
+            transcription = ?,
+            translation = ?,
+            detected_language = ?,
+            is_english = ?
+        WHERE message_id = ?
+      `).run(
+        originalTranscript,
+        englishTranslation,
+        language,
+        isEnglish ? 1 : 0,
+        voiceNote.message_id
+      );
+    }
+
+    // Format output message per Section 4 specifications
+    let replyText = '';
+
+    if (action === 'translate') {
+      replyText = `🎙️ *English transcription:*\n\n"${englishTranslation}"`;
+      if (!isEnglish && language && !/english/i.test(language)) {
+        replyText += `\n\n_Translated from: ${language}_`;
+      }
+    } else {
+      // Transcribe only (original language)
+      replyText = `🎙️ *Transcription:*\n\n"${originalTranscript}"`;
+      if (language) {
+        replyText += `\n\n_Language: ${language}_`;
+      }
+    }
+
+    return {
+      ok: true,
+      text: replyText,
+      originalTranscript,
+      englishTranslation,
+      language,
+      isEnglish,
+    };
+  }
+
+  /**
+   * Process voice note buffer for immediate conversational flow (backward compatibility)
    */
   async processVoiceNote({
     buffer,
@@ -32,124 +461,36 @@ export class VoiceNoteService {
     preferredTone = 'professional',
     relationship = 'Contact',
   }) {
-    if (!config.scaleMaxApiKey) {
-      return {
-        transcription: 'Audio transcription unavailable (API key not configured).',
-        reply: isSandy
-          ? 'Sandy, your voice note has been received and securely archived.'
-          : 'Thank you for your voice message. I have received it and Sandy will review it when available.',
-        summary: `Voice note received (${durationSec}s)`,
-      };
-    }
+    const result = await this.transcribeAndTranslateAudio({
+      buffer,
+      mimeType,
+      durationSec,
+      model: isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite',
+    });
 
-    const base64Audio = buffer.toString('base64');
-    const cleanMime = mimeType ? mimeType.split(';')[0].trim() : 'audio/ogg';
+    const reply = isSandy
+      ? `Sandy, your voice note has been transcribed.`
+      : `Thank you for your voice note. I have transcribed it: "${result.englishTranslation}".`;
 
-    // Persona directives adhering strictly to V2 Professional Communication Engine
-    const personaStyle = isSandy
-      ? "You are Nero, Sandy's executive AI assistant. Provide senior executive support, precise transcription, and concise acknowledgment."
-      : `You are Nero, Sandy's professional, mature, and respectful personal assistant. The sender is a ${relationship}.
-Tone: ${preferredTone}.
-Language: Respond in ${preferredLanguage || 'English'}.
-Maintain high professionalism, no unsolicited slang or cringe expressions, and keep the response natural, respectful, and concise (1-2 sentences).`;
-
-    const promptText =
-      `You are Nero, Sandy's personal AI executive assistant on WhatsApp. ` +
-      `The sender is ${senderName} (${isSandy ? 'Sandy (Owner)' : `Phone +${senderNumber}`}). ` +
-      `They sent an audio voice message (${durationSec} seconds long).\n\n` +
-      `Style Guide:\n` +
-      `${personaStyle}\n\n` +
-      `CRITICAL INSTRUCTIONS:\n` +
-      `1. Listen attentively to the speech in this audio.\n` +
-      `2. Transcribe the speech as faithfully as possible (accurately transcribing English, Urdu, Hindi, or Hinglish as spoken).\n` +
-      `   - If it is pure background noise or silence, transcribe as "[Unintelligible background sound or silence]".\n` +
-      `3. Generate a concise, natural, professional reply directly answering or acknowledging their spoken words.\n` +
-      `   - Keep the reply concise (1 to 2 clear sentences).\n` +
-      `   - Do NOT use unsolicited slang, repetitive filler, or double greetings.\n\n` +
-      `Format your output strictly as follows:\n` +
-      `TRANSCRIPT: <the exact spoken words>\n` +
-      `REPLY: <your response>`;
-
-    const targetModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
-
-    try {
-      const response = await fetch(`${config.scaleMaxBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.scaleMaxApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: targetModel,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: promptText },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:${cleanMime};base64,${base64Audio}` },
-                },
-              ],
-            },
-          ],
-          max_tokens: 350,
-          temperature: 0.4,
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.warn(`[VoiceNoteService] ScaleMax error (${response.status}): ${errText.slice(0, 150)}`);
-        return this._fallbackResponse(senderName, durationSec, isSandy);
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
-
-      const transcriptMatch = content.match(/TRANSCRIPT:\s*([\s\S]*?)(?=REPLY:|$)/i);
-      const replyMatch = content.match(/REPLY:\s*([\s\S]*?)$/i);
-
-      let transcription = transcriptMatch ? transcriptMatch[1].trim() : '';
-      let reply = replyMatch ? replyMatch[1].trim() : '';
-
-      // If parsing failed to find markers, use the full content as reply or transcript
-      if (!transcription && !reply) {
-        reply = content.trim();
-        transcription = `[Voice note audio processed: ${durationSec}s]`;
-      } else if (!transcription) {
-        transcription = `[Voice message: ${durationSec}s]`;
-      } else if (!reply) {
-        reply = `Thank you. I have received your voice note: "${transcription}".`;
-      }
-
-      // Cleanup formatting
-      transcription = transcription.replace(/^["']|["']$/g, '').trim();
-
-      return {
-        transcription,
-        reply,
-        summary: transcription.length > 80 ? `${transcription.slice(0, 77)}...` : transcription,
-      };
-    } catch (err) {
-      console.error('[VoiceNoteService Error]:', err.message);
-      return this._fallbackResponse(senderName, durationSec, isSandy);
-    }
+    return {
+      transcription: result.originalTranscript,
+      englishTranslation: result.englishTranslation,
+      reply,
+      summary: result.englishTranslation.length > 80 ? `${result.englishTranslation.slice(0, 77)}...` : result.englishTranslation,
+    };
   }
 
   _fallbackResponse(senderName, durationSec, isSandy) {
-    if (isSandy) {
-      return {
-        transcription: `[Voice Note: ${durationSec}s]`,
-        reply: `Sandy, your voice message (${durationSec}s) has been received and archived securely.`,
-        summary: `Voice message (${durationSec}s)`,
-      };
-    }
-
+    const rx = this._fallbackReactionResponse(durationSec);
+    const reply = isSandy
+      ? `Sandy, your ${durationSec}s voice note has been received and saved.`
+      : `I have received your ${durationSec}s voice note. Sandy will listen to it directly.`;
     return {
-      transcription: `[Voice Note received: ${durationSec}s]`,
-      reply: `Thank you for your voice message. I have received it and Sandy will review it when available.`,
-      summary: `Voice note received (${durationSec}s)`,
+      transcription: rx.originalTranscript,
+      englishTranslation: rx.englishTranslation,
+      reply,
+      language: rx.language,
+      isEnglish: rx.isEnglish,
     };
   }
 }

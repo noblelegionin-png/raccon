@@ -92,10 +92,11 @@ export class OutreachService {
    */
   parseOutreachCommand(text) {
     if (!text || typeof text !== 'string') return { isOutreach: false };
-    const trimmed = text.trim();
+    let trimmed = text.trim().replace(/^["'`“”«»]+|["'`“”«»]+$/g, '').trim();
 
     // Strip common conversational polite prefixes e.g. "yo nero", "nero please", "can you", "could you"
-    const cleanedText = trimmed.replace(/^(?:(?:please|can\s+you|could\s+you|nero|yo\s+nero|hey\s+nero)\s+)+/i, '').trim();
+    let cleanedText = trimmed.replace(/^(?:(?:please|can\s+you|could\s+you|nero|yo\s+nero|hey\s+nero)\s+)+/i, '').trim();
+    cleanedText = cleanedText.replace(/^["'`“”«»]+|["'`“”«»]+$/g, '').trim();
 
     // 1. Slash commands: /wa_send, /outreach, /text <target> <msg>
     const slashMatch = cleanedText.match(/^(?:\/wa_send|\/outreach|\/text)\s+([^\s]+)\s+([\s\S]+)$/i);

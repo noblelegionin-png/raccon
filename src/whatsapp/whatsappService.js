@@ -1234,10 +1234,16 @@ class WhatsAppService {
     // If told to shut up in any chat, Nero goes 100% silent in that specific conversation
     // so it won't disturb between chats. Resumes when someone says "bol" or "unmute".
     // =========================================================================
-    const chatIsMuted = isChatMuted(remoteJid);
+    // True self-chat (Message Yourself) or Sandy master console should NEVER be silenced by casual mute triggers
+    const chatIsMuted = !isSelfChat && isChatMuted(remoteJid);
 
     if (chatIsMuted) {
-      if (isUnmuteTrigger(trimmed) || isUnmuteTrigger(promptText)) {
+      if (
+        isUnmuteTrigger(trimmed) ||
+        isUnmuteTrigger(promptText) ||
+        /\b(?:unmute|bol|active|resume)\b/i.test(trimmed) ||
+        (isSandy && /unmute/i.test(trimmed))
+      ) {
         unmuteChat(remoteJid);
         const unmuteReply = "🟢 Got it! Main wapas active hoon. Aap continue kar sakte hain! 🤝";
         await this.safeSendMessage(remoteJid, { text: unmuteReply }, { quoted: msg });

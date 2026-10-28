@@ -18,6 +18,7 @@ import { config } from '../config.js';
 import { getDb, logAudit } from '../db/index.js';
 import { webSearchService } from '../search/webSearchService.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
+import { visionService } from '../vision/visionService.js';
 
 export class VisualShoppingEngine {
   constructor() {
@@ -163,36 +164,9 @@ export class VisualShoppingEngine {
 
   /**
    * Detect if a text message is shopping-related or asks to find a product
+   * (Disabled per owner instruction: TOTALLY REMOVE SHOPPING FOR RN QUICK)
    */
   isShoppingQuery(text) {
-    if (!text || typeof text !== 'string') return false;
-    const lower = text.toLowerCase().trim();
-
-    // Check for direct e-commerce product links
-    if (/(?:amazon\.in|flipkart\.com|meesho\.com|blinkit\.com|myntra\.com|nykaa\.com|croma\.com|ajio\.com|reliancedigital\.in)/i.test(lower)) {
-      return true;
-    }
-
-    // Explicit command triggers
-    if (/^(?:\/shop|\/product|\/deal|\/price|\/compare|\/find)\b/i.test(lower)) {
-      return true;
-    }
-
-    // Natural English shopping patterns
-    if (
-      /\b(?:price|cost|how much|buy|purchase|shop|shopping|order|discount|deal|cheapest|compare|where to buy|in stock|flipkart|amazon|meesho|blinkit|under\s+(?:rs\.?|inr|₹|\$)?\s*\d+)\b/i.test(lower) &&
-      !/\b(?:joke|weather|game|news|rule|password|token)\b/i.test(lower)
-    ) {
-      return true;
-    }
-
-    // Roman Hindi / Hinglish shopping patterns
-    if (
-      /\b(?:kitne\s+ka\s+hai|kahan\s+milega|price\s+kya\s+hai|kharidna\s+hai|sabse\s+sasta|best\s+deal|rate\s+batao|order\s+karna|kahan\s+se\s+lu)\b/i.test(lower)
-    ) {
-      return true;
-    }
-
     return false;
   }
 
@@ -772,6 +746,22 @@ Output strictly in JSON format:
     userLanguage = 'English',
     isSandy = false,
   }) {
+    // 🎯 If the query is asking to choose between options (e.g. "choose between 2"),
+    // route directly to the visual choice evaluator and DO NOT search e-commerce stores!
+    if (visionService.isVisualChoiceQuery(text)) {
+      const choiceRes = await visionService.evaluateVisualChoice({
+        images: buffer ? [{ buffer, mimeType }] : [],
+        textPrompt: text,
+        isSandy,
+        userLanguage,
+      });
+      return {
+        ok: true,
+        isChoice: true,
+        replyText: choiceRes.description,
+      };
+    }
+
     const userLocation = this.extractLocationOrPincode(text);
     const budget = this.extractBudget(text);
 

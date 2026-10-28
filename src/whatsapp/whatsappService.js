@@ -1947,34 +1947,57 @@ class WhatsAppService {
         const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
         recordUserMessage(chatId, promptText ? `[User Image: "${promptText}"]` : `[User sent an image]`);
 
-        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
-
-        // 🛍️ Universal Visual Recognition & Smart Shopping Engine
-        // Covers: products, fashion/clothing, sarees, lehengas, shoes, electronics, flowers, hairstyles, nails, objects
-        const visualResult = await visualShoppingEngine.processShoppingRequest({
+        // Cache image in visionService for follow-up choice/comparison context
+        visionService.pushRecentImage(chatId, {
           buffer,
           mimeType: imageMessage.mimetype || 'image/jpeg',
-          text: promptText,
-          userLanguage: prefLang,
-          isSandy,
+          timestamp: Date.now(),
+          caption: promptText,
         });
 
-        let replyText = visualResult?.replyText;
-        if (!replyText) {
-          const visionPrompt = promptText.length > 0
-            ? `The user sent this image with note: "${promptText}". Thoroughly inspect this image. Answer their inquiry clearly, accurately, and concisely in ${prefLang} with a ${prefTone} tone.`
-            : `Thoroughly inspect this image. Provide a concise, clear description of what is visible in ${prefLang} with a ${prefTone} tone.`;
+        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
-          const analysis = await visionService.analyzeImage({
-            buffer,
-            prompt: visionPrompt,
-            mimeType: imageMessage.mimetype || 'image/jpeg',
+        // 🎯 1. First: Check if user is asking to CHOOSE or DECIDE between options in the image!
+        // (e.g. "choose between 2", "which one is better", "1 or 2", "konsa lu?", "help me choose")
+        if (visionService.isVisualChoiceQuery(promptText)) {
+          console.log(`[WhatsApp Vision] 🎯 Visual choice query detected from ${senderName} (${isSandy ? 'Sandy (Rebecca)' : 'Contact'}): "${promptText}"`);
+          const choiceResult = await visionService.evaluateVisualChoice({
+            images: [{ buffer, mimeType: imageMessage.mimetype || 'image/jpeg' }],
+            textPrompt: promptText,
+            isSandy,
+            userLanguage: prefLang,
+            userTone: prefTone,
             chatId,
           });
-          replyText = analysis.description || (prefLang.toLowerCase().includes('urdu') ? "میں نے آپ کی تصویر دیکھ لی ہے۔" : "I have inspected your image.");
+
+          const replyText = choiceResult.description;
+          recordAssistantMessage(chatId, replyText, 180, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+          await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
         }
 
-        recordAssistantMessage(chatId, replyText, 150, 'gemini-3.8-flash');
+        // 🖼️ 2. General Image Inspection & Conversation (Rebecca for Sandy, Nero for general contacts)
+        const visionPrompt = promptText.length > 0
+          ? (isSandy
+              ? `Sandy's note with this image: "${promptText}". React naturally, warmly, and flirtatiously as his wife Rebecca.`
+              : `The user sent this image with note: "${promptText}". Thoroughly inspect this image. Answer their inquiry clearly, accurately, and concisely in ${prefLang} with a ${prefTone} tone.`)
+          : (isSandy
+              ? `Sandy sent you this image. React warmly, playfully, and affectionately as his wife Rebecca.`
+              : `Thoroughly inspect this image. Provide a concise, clear description of what is visible in ${prefLang} with a ${prefTone} tone.`);
+
+        const analysis = await visionService.analyzeImage({
+          buffer,
+          prompt: visionPrompt,
+          mimeType: imageMessage.mimetype || 'image/jpeg',
+          chatId,
+          isSandy,
+          userLanguage: prefLang,
+          userTone: prefTone,
+        });
+        const replyText = analysis.description || (prefLang.toLowerCase().includes('urdu') ? "میں نے آپ کی تصویر دیکھ لی ہے۔" : "I have inspected your image.");
+
+        recordAssistantMessage(chatId, replyText, 150, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2666,21 +2689,28 @@ class WhatsAppService {
         return;
       }
 
-      // 🛍️ Smart Shopping & Visual Product Search Engine (Text Queries & Product URLs)
-      if (visualShoppingEngine.isShoppingQuery(promptText)) {
-        await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
-        const profile = !isSandy ? sandyStatusService.getContactProfile(senderNumber) : null;
-        const prefLang = profile?.preferred_language || 'English';
+      // 🎯 Visual Choice & Comparison Engine (if user previously sent image(s) and now asks to choose)
+      if (visionService.isVisualChoiceQuery(promptText)) {
+        const recentImages = visionService.getRecentImages(chatId, 2);
+        if (recentImages && recentImages.length > 0) {
+          console.log(`[WhatsApp Vision] 🎯 Follow-up visual choice on ${recentImages.length} recent image(s) from ${senderName} (${isSandy ? 'Sandy (Rebecca)' : 'Contact'}): "${promptText}"`);
+          await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+          const profile = !isSandy ? sandyStatusService.getContactProfile(senderNumber) : null;
+          const prefLang = profile?.preferred_language || 'English';
+          const prefTone = profile?.preferred_tone || 'warm';
 
-        const shopResult = await visualShoppingEngine.processShoppingRequest({
-          text: promptText,
-          userLanguage: prefLang,
-          isSandy,
-        });
+          const choiceResult = await visionService.evaluateVisualChoice({
+            images: recentImages.map((img) => ({ buffer: img.buffer, mimeType: img.mimeType })),
+            textPrompt: promptText,
+            isSandy,
+            userLanguage: prefLang,
+            userTone: prefTone,
+            chatId,
+          });
 
-        if (shopResult?.ok && shopResult?.replyText) {
-          recordAssistantMessage(chatId, shopResult.replyText, 150, 'gemini-3.8-flash');
-          await this.safeSendMessage(remoteJid, { text: shopResult.replyText }, { quoted: msg });
+          const replyText = choiceResult.description;
+          recordAssistantMessage(chatId, replyText, 180, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+          await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
         }

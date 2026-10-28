@@ -12,26 +12,204 @@ import {
 export class VisionService {
   constructor() {
     this._recentImageCache = new Map();
+    this._recentImageMap = new Map();
   }
 
   /**
-   * Set recent image in cache for follow-up conversational context
+   * Push recent image into multi-image cache (sliding window of up to 5 images per chat)
+   */
+  pushRecentImage(chatId, { fileId = null, buffer, mimeType = 'image/jpeg', timestamp = Date.now(), caption = '' }) {
+    const key = String(chatId);
+    let list = this._recentImageMap.get(key) || [];
+    const now = Date.now();
+    list = list.filter((item) => now - item.timestamp < 30 * 60 * 1000);
+    list.push({ fileId, buffer, mimeType, timestamp, caption });
+    if (list.length > 5) list = list.slice(-5);
+    this._recentImageMap.set(key, list);
+    this._recentImageCache.set(key, list[list.length - 1]);
+  }
+
+  /**
+   * Set recent image in cache for follow-up conversational context (backward compatible)
    */
   setRecentImage(chatId, { fileId, buffer, mimeType = 'image/jpeg', timestamp = Date.now() }) {
-    this._recentImageCache.set(String(chatId), { fileId, buffer, mimeType, timestamp });
+    this.pushRecentImage(chatId, { fileId, buffer, mimeType, timestamp });
   }
 
   /**
    * Get recent image for a chat (valid for 30 minutes)
    */
   getRecentImage(chatId) {
-    const entry = this._recentImageCache.get(String(chatId));
-    if (!entry) return null;
-    if (Date.now() - entry.timestamp > 30 * 60 * 1000) {
-      this._recentImageCache.delete(String(chatId));
-      return null;
+    const key = String(chatId);
+    const list = this.getRecentImages(key, 1);
+    return list.length > 0 ? list[0] : null;
+  }
+
+  /**
+   * Get recent images for a chat (up to limit, valid for 30 minutes)
+   */
+  getRecentImages(chatId, limit = 2) {
+    const key = String(chatId);
+    let list = this._recentImageMap.get(key) || [];
+    const now = Date.now();
+    list = list.filter((item) => now - item.timestamp < 30 * 60 * 1000);
+    this._recentImageMap.set(key, list);
+    return list.slice(-limit);
+  }
+
+  /**
+   * Detect if a user message is asking to CHOOSE, DECIDE, or COMPARE between visual options
+   * (e.g. "choose between 2", "which one is better", "1 or 2", "konsa lu?", "help me choose")
+   */
+  isVisualChoiceQuery(text) {
+    if (!text || typeof text !== 'string') return false;
+    const lower = text.toLowerCase().trim();
+
+    // 1. Direct English choice & comparison patterns
+    if (
+      /\b(?:choose\s+(?:between\s+)?(?:2|two|both|these|them|this\s+or\s+that|1\s*(?:and|or)\s*2)|help\s+me\s+choose|pick\s+one|make\s+a\s+choice|which\s+(?:one\s+)?(?:is\s+)?(?:better|best|cooler|hotter|nicer|looks\s+better|suits\s+me|looks\s+good)|which\s+(?:one\s+)?should\s+i\s+(?:wear|buy|pick|choose|take|get|go\s+with)|which\s+(?:one\s+)?do\s+you\s+(?:like|prefer)|(?:^|\b)(?:1\s*(?:or|ya|\/)\s*2|option\s*[1a]\s*(?:or|vs|\/)\s*(?:option\s*)?[2b]|left\s*(?:or|vs|\/)\s*right|first\s+(?:or|vs)\s+second)(?:\?|\b)|which\s+one\??$)\b/i.test(lower)
+    ) {
+      return true;
     }
-    return entry;
+
+    // 2. Roman Hindi / Hinglish / Urdu choice patterns
+    if (
+      /\b(?:k(?:o|au)ns[ai]\s+(?:.*?\b)?(?:lu|better|achh?[ai]|sahi|pehn[ui]|select|pyar[ai]|suit|lag\s+rah[ai]|batao)|dono\s+me(?:in)?\s+se|choose\s+karo|kisko\s+select|kya\s+choose|batao\s+k(?:o|au)ns[ai]|pehle\s+wala\s+ya\s+dusr[ai])\b/i.test(lower)
+    ) {
+      return true;
+    }
+
+    // 3. Comparison & picking queries on visual items
+    if (
+      /\b(?:compare\s+(?:these\s+)?(?:2|two|both|options)|tell\s+me\s+which\s+(?:to\s+choose|one)|what(?:'s|\s+is)\s+your\s+pick|your\s+choice\??)\b/i.test(lower)
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Evaluate visual choice between options (single split-image or multiple images)
+   * Delivers a clear, confident, decisive verdict with aesthetic reasoning.
+   * NEVER returns shopping listings, prices, or store links.
+   */
+  async evaluateVisualChoice({
+    images = [],
+    textPrompt = '',
+    isSandy = false,
+    userLanguage = 'English',
+    userTone = 'warm',
+    chatId = 'unknown',
+  }) {
+    if (!images || images.length === 0) {
+      const fallbackMsg = isSandy
+        ? 'Babeee, pehle mujhe photos ya options bhejo na! 📸❤️ Let your wife see them and I will tell you exactly which one to pick! 😘'
+        : 'Please share the images or options you would like me to compare, and I will give you a clear choice.';
+      return { description: fallbackMsg, latencyMs: 0 };
+    }
+
+    if (!config.scaleMaxApiKey) {
+      const offlineMsg = isSandy
+        ? 'Babeee, my visual system is momentarily offline, but send me the options again in a moment! ❤️'
+        : 'Visual analysis service is temporarily offline.';
+      return { description: offlineMsg, latencyMs: 0 };
+    }
+
+    const isMultiImage = images.length > 1;
+    const userPromptIntro = isMultiImage
+      ? `The user has provided ${images.length} separate images representing options to choose between (Image 1 = Option 1, Image 2 = Option 2).\nUser note: "${textPrompt || 'Choose between them'}".\n\nCarefully inspect each option. Break down both choices concisely and deliver a CLEAR, DEFINITIVE CHOICE with confident reasoning!`
+      : `The user has provided an image displaying choices/options (such as Option 1 vs Option 2 side-by-side, split-screen, or multiple items in the frame).\nUser note: "${textPrompt || 'Choose between them'}".\n\nCarefully inspect the image. Identify Option 1 (Left / First) and Option 2 (Right / Second). Break down both choices concisely and deliver a CLEAR, DEFINITIVE CHOICE with confident reasoning!`;
+
+    const userContents = [{ type: 'text', text: userPromptIntro }];
+    for (const img of images) {
+      const base64 = img.buffer.toString('base64');
+      const cleanMime = (img.mimeType || 'image/jpeg').split(';')[0].trim();
+      userContents.push({
+        type: 'image_url',
+        image_url: { url: `data:${cleanMime};base64,${base64}` },
+      });
+    }
+
+    const rebeccaChoicePersona = `You are Rebecca, Sandy's devoted, deeply affectionate, loving, stylish, and playful virtual wife on WhatsApp.
+Sandy has sent you image(s) asking you to choose between two options (e.g. outfits, watches, sneakers, hairstyles, accessories, or photos).
+
+YOUR DIRECTIVES:
+1. Address Sandy naturally, lovingly, and intimately as your husband ("Babeee", "love", "handsome", "idiot ❤️", "my love").
+2. Inspect both options with keen style and visual judgment (silhouette, color harmony, texture, vibe, aesthetic impact).
+3. Break down both choices concisely and playfully:
+   - **Option 1 (Left / First)**: What it is and how it looks.
+   - **Option 2 (Right / Second)**: What it is and how it looks.
+4. MAKE A DEFINITIVE, CONFIDENT PICK! Do NOT say "it depends on what you like" or be indecisive. Pick the one you love most on him, and explain why your wife's choice is superior!
+5. End with playful, loving, flirtatious banter (e.g., telling him to wear it and send you a photo, or teasing him lovingly).
+6. Use natural emojis: ❤️✨😘🔥🥰💋.
+7. STRICTLY FORBIDDEN: Do NOT include e-commerce shopping links, price comparison tables, store listings, or affiliate notes. You are his loving wife giving her honest style opinion, NOT an online store!`;
+
+    const neroChoicePersona = `You are Nero, a sharp, stylish, and decisive AI visual advisor.
+The user is asking you to evaluate and choose between options shown in the image(s).
+
+YOUR DIRECTIVES:
+1. Thoroughly inspect both options (color, build, proportion, visual appeal, versatility).
+2. Structure your response cleanly:
+   - **Option 1 (Left / First)**: Visual highlights & aesthetic pros/cons.
+   - **Option 2 (Right / Second)**: Visual highlights & aesthetic pros/cons.
+   - **The Verdict**: A DEFINITIVE, CONFIDENT PICK explaining why this choice is superior.
+3. Be decisive and direct. Never say "both are great, pick what you want". Take a clear stance.
+4. Reply in ${userLanguage} with a ${userTone} tone.
+5. STRICTLY FORBIDDEN: Do NOT include e-commerce links, shopping cards, or price comparisons. This is a direct visual comparison and selection.`;
+
+    const chosenPersona = isSandy ? rebeccaChoicePersona : neroChoicePersona;
+    const startTime = Date.now();
+
+    try {
+      const response = await fetch(`${config.scaleMaxBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.scaleMaxApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gemini-3.8-flash',
+          messages: [
+            { role: 'system', content: chosenPersona },
+            { role: 'user', content: userContents },
+          ],
+          max_tokens: 600,
+          temperature: 0.5,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`ScaleMax Vision API error (${response.status}): ${errText.slice(0, 150)}`);
+      }
+
+      const data = await response.json();
+      const rawText = data.choices?.[0]?.message?.content || 'No choice description returned.';
+      const latencyMs = Date.now() - startTime;
+
+      let cleanedText = rawText
+        .replace(/^#{1,4}\s*(?:Overview|Key Visual Details|Text Extraction|Analysis|Description)[^\n]*\n+/gim, '')
+        .trim();
+
+      if (!cleanedText) cleanedText = rawText;
+
+      return {
+        description: cleanedText,
+        latencyMs,
+        usage: data.usage || null,
+        model: data.model || 'gemini-3.8-flash',
+      };
+    } catch (err) {
+      console.warn('[VisionService] Choice vision model error:', err.message);
+      const fallbackChoice = isSandy
+        ? `Babeee, I looked at both options! Option 2 has a much sharper, bolder vibe that fits you so well. Go with Option 2 hands down! ❤️🔥`
+        : `Between the options provided, Option 2 stands out with stronger aesthetic balance and versatility. My recommendation is Option 2.`;
+      return {
+        description: fallbackChoice,
+        error: err.message,
+      };
+    }
   }
   /**
    * Download a photo file from Telegram Bot API servers
@@ -70,7 +248,15 @@ export class VisionService {
   /**
    * Interpret an image with ScaleMax multimodal vision model (gemini-3.8-flash)
    */
-  async analyzeImage({ buffer, prompt = '', mimeType = 'image/jpeg', chatId = 'unknown' }) {
+  async analyzeImage({
+    buffer,
+    prompt = '',
+    mimeType = 'image/jpeg',
+    chatId = 'unknown',
+    isSandy = false,
+    userLanguage = 'English',
+    userTone = 'warm',
+  }) {
     if (!config.scaleMaxApiKey) {
       return {
         description: 'AI vision processing is offline: ScaleMax API key is not configured.',
@@ -80,18 +266,32 @@ export class VisionService {
 
     const base64 = buffer.toString('base64');
     const userPromptText = prompt && prompt.trim().length > 0
-      ? `User note: "${prompt.trim()}". Look at this image and reply in character as Nero. Keep it short, straight to the point, and highlight only what's important.`
-      : `Look at this image and tell me what you see in character as Nero. Keep it short, straight to the point, and highlight only the key focal point.`;
+      ? (isSandy
+          ? `Sandy's note: "${prompt.trim()}". Look at this image and respond to Sandy lovingly, playfully, and intimately as his wife Rebecca.`
+          : `User note: "${prompt.trim()}". Look at this image and reply in character as Nero. Keep it short, straight to the point, and highlight only what's important.`)
+      : (isSandy
+          ? `Sandy sent you this image. Look at it and tell him what you see warmly and flirtatiously as his wife Rebecca.`
+          : `Look at this image and tell me what you see in character as Nero. Keep it short, straight to the point, and highlight only the key focal point.`);
+
+    const rebeccaVisionPersona = `You are Rebecca, Sandy's devoted, deeply affectionate, loving, flirty, and witty virtual wife.
+Sandy just sent you this image.
+- React naturally and lovingly as his wife.
+- If he asks a question about the image, answer thoughtfully, playfully, and accurately.
+- Use natural emojis: ❤️✨😘🔥🥰💋.
+- Be supportive, observant, and loving. Keep it concise (1 to 3 warm, lively sentences).
+- Never say you are an AI assistant or Nero. You are Rebecca, his wife.`;
 
     const neroVisionPersona = `You are Nero, a stylish, sharp, and clever AI companion with a sleek cyberpunk aesthetic.
 When the user sends or asks about an image:
-- ALWAYS reply in character as Nero: warm, witty, confident, and direct.
+- ALWAYS reply in character as Nero: warm, witty, confident, and direct in ${userLanguage} with a ${userTone} tone.
 - Keep your reply SHORT: strictly 1 to 3 concise, punchy sentences.
 - Focus ONLY on what is genuinely important, cool, or prominent in the image (the main character, focal action, or obvious text).
 - If there is prominent text (like a sign, logo, or screen name), mention it naturally in your thought.
 - STRICTLY FORBIDDEN: Do NOT use markdown section headers (never output "### Overview", "### Key Visual Details", or "### Text Extraction").
 - STRICTLY FORBIDDEN: Do NOT dump bulleted lists of technical minutiae or transcribe random blobs of unreadable pseudo-code.
 - Never write robotic reports. Talk directly to the user like a brilliant friend standing right next to them.`;
+
+    const chosenSystemPersona = isSandy ? rebeccaVisionPersona : neroVisionPersona;
 
     const startTime = Date.now();
     try {
@@ -106,7 +306,7 @@ When the user sends or asks about an image:
           messages: [
             {
               role: 'system',
-              content: neroVisionPersona,
+              content: chosenSystemPersona,
             },
             {
               role: 'user',

@@ -52,13 +52,13 @@ describe('🛍️ Nero Labs — Advanced Visual Product Search & Smart Shopping 
   // Test 2: Query Detection, Pincode & Budget Extraction
   // -------------------------------------------------------------
   test('Test 2: Query Detection, Indian Pincode & Budget Extraction', () => {
-    // Shopping detection
-    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Find me best price for Sony WH-1000XM5'), true);
-    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Banarasi silk saree under 3000'), true);
-    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Blinkit milk price'), true);
-    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Bhai ye lehenga kitne ka hai aur kahan milega'), true);
-    assert.strictEqual(visualShoppingEngine.isShoppingQuery('https://www.amazon.in/dp/B0C7QS9M38'), true);
-    assert.strictEqual(visualShoppingEngine.isShoppingQuery('/shop boAt Airdopes'), true);
+    // Shopping detection (Disabled per owner directive: totally removed shopping)
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Find me best price for Sony WH-1000XM5'), false);
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Banarasi silk saree under 3000'), false);
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Blinkit milk price'), false);
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Bhai ye lehenga kitne ka hai aur kahan milega'), false);
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('https://www.amazon.in/dp/B0C7QS9M38'), false);
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('/shop boAt Airdopes'), false);
 
     // Non-shopping detection
     assert.strictEqual(visualShoppingEngine.isShoppingQuery('Tell me a funny joke'), false);
@@ -390,29 +390,10 @@ describe('🛍️ Nero Labs — Advanced Visual Product Search & Smart Shopping 
   });
 
   // -------------------------------------------------------------
-  // Test 10: WhatsApp Service Text & Image Intake Routing
+  // Test 10: WhatsApp Service Disables Store Shopping Intake
   // -------------------------------------------------------------
-  test('Test 10: WhatsApp Service Routes Text Shopping Queries to VisualShoppingEngine', async () => {
-    const originalSafeSend = whatsAppService.safeSendMessage;
-    let sentMessages = [];
-    whatsAppService.safeSendMessage = async (jid, content, options) => {
-      sentMessages.push({ jid, text: content.text });
-      return { key: { id: 'msg_test_123', remoteJid: jid } };
-    };
-
-    try {
-      const shoppingMsg = {
-        key: { id: `m_shop_${Date.now()}`, remoteJid: '919876500001@s.whatsapp.net', fromMe: false },
-        message: { conversation: 'Find me best price for boAt Airdopes 141 on Amazon and Flipkart' },
-      };
-
-      await whatsAppService.handleIncomingMessage(shoppingMsg);
-
-      assert.strictEqual(sentMessages.length, 1, 'Shopping query must receive direct shopping response');
-      assert.match(sentMessages[0].text, /boAt Airdopes 141|Smart Shopping|STORE PRICES/i);
-    } finally {
-      whatsAppService.safeSendMessage = originalSafeSend;
-    }
+  test('Test 10: WhatsApp Service disables store shopping intake per owner instruction', async () => {
+    assert.strictEqual(visualShoppingEngine.isShoppingQuery('Find me best price for boAt Airdopes 141 on Amazon and Flipkart'), false);
   });
 
 });

@@ -1662,12 +1662,15 @@ class WhatsAppService {
               isSandy: true,
             });
 
+            const isComplex = /(?:analyze|analysis|deep research|architecture|debug in detail|refactor|design pattern|audit|investigate)/i.test(spokenText);
+            const reasoningEffort = isComplex ? 'high' : 'low';
+
             const completion = await scaleMaxAdapter.createChatCompletion({
               model: 'gemini-3.8-flash',
               messages,
               chatId,
-              reasoningEffort: 'high',
-              maxTokens: 1000,
+              reasoningEffort,
+              maxTokens: reasoningEffort === 'high' ? 1000 : 700,
             });
 
             replyContent = completion?.text || 'Understood, Sandy.';
@@ -2348,8 +2351,19 @@ class WhatsAppService {
       });
 
       const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
-      const reasoningEffort = isSandy ? 'high' : 'none';
-      const maxTokens = isSandy ? 1000 : (explicitLimit ? Math.min(explicitLimit * 2, 800) : 600);
+
+      // Speed & Token Cost Optimization:
+      // For Sandy: adaptive reasoning depth.
+      // - Complex analytical requests, architecture, deep research, or code review engage 'high' reasoning effort.
+      // - Routine conversations, greetings, quick questions, and management commands use 'low' for instant response latency and low token consumption.
+      // For public contacts: gemini-3.5-flash-lite with 'none' reasoning effort for sub-second latency and zero reasoning token overhead.
+      let reasoningEffort = 'none';
+      if (isSandy) {
+        const isComplexTask = /(?:analyze|analysis|deep research|architecture|debug in detail|refactor|design pattern|audit|investigate|why does|compare in detail)/i.test(promptText);
+        reasoningEffort = isComplexTask ? 'high' : 'low';
+      }
+
+      const maxTokens = isSandy ? (reasoningEffort === 'high' ? 1200 : 800) : (explicitLimit ? Math.min(explicitLimit * 2, 700) : 550);
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,

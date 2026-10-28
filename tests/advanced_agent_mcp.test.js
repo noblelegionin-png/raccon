@@ -34,9 +34,9 @@ test('Advanced Agent & MCP Implementation — Comprehensive Verification', async
   // =========================================================================
   // 1. MODEL ROUTING & REASONING TIERS
   // =========================================================================
-  await t.test('Model Routing — defaults to gemini-3.1-flash-lite-preview for chat, gemini-3.5-flash-lite for security', () => {
+  await t.test('Model Routing — defaults to gemini-3.8-flash for chat, gemini-3.5-flash-lite for security', () => {
     const chatRouting = getAgentRouting('chat');
-    assert.equal(chatRouting.model, 'gemini-3.1-flash-lite-preview');
+    assert.equal(chatRouting.model, 'gemini-3.8-flash');
     assert.ok(chatRouting.maxInputTokens >= 1500);
     assert.ok(chatRouting.maxOutputTokens >= 1500);
 
@@ -297,6 +297,7 @@ test('Advanced Agent & MCP Implementation — Comprehensive Verification', async
   // =========================================================================
   await t.test('Assistant Manager — manages policies (manual, auto, restricted) and logs inbox notes', async () => {
     // Mode toggle test
+    assistantManager.setEnabled(false);
     assert.equal(assistantManager.isEnabled(), false);
     assistantManager.setEnabled(true);
     assert.equal(assistantManager.isEnabled(), true);

@@ -158,7 +158,9 @@ export function buildWhatsAppChatContext({
   senderName,
   isSandy = false,
 }) {
-  const history = getRecentConversation(chatId, Math.max(config.maxContextMessages || 30, 40));
+  // History retrieval tuned for maximum token efficiency and low latency while preserving multi-turn continuity
+  const historyLimit = isSandy ? 25 : 20;
+  const history = getRecentConversation(chatId, historyLimit);
   const explicitLimit = extractExplicitWordLimit(promptText);
   const detectedIntent = detectUserIntent(promptText);
 
@@ -182,13 +184,14 @@ export function buildWhatsAppChatContext({
 
   const messages = [{ role: 'system', content: systemDirective }];
 
-  // Include recent conversation window with truncation safety (supports prolonged conversations)
+  // Include recent conversation window with token-efficient truncation safety
   for (const item of history) {
     if (item.role === 'user' || item.role === 'assistant') {
+      const maxLen = item.role === 'assistant' ? 750 : 1000;
       const content =
-        item.role === 'assistant' && item.content.length > 1500
-          ? item.content.slice(0, 1500) + '...'
-          : item.content;
+        item.content && item.content.length > maxLen
+          ? item.content.slice(0, maxLen) + '...'
+          : (item.content || '');
       messages.push({
         role: item.role,
         content,

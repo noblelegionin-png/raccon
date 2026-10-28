@@ -217,7 +217,15 @@ export class ScaleMaxAdapter {
    * @param {string} params.chatId - Telegram chat ID for tracking
    * @returns {Promise<{text: string, usage: Object, latencyMs: number, model: string}>}
    */
-  async createChatCompletion({ model, messages, chatId = 'unknown', reasoningEffort = null, maxTokens = null }) {
+  async createChatCompletion({
+    model,
+    messages,
+    chatId = 'unknown',
+    reasoningEffort = null,
+    maxTokens = null,
+    max_tokens = null,
+    temperature = 0.5,
+  }) {
     if (!this.isConfigured()) {
       throw new Error(
         'ScaleMax provider is disconnected. Please configure SCALEMAX_API_KEY in the bot environment.'
@@ -236,8 +244,8 @@ export class ScaleMaxAdapter {
         const payload = {
           model: targetModel,
           messages,
-          temperature: 0.5,
-          max_tokens: maxTokens || 450,
+          temperature: typeof temperature === 'number' ? temperature : 0.5,
+          max_tokens: maxTokens || max_tokens || 450,
         };
 
         const effort = reasoningEffort || 'none';

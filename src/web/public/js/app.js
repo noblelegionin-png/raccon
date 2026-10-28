@@ -292,7 +292,7 @@ function setupLiveChat() {
         <div class="chat-bubble chat-bubble-assistant">
           <div class="bubble-header">
             <span class="bubble-sender">Nero</span>
-            <span class="bubble-model">Gemini 3.1 Flash</span>
+            <span class="bubble-model">Gemini 3.8 Flash</span>
           </div>
           <div class="bubble-text">
             Chat history cleared! How can I assist you today? 💖
@@ -306,7 +306,7 @@ function setupLiveChat() {
   });
 }
 
-function appendChatBubble(role, message, modelName = 'Gemini 3.1 Flash') {
+function appendChatBubble(role, message, modelName = 'Gemini 3.8 Flash') {
   const container = document.getElementById('chatMessagesContainer');
   if (!container) return;
 

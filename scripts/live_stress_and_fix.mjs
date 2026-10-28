@@ -96,28 +96,28 @@ async function testLiveAIModels() {
     fail('Live Model: gemini-3.5-flash-lite Low-Token Coder', err);
   }
 
-  // Test 1C: Gemini 3.1 Flash (Conversational Core)
+  // Test 1C: GPT-6 Luna (Conversational Core)
   try {
     const t0 = Date.now();
     const res = await scaleMaxAdapter.createChatCompletion({
-      model: 'gemini-3.1-flash-lite-preview',
+      model: 'gpt-6-luna',
       messages: [
         { role: 'system', content: 'You are Nero Labs AI. Reply cordially in 1 sentence.' },
         { role: 'user', content: 'Hello! Are you online and responsive?' },
       ],
-      chatId: 'live_test_31',
+      chatId: 'live_test_luna',
     });
     const latency = Date.now() - t0;
-    recordTokens(res.usage.prompt_tokens, res.usage.completion_tokens, 'gemini-3.1-flash-lite-preview');
-    if (!res.text || res.text.length < 5) throw new Error('Empty completion from gemini-3.1-flash-lite-preview');
-    pass('Live Model: gemini-3.1-flash-lite-preview Chat Responsiveness', {
+    recordTokens(res.usage.prompt_tokens, res.usage.completion_tokens, 'gpt-6-luna');
+    if (!res.text || res.text.length < 5) throw new Error('Empty completion from gpt-6-luna');
+    pass('Live Model: gpt-6-luna Chat Responsiveness', {
       latencyMs: latency,
       inTokens: res.usage.prompt_tokens,
       outTokens: res.usage.completion_tokens,
       replySnippet: res.text.trim().slice(0, 80),
     });
   } catch (err) {
-    fail('Live Model: gemini-3.1-flash-lite-preview Chat Responsiveness', err);
+    fail('Live Model: gpt-6-luna Chat Responsiveness', err);
   }
 }
 

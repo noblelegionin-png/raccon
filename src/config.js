@@ -47,7 +47,7 @@ export const config = {
   latencyThresholdMs: 1000,
   maxContextMessages: 20,
   maxRetryCount: 1,
-  requestTimeoutMs: 15000,
+  requestTimeoutMs: 30000,
 };
 
 // Validate critical configuration on startup

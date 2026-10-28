@@ -27,9 +27,9 @@ import { initDatabase, getDb } from '../src/db/index.js';
 initDatabase();
 
 test('1. Model Architecture & Catalogue Routing Verification', () => {
-  // Conversational default must be gemini-3.1-flash-lite-preview (Gemini 3.1 Flash)
+  // Conversational default must be gemini-3.8-flash (Gemini 3.8 Flash)
   const chatRoute = getAgentRouting('chat');
-  assert.equal(chatRoute.model, 'gemini-3.1-flash-lite-preview');
+  assert.equal(chatRoute.model, 'gemini-3.8-flash');
 
   // Management and coding model must be gemini-3.5-flash-lite (Gemini 3.5 Flash Light)
   const mgmtRoute = getAgentRouting('management');
@@ -43,8 +43,8 @@ test('1. Model Architecture & Catalogue Routing Verification', () => {
   assert.equal(mediaRoute.model, 'gemini-3.8-flash');
 
   // Active model switching works cleanly
-  setActiveModelId('gemini-3.1-flash-lite-preview');
-  assert.equal(getActiveModelId(), 'gemini-3.1-flash-lite-preview');
+  setActiveModelId('gemini-3.5-flash-lite');
+  assert.equal(getActiveModelId(), 'gemini-3.5-flash-lite');
 });
 
 test('2. Persistent Maintenance & Edit Mode Service', async () => {

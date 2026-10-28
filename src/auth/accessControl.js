@@ -56,7 +56,7 @@ export function verifyDashboardAccessKey(providedKey, ipAddress = 'unknown') {
  */
 export function requireOwnerAuth(req, res, next) {
   const initData = req.headers['x-telegram-init-data'];
-  const accessKey = req.headers['x-dashboard-access-key'];
+  const accessKey = req.headers['x-dashboard-access-key'] || req.body?.accessKey || req.query?.accessKey;
   const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
 
   // 1. Try Telegram WebApp initData

@@ -55,10 +55,10 @@ async function main() {
   });
 
   // 4. Start Telegram Bot Long-Polling
-  if (config.telegramBotToken) {
+  if (config.telegramEnabled && config.telegramBotToken) {
     await startBot();
   } else {
-    console.log('[TelegramBot] Bot long-polling skipped (No TELEGRAM_BOT_TOKEN provided).');
+    console.log('[TelegramBot] Telegram bot is UNDEPLOYED / DISABLED (TELEGRAM_ENABLED=false). Long-polling skipped.');
   }
 
   // 4b. Start WhatsApp 24/7 Live Bridge

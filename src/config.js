@@ -17,6 +17,7 @@ function cleanEnv(val, fallback = '') {
 
 export const config = {
   // Telegram
+  telegramEnabled: cleanEnv(process.env.TELEGRAM_ENABLED, 'false') === 'true',
   telegramBotToken: cleanEnv(process.env.TELEGRAM_BOT_TOKEN),
   telegramOwnerId: cleanEnv(process.env.TELEGRAM_OWNER_ID),
 
@@ -53,11 +54,13 @@ export const config = {
 // Validate critical configuration on startup
 export function validateConfig() {
   const issues = [];
-  if (!config.telegramBotToken) {
-    issues.push('TELEGRAM_BOT_TOKEN is not set. Bot will run in diagnostic/offline mode.');
-  }
-  if (!config.telegramOwnerId) {
-    issues.push('TELEGRAM_OWNER_ID is not set. Owner authentication cannot be verified.');
+  if (config.telegramEnabled) {
+    if (!config.telegramBotToken) {
+      issues.push('TELEGRAM_BOT_TOKEN is not set. Telegram bot will remain offline.');
+    }
+    if (!config.telegramOwnerId) {
+      issues.push('TELEGRAM_OWNER_ID is not set. Telegram owner authentication cannot be verified.');
+    }
   }
   if (!config.scaleMaxApiKey) {
     issues.push('SCALEMAX_API_KEY is not set. AI provider calls will report disconnected status.');

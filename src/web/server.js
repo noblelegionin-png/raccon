@@ -415,9 +415,18 @@ export function createWebServer() {
         </ol>
       </div>
 
-      <div class="footer-actions">
-        <a href="/owner.html" class="btn">👑 Owner Console</a>
-        <a href="https://t.me/NeroLabsBot" target="_blank" class="btn btn-primary">📱 Telegram Bot</a>
+      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);">
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Or Link with Phone Number (8-digit code):</p>
+        <div style="display: flex; gap: 8px; justify-content: center;">
+          <input id="phoneNumberInput" type="text" placeholder="e.g. 919317741936" style="background:#0b0f19; border:1px solid var(--border); color:#fff; padding:8px 12px; border-radius:8px; font-size:12px; width:65%;" />
+          <button onclick="requestPairingCode()" class="btn btn-primary" style="padding:8px 14px; font-size:12px;">Get Code</button>
+        </div>
+        <div id="pairingCodeDisplay" style="display:none; margin-top:12px; padding:10px; background:rgba(16,185,129,0.15); border:1px dashed var(--primary); border-radius:8px; font-size:18px; font-weight:800; letter-spacing:2px; color:var(--primary);"></div>
+      </div>
+
+      <div class="footer-actions" style="margin-top: 18px;">
+        <button onclick="location.reload()" class="btn">🔄 Refresh Page</button>
+        <a href="/owner.html" class="btn btn-primary">👑 Owner Console</a>
       </div>
     </div>
 
@@ -429,13 +438,59 @@ export function createWebServer() {
       </div>
       <h1 id="connTitle">WhatsApp Successfully Linked!</h1>
       <p id="connSubtitle" class="subtitle">Nero is now actively responding to your WhatsApp messages with persistent memory.</p>
-      <div class="footer-actions">
+      <div class="footer-actions" style="flex-direction: column; gap: 10px;">
         <a href="/owner.html" class="btn btn-primary">Open Owner Console</a>
+        <button onclick="resetWhatsApp()" class="btn" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;">🔌 Disconnect & Pair Different Phone</button>
       </div>
     </div>
   </div>
 
   <script>
+    async function requestPairingCode() {
+      const num = document.getElementById('phoneNumberInput').value.trim();
+      if (!num) return alert('Please enter phone number with country code (e.g. 919317741936)');
+      const box = document.getElementById('pairingCodeDisplay');
+      box.style.display = 'block';
+      box.textContent = 'Generating pairing code...';
+      try {
+        const res = await fetch('/api/whatsapp/pair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-dashboard-access-key': 'nero_labs_secret_key_2026' },
+          body: JSON.stringify({ phoneNumber: num, accessKey: 'nero_labs_secret_key_2026' })
+        });
+        const data = await res.json();
+        if (data.ok && data.pairingCode) {
+          box.textContent = 'CODE: ' + data.pairingCode;
+        } else {
+          box.textContent = 'Error: ' + (data.error || 'Failed to get code');
+        }
+      } catch (err) {
+        box.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    async function resetWhatsApp() {
+      if (!confirm('Are you sure you want to disconnect WhatsApp and generate a fresh QR code?')) return;
+      try {
+        const res = await fetch('/api/whatsapp/disconnect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-dashboard-access-key': 'nero_labs_secret_key_2026' },
+          body: JSON.stringify({ accessKey: 'nero_labs_secret_key_2026' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert('Session reset! Generating fresh QR code...');
+          document.getElementById('connectedView').style.display = 'none';
+          document.getElementById('liveView').style.display = 'block';
+          checkStatus();
+        } else {
+          alert(data.error || 'Could not disconnect session');
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
     async function checkStatus() {
       try {
         const res = await fetch('/api/whatsapp/status');

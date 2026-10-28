@@ -137,6 +137,7 @@ export async function stopBot() {
 
 export function getBotStatus() {
   return {
+    isEnabled: Boolean(config.telegramEnabled),
     isConfigured: Boolean(config.telegramBotToken),
     isRunning: isBotRunning,
   };

@@ -1022,7 +1022,7 @@ class WhatsAppService {
       // Handle incoming messages
       sock.ev.on('messages.upsert', async (chatUpdate) => {
         try {
-          if (chatUpdate.type !== 'notify') return;
+          if (chatUpdate.type !== 'notify' && chatUpdate.type !== 'append') return;
           for (const msg of chatUpdate.messages) {
             await this.handleIncomingMessage(msg);
           }
@@ -1071,11 +1071,8 @@ class WhatsAppService {
         : (msg.messageTimestamp?.low || Number(msg.messageTimestamp) || 0);
       const msgTsMs = msgTsSec * 1000;
       const now = Date.now();
-      const startup = typeof this.startedAt === 'number'
-        ? this.startedAt
-        : (new Date(this.startedAt).getTime() || now);
-      // Drop any historical message older than 3 minutes or received before this process started (with 30s grace)
-      if (msgTsMs > 0 && (msgTsMs < startup - 30000 || (now - msgTsMs) > 180000)) {
+      // Drop any historical message older than 5 minutes (300s)
+      if (msgTsMs > 0 && (now - msgTsMs) > 300000) {
         console.log(`[WhatsApp Stale Message] Dropping old message ${msg.key?.id} (age: ${Math.round((now - msgTsMs) / 1000)}s)`);
         return;
       }

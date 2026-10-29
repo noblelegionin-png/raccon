@@ -27,24 +27,24 @@ import { initDatabase, getDb } from '../src/db/index.js';
 initDatabase();
 
 test('1. Model Architecture & Catalogue Routing Verification', () => {
-  // Conversational default must be gemini-3.8-flash (Gemini 3.8 Flash)
+  // Conversational default is gpt-6-luna (GPT-6 Luna)
   const chatRoute = getAgentRouting('chat');
-  assert.equal(chatRoute.model, 'gemini-3.8-flash');
+  assert.equal(chatRoute.model, 'gpt-6-luna');
 
-  // Management and coding model must be gemini-3.5-flash-lite (Gemini 3.5 Flash Light)
+  // Management and coding model is gpt-6-luna
   const mgmtRoute = getAgentRouting('management');
-  assert.equal(mgmtRoute.model, 'gemini-3.5-flash-lite');
+  assert.equal(mgmtRoute.model, 'gpt-6-luna');
 
   const coderRoute = getAgentRouting('coding');
-  assert.equal(coderRoute.model, 'gemini-3.5-flash-lite');
+  assert.equal(coderRoute.model, 'gpt-6-luna');
 
   // Media / vision default
   const mediaRoute = getAgentRouting('media');
-  assert.equal(mediaRoute.model, 'gemini-3.8-flash');
+  assert.equal(mediaRoute.model, 'gpt-6-luna');
 
   // Active model switching works cleanly
-  setActiveModelId('gemini-3.5-flash-lite');
-  assert.equal(getActiveModelId(), 'gemini-3.5-flash-lite');
+  setActiveModelId('gpt-6-luna');
+  assert.equal(getActiveModelId(), 'gpt-6-luna');
 });
 
 test('2. Persistent Maintenance & Edit Mode Service', async () => {

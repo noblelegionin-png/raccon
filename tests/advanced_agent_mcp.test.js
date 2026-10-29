@@ -34,19 +34,19 @@ test('Advanced Agent & MCP Implementation — Comprehensive Verification', async
   // =========================================================================
   // 1. MODEL ROUTING & REASONING TIERS
   // =========================================================================
-  await t.test('Model Routing — defaults to gemini-3.8-flash for chat, gemini-3.5-flash-lite for security', () => {
+  await t.test('Model Routing — defaults to gpt-6-luna across all agent roles', () => {
     const chatRouting = getAgentRouting('chat');
-    assert.equal(chatRouting.model, 'gemini-3.8-flash');
+    assert.equal(chatRouting.model, 'gpt-6-luna');
     assert.ok(chatRouting.maxInputTokens >= 1500);
     assert.ok(chatRouting.maxOutputTokens >= 1500);
 
     const secRouting = getAgentRouting('security');
-    assert.equal(secRouting.model, 'gemini-3.5-flash-lite');
-    assert.equal(secRouting.reasoning, 'high');
+    assert.equal(secRouting.model, 'gpt-6-luna');
+    assert.equal(secRouting.reasoning, 'low');
 
     const mediaRouting = getAgentRouting('media');
-    assert.equal(mediaRouting.model, 'gemini-3.8-flash');
-    assert.equal(mediaRouting.reasoning, 'high');
+    assert.equal(mediaRouting.model, 'gpt-6-luna');
+    assert.equal(mediaRouting.reasoning, 'low');
   });
 
   await t.test('Model Routing — independently adjustable in database', () => {

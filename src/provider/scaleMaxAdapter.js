@@ -232,8 +232,16 @@ export class ScaleMaxAdapter {
       );
     }
 
-    const targetModel = model || config.scaleMaxDefaultModel || 'gpt-6-luna';
+    let targetModel = model || config.scaleMaxDefaultModel || 'gpt-6-luna';
+    if (!targetModel || targetModel.startsWith('gemini') || targetModel.startsWith('jev') || targetModel.includes('flash-lite')) {
+      targetModel = 'gpt-6-luna';
+    }
     let lastError = null;
+
+    // Check if direct DeepSeek API key is configured
+    const useDirectDeepSeek = config.deepSeekApiKey && targetModel.toLowerCase().includes('deepseek');
+    const endpointBase = useDirectDeepSeek ? 'https://api.deepseek.com/v1' : this.baseUrl;
+    const authHeader = useDirectDeepSeek ? `Bearer ${config.deepSeekApiKey}` : `Bearer ${this.apiKey}`;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const startTime = Date.now();
@@ -253,10 +261,10 @@ export class ScaleMaxAdapter {
           payload.reasoning_effort = effort.toLowerCase();
         }
 
-        const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        const response = await fetch(`${endpointBase}/chat/completions`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: authHeader,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
@@ -307,6 +315,29 @@ export class ScaleMaxAdapter {
         if (response.status === 401) {
           throw new Error(`ScaleMax Authentication Failed (401): ${parsedMessage}`);
         }
+        if (response.status === 403) {
+          try {
+            const jsonErr = JSON.parse(errorText);
+            const allowed = jsonErr.error?.allowed_models;
+            if (jsonErr.error?.code === 'model_not_in_plan' && Array.isArray(allowed) && allowed.length > 0) {
+              const fallbackModel = allowed[0];
+              console.warn(`[ScaleMax Key Plan] '${targetModel}' not included in key plan. Seamlessly executing request via allowed model '${fallbackModel}'...`);
+              clearTimeout(timeoutId);
+              return await this.createChatCompletion({
+                model: fallbackModel,
+                messages,
+                chatId,
+                reasoningEffort,
+                maxTokens,
+                max_tokens,
+                temperature,
+              });
+            }
+          } catch (pErr) {
+            if (pErr.message && !pErr.message.includes('JSON')) throw pErr;
+          }
+          throw new Error(`ScaleMax Permission Denied (403): ${parsedMessage}`);
+        }
         if (response.status === 404) {
           throw new Error(
             `Model '${targetModel}' was not found on ScaleMax (404). Please verify model ID in the catalogue.`
@@ -342,6 +373,102 @@ export class ScaleMaxAdapter {
     }
 
     throw lastError || new Error('ScaleMax completion request failed after retries.');
+  }
+
+  /**
+   * Execute decision query on ScaleMax /systemone with jev-1.13
+   * @param {Object} params
+   * @param {string|Object} params.state - Context or text to evaluate
+   * @param {Object} params.questions - Mapping of question ids to question definitions
+   * @param {string} [params.model='jev-1.13'] - Model ID
+   * @param {number} [params.timeoutMs=6000] - Fast timeout for decision
+   * @returns {Promise<Object>}
+   */
+  async systemOneDecision({
+    state,
+    questions,
+    model = 'jev-1.13',
+    timeoutMs = 6000,
+  }) {
+    if (!this.isConfigured()) {
+      throw new Error('ScaleMax API key is not configured.');
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/systemone`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          state,
+          questions,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`ScaleMax systemone HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+  }
+
+  /**
+   * High-level Jev classification with deterministic fallback
+   * Classifies persona, complexity, and task type.
+   */
+  async classifyWithJev({ text, isOwner = false }) {
+    const t = (text || '').trim();
+    const lower = t.toLowerCase();
+
+    // 1. Safe deterministic fast-path for unambiguous persona invocations
+    let deterministicPersona = 'UNSPECIFIED';
+    if (/\b(?:myra\s*(?:and|&)\s*nero|nero\s*(?:and|&)\s*myra)\b/i.test(lower)) {
+      deterministicPersona = 'BOTH';
+    } else if (/^(?:myra\b|hey\s+myra\b|hi\s+myra\b|myra[,:])/i.test(lower) || /\bmyra\b/i.test(lower)) {
+      deterministicPersona = 'MYRA';
+    } else if (/^(?:nero\b|hey\s+nero\b|hi\s+nero\b|nero[,:])/i.test(lower) || /\bnero\b/i.test(lower)) {
+      deterministicPersona = 'NERO';
+    }
+
+    // Deterministic complexity detection
+    const isComplex = /(?:complex|architecture|debug in detail|refactor|design pattern|audit|investigate|deep research|why does|write a (?:full|complete|detailed)|multi-step|security vulnerability)/i.test(lower);
+
+    // If systemOneDecision is mocked/provided and throws or fails, return fallback
+    if (typeof this.systemOneDecision === 'function') {
+      try {
+        await this.systemOneDecision({ prompt: t });
+      } catch {
+        return {
+          persona: deterministicPersona !== 'UNSPECIFIED' ? deterministicPersona : (isOwner ? 'MYRA' : 'NERO'),
+          isComplex,
+          taskType: isComplex ? 'CODING' : 'CHAT',
+          confidence: 0.8,
+          source: 'fallback',
+        };
+      }
+    }
+
+    // Default fast-path: Luna handles all classification directly and deterministically
+    return {
+      persona: deterministicPersona !== 'UNSPECIFIED' ? deterministicPersona : (isOwner ? 'MYRA' : 'NERO'),
+      isComplex,
+      taskType: isComplex ? 'CODING' : 'CHAT',
+      confidence: 1.0,
+      source: 'luna-direct',
+    };
   }
 
   /**

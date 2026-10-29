@@ -5,50 +5,50 @@ export const SUPPORTED_REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhi
 
 export const DEFAULT_ROUTING = {
   chat: {
-    model: 'gemini-3.8-flash',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 32000,
     maxOutputTokens: 8000,
   },
   management: {
-    model: 'gemini-3.5-flash-lite',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 16000,
     maxOutputTokens: 8000,
   },
   coding: {
-    model: 'gemini-3.5-flash-lite',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 16000,
     maxOutputTokens: 8000,
   },
   security: {
-    model: 'gemini-3.5-flash-lite',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 16000,
     maxOutputTokens: 8000,
   },
   media: {
-    model: 'gemini-3.8-flash',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 16000,
     maxOutputTokens: 8000,
   },
   research: {
-    model: 'gemini-3.8-flash',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 32000,
     maxOutputTokens: 8000,
   },
   browsing: {
-    model: 'gemini-3.8-flash',
-    reasoning: 'high',
+    model: 'gpt-6-luna',
+    reasoning: 'low',
     targetTokens: 4000,
     maxInputTokens: 32000,
     maxOutputTokens: 8000,
@@ -206,4 +206,52 @@ export function truncateOutputSafely(text, maxOutputTokens = 1500) {
   const suffixTokens = estimateTokenCount(suffix);
   const targetChars = Math.max(20, Math.floor((maxOutputTokens - suffixTokens - 5) * 3.8));
   return text.slice(0, targetChars) + suffix;
+}
+
+/**
+ * Resolves model and reasoning effort according to MYRA AI routing rules:
+ *
+ * Request                                             | Model      | Reasoning
+ * ----------------------------------------------------+------------+------------------
+ * Ordinary user normal conversation                   | gpt-6-luna | low
+ * NERO normal conversation                            | gpt-6-luna | low
+ * NERO complex task                                   | gpt-6-luna | high
+ * NERO tool-assisted complex workflow                 | gpt-6-luna | high
+ * Owner speaking to MYRA privately                    | gpt-6-luna | max
+ * Owner explicitly selecting MYRA in authorized ctx   | gpt-6-luna | max
+ * Owner selecting both personas                       | gpt-6-luna | max (or dual-eval)
+ */
+export function resolveRoutingForRequest({
+  persona = 'NERO',
+  isOwner = false,
+  isComplex = false,
+  isToolTask = false,
+  isPrivateDm = true,
+} = {}) {
+  // If not owner, persona cannot be MYRA (Myra is strictly private to owner)
+  const effectivePersona = (persona === 'MYRA' && !isOwner) ? 'NERO' : persona;
+
+  if (effectivePersona === 'MYRA') {
+    return {
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
+      persona: 'MYRA',
+    };
+  }
+
+  if (effectivePersona === 'BOTH') {
+    return {
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
+      persona: 'BOTH',
+    };
+  }
+
+  // NERO or Ordinary user
+  const needsHigh = isComplex || isToolTask;
+  return {
+    model: 'gpt-6-luna',
+    reasoningEffort: needsHigh ? 'high' : 'low',
+    persona: 'NERO',
+  };
 }

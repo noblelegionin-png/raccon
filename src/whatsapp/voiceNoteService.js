@@ -265,7 +265,7 @@ export class VoiceNoteService {
     buffer,
     mimeType = 'audio/ogg',
     durationSec = 0,
-    model = 'gemini-3.8-flash',
+    model = 'gpt-6-luna',
   }) {
     if (!config.scaleMaxApiKey) {
       return {
@@ -410,7 +410,7 @@ export class VoiceNoteService {
         buffer,
         mimeType: voiceNote.mime_type || 'audio/ogg',
         durationSec: voiceNote.duration_sec || 0,
-        model: 'gemini-3.8-flash',
+        model: 'gpt-6-luna',
       });
 
       originalTranscript = result.originalTranscript;
@@ -481,7 +481,7 @@ export class VoiceNoteService {
       buffer,
       mimeType,
       durationSec,
-      model: isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite',
+      model: 'gpt-6-luna',
     });
 
     const reply = isSandy

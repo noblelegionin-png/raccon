@@ -170,7 +170,7 @@ Instructions:
 4. Keep the output punchy, factual, and mobile-friendly.`;
 
     try {
-      const activeModel = getActiveModelId() || 'gemini-3.8-flash';
+      const activeModel = getActiveModelId() || 'gpt-6-luna';
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages: [{ role: 'user', content: prompt }],

@@ -177,6 +177,6 @@ test('👑 Root Owner Universal Knowledge & Natural Language Action Suite', asyn
     assert.ok(res?.handled);
     assert.equal(res.actionName, 'code_fix');
     assert.ok(replyText.includes('a + b'));
-    assert.ok(replyText.includes('Gemini 3.5 Flash Lite'));
+    assert.ok(replyText.includes('GPT-6 Luna'));
   });
 });

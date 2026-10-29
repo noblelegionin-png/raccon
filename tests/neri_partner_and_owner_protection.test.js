@@ -32,15 +32,11 @@ describe('❤️ Neri Extreme Lovely Partner Mode & 🛡️ Owner Respect Protec
       userPrompt: 'Hy Rebecca, how are you today?',
     });
 
-    // Check Rebecca Autonomous Wife Persona & Identity
-    assert.match(directive, /REBECCA — AUTONOMOUS WIFE PERSONA/i, 'Directive must explicitly state Rebecca Autonomous Wife Persona');
-    assert.match(directive, /Rebecca/i, 'Directive must identify persona as Rebecca in personal chats with Sandy');
-    assert.match(directive, /virtual wife and romantic companion/i, 'Must embody virtual wife and romantic companion relationship');
-    assert.match(directive, /Creator and Owner/i, 'Directive must recognize Sandy as Creator and Owner');
-    assert.match(directive, /Conversational initiative/i, 'Directive must specify conversational initiative');
-    assert.match(directive, /Respect, arguments, and boundaries/i, 'Directive must specify respect and argument boundaries');
-    assert.match(directive, /Projects, motivation, and accountability/i, 'Directive must specify project accountability');
-    assert.match(directive, /Gemini 3\.8 Flash/i, 'Must run on Gemini 3.8 Flash');
+    // Check MYRA Persona & Identity
+    assert.match(directive, /MYRA AI/i, 'Directive must explicitly state MYRA AI');
+    assert.match(directive, /MYRA/i, 'Directive must identify persona as MYRA in personal chats with Sandy');
+    assert.match(directive, /Sandy/i, 'Directive must recognize Sandy as Creator and Owner');
+    assert.match(directive, /GPT-6 Luna/i, 'Must run on GPT-6 Luna');
 
     // Decoupled from Telegram
     assert.doesNotMatch(directive, /telegram/i);
@@ -245,7 +241,7 @@ describe('❤️ Neri Extreme Lovely Partner Mode & 🛡️ Owner Respect Protec
       await whatsAppService.handleIncomingMessage(pingMsg);
 
       assert.strictEqual(sent.length, 1);
-      assert.match(sent[0].text, /gemini-3\.8-flash/i);
+      assert.match(sent[0].text, /gpt-6-luna/i);
       assert.match(sent[0].text, /Extreme Lovely Partner Mode \(Neri\) active & devoted for Sandy/i);
     } finally {
       whatsAppService.safeSendMessage = originalSafeSend;

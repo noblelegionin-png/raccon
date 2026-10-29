@@ -2,6 +2,7 @@ import { InputFile } from 'grammy';
 import { config } from '../config.js';
 import { googleDriveAdapter } from '../storage/driveAdapter.js';
 import { getAgentRouting } from '../models/modelRouter.js';
+import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import {
   recordAttachment,
   searchAttachments,
@@ -162,46 +163,40 @@ YOUR DIRECTIVES:
     const startTime = Date.now();
 
     try {
-      const response = await fetch(`${config.scaleMaxBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.scaleMaxApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gemini-3.8-flash',
-          messages: [
-            { role: 'system', content: chosenPersona },
-            { role: 'user', content: userContents },
-          ],
-          max_tokens: 600,
-          temperature: 0.5,
-        }),
+      const choicePrompt = `User choice request: "${textPrompt || 'Which option is better? Choose between the options.'}". Give your definitive verdict between Option 1 and Option 2 with confidence.`;
+      const userContent = [
+        { type: 'text', text: choicePrompt },
+        ...images.map(img => {
+          const b64 = Buffer.isBuffer(img.buffer) ? img.buffer.toString('base64') : (typeof img.base64 === 'string' ? img.base64 : '');
+          const mime = img.mimeType || 'image/jpeg';
+          return b64 ? { type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } } : null;
+        }).filter(Boolean),
+      ];
+
+      const completion = await scaleMaxAdapter.createChatCompletion({
+        model: 'gpt-6-luna',
+        messages: [
+          { role: 'system', content: chosenPersona },
+          { role: 'user', content: userContent.length > 1 ? userContent : choicePrompt },
+        ],
+        maxTokens: 500,
+        temperature: 0.5,
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`ScaleMax Vision API error (${response.status}): ${errText.slice(0, 150)}`);
-      }
-
-      const data = await response.json();
-      const rawText = data.choices?.[0]?.message?.content || 'No choice description returned.';
-      const latencyMs = Date.now() - startTime;
-
-      let cleanedText = rawText
+      let cleanedText = (completion.text || '')
         .replace(/^#{1,4}\s*(?:Overview|Key Visual Details|Text Extraction|Analysis|Description)[^\n]*\n+/gim, '')
         .trim();
 
-      if (!cleanedText) cleanedText = rawText;
+      if (!cleanedText) cleanedText = completion.text;
 
       return {
         description: cleanedText,
-        latencyMs,
-        usage: data.usage || null,
-        model: data.model || 'gemini-3.8-flash',
+        latencyMs: completion.latencyMs,
+        usage: completion.usage || null,
+        model: completion.model || 'gpt-6-luna',
       };
     } catch (err) {
-      console.warn('[VisionService] Choice vision model error:', err.message);
+      console.warn('[VisionService] Choice model error:', err.message);
       const fallbackChoice = isSandy
         ? `Babeee, I looked at both options! Option 2 has a much sharper, bolder vibe that fits you so well. Go with Option 2 hands down! ❤️🔥`
         : `Between the options provided, Option 2 stands out with stronger aesthetic balance and versatility. My recommendation is Option 2.`;
@@ -295,43 +290,31 @@ When the user sends or asks about an image:
 
     const startTime = Date.now();
     try {
-      const response = await fetch(`${config.scaleMaxBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.scaleMaxApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gemini-3.8-flash',
-          messages: [
-            {
-              role: 'system',
-              content: chosenSystemPersona,
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: userPromptText },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:${mimeType};base64,${base64}` },
-                },
-              ],
-            },
-          ],
-          max_tokens: 280,
-          temperature: 0.4,
-        }),
+      const userContent = base64
+        ? [
+            { type: 'text', text: userPromptText },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+          ]
+        : userPromptText;
+
+      const completion = await scaleMaxAdapter.createChatCompletion({
+        model: 'gpt-6-luna',
+        messages: [
+          {
+            role: 'system',
+            content: chosenSystemPersona,
+          },
+          {
+            role: 'user',
+            content: userContent,
+          },
+        ],
+        maxTokens: 350,
+        temperature: 0.4,
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`ScaleMax Vision API error (${response.status}): ${errText.slice(0, 150)}`);
-      }
-
-      const data = await response.json();
-      const rawText = data.choices?.[0]?.message?.content || 'No description returned.';
-      const latencyMs = Date.now() - startTime;
+      const rawText = completion.text || '';
+      const latencyMs = completion.latencyMs || (Date.now() - startTime);
 
       // Clean up any stray academic headers or codeblocks if the model somehow slipped
       let cleanedText = rawText
@@ -340,16 +323,17 @@ When the user sends or asks about an image:
         .trim();
 
       if (!cleanedText) {
-        cleanedText = rawText;
+        cleanedText = isSandy
+          ? "Baby, you look amazing! Love this so much ❤️✨"
+          : "Photo received and logged! How can I assist you with this? ✨";
       }
-
-      const usage = data.usage || null;
 
       return {
         description: cleanedText,
+        ocrText: '',
         latencyMs,
-        usage,
-        model: data.model || activeModel,
+        usage: completion.usage || null,
+        model: completion.model || 'deepseek-v4-flash',
       };
     } catch (err) {
       console.warn('[VisionService] Vision model inference error:', err.message);

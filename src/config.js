@@ -21,10 +21,11 @@ export const config = {
   telegramBotToken: cleanEnv(process.env.TELEGRAM_BOT_TOKEN),
   telegramOwnerId: cleanEnv(process.env.TELEGRAM_OWNER_ID),
 
-  // ScaleMax
+  // ScaleMax & Model Provider
   scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY),
-  scaleMaxBaseUrl: (cleanEnv(process.env.SCALEMAX_BASE_URL, 'https://api.scalemax.pro/v1')).replace(/\/+$/, ''),
-  scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gemini-3.8-flash'),
+  scaleMaxBaseUrl: (cleanEnv(process.env.SCALEMAX_BASE_URL, 'https://api.scalemax.pro/token/v1')).replace(/\/+$/, ''),
+  scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gpt-6-luna'),
+  deepSeekApiKey: cleanEnv(process.env.DEEPSEEK_API_KEY),
 
   // Dashboard Security
   dashboardAccessKey: cleanEnv(process.env.DASHBOARD_ACCESS_KEY),

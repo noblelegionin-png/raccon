@@ -92,8 +92,9 @@ test('🛡️ Sandy DM Silence, /mute and Replay Prevention Verification', async
     };
 
     await whatsAppService.handleIncomingMessage(msg);
-    assert.strictEqual(sentMessages.length, 1, 'Bot must respond when Sandy explicitly tags @nero');
-    assert.match(sentMessages[0].text, /available|online|assist|Nero/i);
+    const sentForChat = sentMessages.filter(m => m.jid === contactJid);
+    assert.strictEqual(sentForChat.length, 1, 'Bot must respond when Sandy explicitly tags @nero');
+    assert.match(sentForChat[0].text, /available|online|assist|Nero/i);
   });
 
   await t.test('6. Stale/old messages from WhatsApp sync (>3 min old) -> Dropped immediately', async () => {

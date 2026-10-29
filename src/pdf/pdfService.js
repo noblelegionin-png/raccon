@@ -311,8 +311,8 @@ export class PdfService {
             Title: title,
             Author: author,
             Subject: subtitle,
-            Creator: 'Nero Labs Enterprise PDF Engine',
-            Producer: 'PDFKit & Gemini 3.8 Flash',
+            Creator: 'MYRA AI Enterprise PDF Engine',
+            Producer: 'PDFKit & GPT-6 Luna',
             CreationDate: new Date(),
           },
         });
@@ -410,7 +410,7 @@ export class PdfService {
           doc.fontSize(9.5).font('Helvetica').fillColor(TEXT_COLOR)
             .text(`• Prepared By: ${author}`)
             .text(`• Publication Date: ${date}`)
-            .text(`• Intelligence Engine: Gemini 3.8 Flash (High Reasoning)`)
+            .text(`• Intelligence Engine: GPT-6 Luna (High Reasoning)`)
             .text(`• Attached Visual Figures: ${sanitizedImages.length} asset(s)`)
             .text(`• Distribution: Executive & Private Circulation Only`);
 
@@ -703,10 +703,10 @@ Target Scale: ${pages} pages.
 Include exhaustive technical explanations, structured tables, and key insights.
 `.trim();
 
-    // High Reasoning Gemini 3.8 Flash Call
+    // High Reasoning GPT-6 Luna Call
     const tokenLimit = Math.min(Math.max(pages * 450, 1200), 7500);
     const completion = await scaleMaxAdapter.createChatCompletion({
-      model: 'gemini-3.8-flash',
+      model: 'gpt-6-luna',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -848,7 +848,7 @@ Please provide your high-reasoning document analysis now:
 
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
-        model: 'gemini-3.8-flash',
+        model: 'gpt-6-luna',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

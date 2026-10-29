@@ -199,7 +199,7 @@ TRANSCRIPT:
 ${transcriptContent.slice(0, 3000)}`;
 
           const completion = await scaleMaxAdapter.createChatCompletion({
-            model: 'gemini-3.8-flash',
+            model: 'gpt-6-luna',
             messages: [{ role: 'user', content: prompt }],
             chatId,
           });

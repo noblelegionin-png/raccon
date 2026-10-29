@@ -763,7 +763,7 @@ export async function tryExecuteOwnerIntent(ctx, text, isPrivate = false) {
     await ctx.api.editMessageText(
       ctx.chat.id,
       msg.message_id,
-      `⚡ *NERO LABS LATENCY DIAGNOSTICS*\n\n• *Telegram API*: \`${tgLatency} ms\`\n• *SQLite Local DB*: \`${dbLatency} ms\`\n• *AI Provider*: 🟢 Gemini 3.5 Flash Lite`,
+      `⚡ *NERO LABS LATENCY DIAGNOSTICS*\n\n• *Telegram API*: \`${tgLatency} ms\`\n• *SQLite Local DB*: \`${dbLatency} ms\`\n• *AI Provider*: 🟢 GPT-6 Luna`,
       { parse_mode: 'Markdown' }
     ).catch(() => {});
     return { handled: true, actionName: 'ping' };
@@ -786,7 +786,7 @@ export async function tryExecuteOwnerIntent(ctx, text, isPrivate = false) {
     reply += `  - Failed: ${result.failedCount} chats 🔴\n`;
     reply += `  - Skipped: ${result.skippedCount} chats ⚪\n`;
     reply += `• *Active Controller*: Sandy (\`${userId}\`)\n`;
-    reply += `• *Management Model*: \`gemini-3.5-flash-lite\`\n\n`;
+    reply += `• *Management Model*: \`gpt-6-luna\`\n\n`;
     reply += `_Ordinary group and user replies are suspended. Send "exit edit mode" or /edit_mode off to resume service._`;
     await ctx.reply(reply, { parse_mode: 'Markdown' });
     return { handled: true, actionName: 'maintenance_enable' };
@@ -939,14 +939,15 @@ export async function tryExecuteOwnerIntent(ctx, text, isPrivate = false) {
       const prompt = `You are a Principal Software Engineer. Fix this code with minimal tokens. Provide only the clean drop-in fixed code block and a 1-sentence explanation of what was fixed:\n\n${targetCode}`;
       try {
         const completion = await scaleMaxAdapter.createChatCompletion({
-          model: 'gemini-3.5-flash-lite',
+          model: getActiveModelId() || 'gpt-6-luna',
           messages: [{ role: 'user', content: prompt }],
           chatId: 'owner_fix_coder',
           temperature: 0.1,
           maxTokens: 350,
+          reasoningEffort: 'xhigh',
         });
         const fixedText = completion?.text || 'Could not generate fix.';
-        const tokInfo = completion.usage ? `\n\n⚡ _Fixed in ${completion.usage.completion_tokens || 0} tokens via Gemini 3.5 Flash Lite_` : '';
+        const tokInfo = completion.usage ? `\n\n⚡ _Fixed in ${completion.usage.completion_tokens || 0} tokens via GPT-6 Luna_` : '';
         await ctx.reply(fixedText + tokInfo, {
           parse_mode: 'Markdown',
           reply_parameters: { message_id: ctx.message.message_id },

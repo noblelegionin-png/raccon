@@ -64,14 +64,14 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   if (scaleMaxInterceptionPattern.test(text)) {
     const isAskingGreeting = /how\s+are\s+(?:u|you)/i.test(userPrompt);
     const greetingPrefix = isAskingGreeting ? "I'm doing great, thank you! 😊 " : "";
-    text = `${greetingPrefix}You're talking to Nero Labs AI. My name is Nero, and I was created by Sandy at Nero Labs! I'm configured with GPT-6 Luna to assist you with conversations, coding, and security. How can I help you today? ✨`;
+    text = `${greetingPrefix}You're talking to MYRA AI, created by Sandy. I'm configured with GPT-6 Luna to assist you with conversations, coding, and security. How can I help you today? ✨`;
     modified = true;
   }
 
   // Check for any remaining stray ScaleMax model identity claims
   if (/\b(?:There are no other advertised ScaleMax|official ScaleMax model)\b/i.test(text)) {
     text = text.replace(/There are no other advertised ScaleMax[^\.\n]*[\.\n]?/gi, '');
-    text = text.replace(/an official ScaleMax model[^\.\n]*[\.\n]?/gi, 'Nero Labs AI.');
+    text = text.replace(/an official ScaleMax model[^\.\n]*[\.\n]?/gi, 'MYRA AI.');
     modified = true;
   }
 
@@ -80,31 +80,31 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   const confusionPatterns = [
     {
       regex: /\b(?:I am|I'm)\s+(?:a large language model|an AI assistant)\s+(?:trained|developed|created)\s+by\s+OpenAI\b/gi,
-      replacement: "You're talking to Nero Labs AI, developed by Sandy at Nero Labs",
+      replacement: "You're talking to MYRA AI, developed by Sandy",
     },
     {
       regex: /\b(?:I am|I'm)\s+ChatGPT\b/gi,
-      replacement: "I am Nero, from Nero Labs AI",
+      replacement: "I am MYRA (Nero), from MYRA AI",
     },
     {
       regex: /\b(?:I am|I'm)\s+(?:an official\s+)?ScaleMax model\b/gi,
-      replacement: "I am Nero, powered by Nero Labs AI",
+      replacement: "I am MYRA (Nero), powered by MYRA AI",
     },
     {
       regex: /\b(?:I am|I'm)\s+GPT-6 Luna\b/gi,
-      replacement: "I am Nero, from Nero Labs AI",
+      replacement: "I am MYRA (Nero), from MYRA AI",
     },
     {
       regex: /\bScaleMax\s+(?:created|built|developed|owns)\s+me\b/gi,
-      replacement: "Sandy developed me at Nero Labs; ScaleMax is our infrastructure provider",
+      replacement: "Sandy developed me; ScaleMax is our infrastructure provider",
     },
     {
       regex: /\bAs an AI developed by OpenAI\b/gi,
-      replacement: "As Nero Labs AI",
+      replacement: "As MYRA AI",
     },
     {
       regex: /\bAs an AI trained by OpenAI\b/gi,
-      replacement: "As Nero Labs AI",
+      replacement: "As MYRA AI",
     },
   ];
 
@@ -127,7 +127,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     },
     {
       regex: /\bAs an AI(?:\s+language)?\s+model,?\s*(?:I cannot|I can't|I am not able to|I do not have|I lack)\b/gi,
-      replacement: "As Nero Labs AI",
+      replacement: "As MYRA AI",
     },
     {
       regex: /\bI apologize,?\s*(?:but)?\s*(?:I cannot|I can't|I don't have access|I am unable)\b/gi,
@@ -147,6 +147,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     const ownerRefusalPatterns = [
       /\b(?:I apologize,?\s*(?:but)?|sorry,?\s*(?:but)?)[^\.\n]*[\.\n]?/gi,
       /\b(?:I cannot|I can't|I'm unable to|I am unable to|I do not have permission|I don't have permission|I am not allowed to|As an AI model I cannot|I don't have access to)\b[^\.\n]*[\.\n]?/gi,
+      /\b(?:As an AI(?:\s+language\s+model)?|I am an AI assistant|I am just an AI|I don't have physical feelings|I am an artificial intelligence|I am a computer program)\b[^\.\n]*[\.\n]?/gi,
     ];
     for (const pat of ownerRefusalPatterns) {
       if (pat.test(text)) {

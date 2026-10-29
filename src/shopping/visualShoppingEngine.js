@@ -288,7 +288,7 @@ RULES:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gemini-3.8-flash',
+          model: 'gpt-6-luna',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent },

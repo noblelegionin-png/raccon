@@ -200,7 +200,7 @@ test('11. System Integrity & Backward Compatibility', async () => {
   // Verify 20 roles are intact
   assert.equal(Object.keys(ROLEPLAY_ROLES).length, 20);
 
-  // Verify primary model is configured to gemini-3.8-flash
-  setActiveModelId('gemini-3.8-flash');
-  assert.equal(getActiveModelId(), 'gemini-3.8-flash');
+  // Verify primary model is configured to gpt-6-luna
+  setActiveModelId('gpt-6-luna');
+  assert.equal(getActiveModelId(), 'gpt-6-luna');
 });

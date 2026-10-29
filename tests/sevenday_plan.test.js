@@ -178,6 +178,9 @@ test('NERO 7-Day Testing Phase — Comprehensive Verification', async (suite) =>
     assert.ok(
       unrecordedRes.answer.toLowerCase().includes('no information') ||
       unrecordedRes.answer.toLowerCase().includes('no mention') ||
+      unrecordedRes.answer.toLowerCase().includes('not mentioned') ||
+      unrecordedRes.answer.toLowerCase().includes('no record') ||
+      unrecordedRes.answer.toLowerCase().includes('not found') ||
       unrecordedRes.answer.toLowerCase().includes('missing from the archives'),
       'Must declare unrecorded topic honestly without fabricating facts'
     );

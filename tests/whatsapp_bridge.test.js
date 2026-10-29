@@ -173,20 +173,20 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.equal(noLimit, null);
   });
 
-  await t.test('12. Dedicated Gemini 3.8 Flash & High Reasoning Verification', async () => {
+  await t.test('12. Dedicated GPT-6 Luna & High Reasoning Verification', async () => {
     const { getActiveModelId, setActiveModelId } = await import('../src/models/catalogue.js');
     const { getAgentRouting, updateAgentRouting } = await import('../src/models/modelRouter.js');
     const { getConfig, setConfig } = await import('../src/db/index.js');
 
-    setConfig('active_model_id', 'gemini-3.8-flash');
+    setConfig('active_model_id', 'gpt-6-luna');
     setConfig('reasoning_effort', 'high');
-    updateAgentRouting('chat', { model: 'gemini-3.8-flash', reasoning: 'high' });
+    updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: 'high' });
 
-    assert.equal(getActiveModelId(), 'gemini-3.8-flash');
+    assert.equal(getActiveModelId(), 'gpt-6-luna');
     assert.equal(getConfig('reasoning_effort'), 'high');
 
     const chatRouting = getAgentRouting('chat');
-    assert.equal(chatRouting.model, 'gemini-3.8-flash');
+    assert.equal(chatRouting.model, 'gpt-6-luna');
     assert.equal(chatRouting.reasoning, 'high');
   });
 
@@ -363,8 +363,8 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     assert.match(contactDirective, /Single Coherent Reply/i);
 
     // MasterBot directive emphasizes supreme senior coder, manager & caretaker
-    assert.match(masterDirective, /MASTER CONSOLE/i);
-    assert.match(masterDirective, /Gemini 3\.8 Flash/i);
+    assert.match(masterDirective, /MYRA AI/i);
+    assert.match(masterDirective, /Sandy/i);
   });
 
   await t.test('19. Owner Chat Buttons & Quick Action Execution', async () => {
@@ -382,7 +382,7 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     try {
       await whatsAppService.executeOwnerAction('2', 'wa_sandy_master');
       assert.match(sentDiagnostic, /SYSTEM DIAGNOSTICS/i);
-      assert.match(sentDiagnostic, /gemini-3.8-flash/i);
+      assert.match(sentDiagnostic, /gpt-6-luna/i);
 
       // Test executeOwnerAction for routine
       await whatsAppService.executeOwnerAction('3', 'wa_sandy_master');

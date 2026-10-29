@@ -214,7 +214,7 @@ export class DocumentService {
   }
 
   /**
-   * Summarize educational document using Gemini 3.8 Flash
+   * Summarize educational document using DeepSeek V4 Flash
    */
   async summarizeDocument(docInfo, userFocus = '') {
     const text = this.extractTextFromBuffer(docInfo.buffer, docInfo.mimeType);
@@ -234,7 +234,7 @@ Instructions:
 4. Keep the output well-structured, clear, and mobile-friendly with markdown headers.`;
 
     try {
-      const activeModel = getActiveModelId() || 'gemini-3.8-flash';
+      const activeModel = getActiveModelId() || 'deepseek-v4-flash';
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages: [{ role: 'user', content: prompt }],

@@ -104,6 +104,24 @@ import { videoSearchService } from '../media/videoSearchService.js';
 import { productSearchService } from '../shopping/productSearchService.js';
 import { documentService } from '../documents/documentService.js';
 import { messageArchiver } from '../memory/archiver.js';
+import { companionStateService } from '../companion/companionStateService.js';
+import { workspaceService } from '../workspace/workspaceService.js';
+import { learningService } from '../learning/learningService.js';
+import { budgetService } from '../budget/budgetService.js';
+import { permissionService } from '../permissions/permissionService.js';
+import { selfImprovementService } from '../selfimprovement/selfImprovementService.js';
+import { proactiveService } from '../proactive/proactiveService.js';
+import { simulationService } from '../simulation/simulationService.js';
+import { taskService } from '../tasks/taskService.js';
+import { webResearchService } from '../research/webResearchService.js';
+import { mediaIntelligenceService } from '../media/mediaIntelligenceService.js';
+import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
+import { pdfToolkitService } from '../pdf/pdfToolkitService.js';
+import { skillTreeService } from '../skills/skillTreeService.js';
+import { myraScriptTranspiler } from '../language/myraScript.js';
+import { toolCreationPipeline } from '../toolmaker/toolCreationPipeline.js';
+import { universalMcpManager } from '../mcp/universalMcpManager.js';
+import { minecraftFramework } from '../minecraft/minecraftFramework.js';
 import crypto from 'node:crypto';
 import os from 'node:os';
 
@@ -1215,7 +1233,7 @@ export function createWebServer() {
           const codeSnippet = params.code || params.text || 'const x = undefined; x.length;';
           const prompt = `Fix and optimize this code with drop-in precision:\n${codeSnippet}`;
           const aiRes = await scaleMaxAdapter.createChatCompletion({
-            model: 'gemini-3.5-flash-lite',
+            model: 'gpt-6-luna',
             messages: [
               { role: 'system', content: 'You are an ultra-low-token drop-in software repair engineer. Output concise, exact fixed code.' },
               { role: 'user', content: prompt }
@@ -1230,12 +1248,12 @@ export function createWebServer() {
         case 'code': {
           const task = params.task || params.text || 'Write a debounce function in TypeScript';
           const aiRes = await scaleMaxAdapter.createChatCompletion({
-            model: 'gemini-3.8-flash',
+            model: 'gpt-6-luna',
             messages: [
               { role: 'system', content: 'You are an expert fullstack architect. Write clean, idiomatic code.' },
               { role: 'user', content: task }
             ],
-            reasoningEffort: 'medium',
+            reasoningEffort: 'high',
           });
           result.message = 'Code generated successfully';
           result.data = { code: aiRes.text, model: aiRes.model };
@@ -1243,14 +1261,14 @@ export function createWebServer() {
         }
 
         case 'summarize': {
-          const text = params.text || 'Nero Labs is an autonomous Telegram AI companion and platform.';
+          const text = params.text || 'MYRA AI is an autonomous WhatsApp AI companion and platform.';
           const aiRes = await scaleMaxAdapter.createChatCompletion({
-            model: 'gemini-3.5-flash-lite',
+            model: 'gpt-6-luna',
             messages: [
               { role: 'system', content: 'Provide a crisp 3-bullet executive summary.' },
               { role: 'user', content: text }
             ],
-            reasoningEffort: 'none',
+            reasoningEffort: 'low',
           });
           result.message = 'Executive summary generated';
           result.data = { summary: aiRes.text };
@@ -1258,15 +1276,15 @@ export function createWebServer() {
         }
 
         case 'translate': {
-          const text = params.text || 'Welcome to Nero Labs Master Console';
+          const text = params.text || 'Welcome to MYRA AI Master Console';
           const targetLang = params.targetLang || 'Hindi';
           const aiRes = await scaleMaxAdapter.createChatCompletion({
-            model: 'gemini-3.5-flash-lite',
+            model: 'gpt-6-luna',
             messages: [
               { role: 'system', content: `Translate text accurately into ${targetLang}.` },
               { role: 'user', content: text }
             ],
-            reasoningEffort: 'none',
+            reasoningEffort: 'low',
           });
           result.message = `Translated to ${targetLang}`;
           result.data = { translation: aiRes.text };
@@ -1303,12 +1321,12 @@ export function createWebServer() {
         case 'image': {
           const prompt = params.prompt || params.text || 'Futuristic command center';
           const aiRes = await scaleMaxAdapter.createChatCompletion({
-            model: 'gemini-3.5-flash-lite',
+            model: 'gpt-6-luna',
             messages: [
               { role: 'system', content: 'You are an elite prompt engineer. Synthesize an ultra-detailed, photorealistic image generation prompt.' },
               { role: 'user', content: `Create an expanded prompt for: ${prompt}` }
             ],
-            reasoningEffort: 'none',
+            reasoningEffort: 'low',
           });
           result.message = `Creative image prompt generated for "${prompt}"`;
           result.data = { prompt, expandedPrompt: aiRes.text };
@@ -2383,6 +2401,604 @@ export function createWebServer() {
       const { policy } = req.body;
       const updated = assistantManager.setPolicy(policy);
       res.json({ ok: true, policy: updated });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // =========================================================================
+  // MYRA'S LITTLE UNIVERSE & AUTONOMOUS WORKSPACE API
+  // =========================================================================
+
+  // Public Universe HTML Route
+  app.get('/universe', (req, res) => {
+    res.sendFile(path.join(publicDir, 'universe', 'index.html'));
+  });
+
+  // Public Universe API (Read-only, zero auth, strictly safe public items)
+  app.get('/api/universe/public', (req, res) => {
+    try {
+      const companionState = companionStateService.getState();
+      const world = simulationService.getWorldState();
+      const artifacts = workspaceService.listPublicShowcase();
+      const journals = workspaceService.listJournals({ includePrivate: false, limit: 10 });
+      const stats = workspaceService.getWorkspaceStats();
+
+      res.json({
+        ok: true,
+        companionState,
+        virtualLife: {
+          room: world.location,
+          activity: world.activity_detail,
+          outfit: world.current_outfit,
+        },
+        artifacts,
+        journals,
+        stats,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Private Workspace HTML Route
+  app.get('/workspace', (req, res) => {
+    res.sendFile(path.join(publicDir, 'workspace', 'index.html'));
+  });
+
+  // 1. Workspace Dashboard Overview (Private)
+  app.get('/api/workspace/dashboard', requireOwnerAuth, (req, res) => {
+    try {
+      const companionState = companionStateService.getState();
+      const world = simulationService.getWorldState();
+      const budget = budgetService.getBudgetStatus();
+      const stats = workspaceService.getWorkspaceStats();
+      const recentArtifacts = workspaceService.listArtifacts({ limit: 5 });
+      const recentJournals = workspaceService.listJournals({ limit: 5 });
+      const autonomousMode = proactiveService.isAutonomousModeActive();
+      const proactiveEnabled = proactiveService.isProactiveMessagingEnabled();
+
+      res.json({
+        ok: true,
+        companionState,
+        virtualLife: {
+          room: world.location,
+          activity: world.activity_detail,
+          outfit: world.current_outfit,
+        },
+        budget,
+        stats,
+        recentArtifacts,
+        recentJournals,
+        autonomousMode,
+        proactiveEnabled,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 2. Journals & Notes CRUD
+  app.get('/api/workspace/journals', requireOwnerAuth, (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit || '50', 10);
+      const journals = workspaceService.listJournals({ includePrivate: true, limit });
+      res.json({ ok: true, journals });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/journals', requireOwnerAuth, (req, res) => {
+    try {
+      const { title, content, mood, tags, isPrivate } = req.body;
+      const journal = workspaceService.createJournal({ title, content, mood, tags, isPrivate });
+      res.json({ ok: true, journal });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/workspace/journals/:id', requireOwnerAuth, (req, res) => {
+    try {
+      const deleted = workspaceService.deleteJournal(req.params.id);
+      res.json({ ok: deleted });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 3. Artifacts & Versions
+  app.get('/api/workspace/artifacts', requireOwnerAuth, (req, res) => {
+    try {
+      const { type, projectId } = req.query;
+      const artifacts = workspaceService.listArtifacts({ type, projectId });
+      res.json({ ok: true, artifacts });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/artifacts', requireOwnerAuth, (req, res) => {
+    try {
+      const { title, type, content, metadata, projectId, isPublic } = req.body;
+      const artifact = workspaceService.createArtifact({ title, type, content, metadata, projectId, isPublic });
+      res.json({ ok: true, artifact });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.put('/api/workspace/artifacts/:id', requireOwnerAuth, (req, res) => {
+    try {
+      const updated = workspaceService.updateArtifact(req.params.id, req.body);
+      res.json({ ok: Boolean(updated), artifact: updated });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/workspace/artifacts/:id', requireOwnerAuth, (req, res) => {
+    try {
+      const deleted = workspaceService.deleteArtifact(req.params.id);
+      res.json({ ok: deleted });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/workspace/artifacts/:id/history', requireOwnerAuth, (req, res) => {
+    try {
+      const history = workspaceService.getArtifactHistory(req.params.id);
+      res.json({ ok: true, history });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/artifacts/:id/rollback', requireOwnerAuth, (req, res) => {
+    try {
+      const { version } = req.body;
+      const result = workspaceService.rollbackArtifact(req.params.id, version);
+      res.json({ ok: result.success, ...result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 4. Learning & Skills
+  app.get('/api/workspace/skills', requireOwnerAuth, (req, res) => {
+    try {
+      const skills = learningService.listSkills();
+      res.json({ ok: true, skills });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/skills', requireOwnerAuth, (req, res) => {
+    try {
+      const skill = learningService.createSkill(req.body);
+      res.json({ ok: true, skill });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/workspace/lessons', requireOwnerAuth, (req, res) => {
+    try {
+      const lessons = learningService.listLessons();
+      res.json({ ok: true, lessons });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/lessons', requireOwnerAuth, (req, res) => {
+    try {
+      const lesson = learningService.teachLesson(req.body);
+      res.json({ ok: true, lesson });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 5. Budget & Spending
+  app.get('/api/workspace/budget', requireOwnerAuth, (req, res) => {
+    try {
+      const status = budgetService.getBudgetStatus();
+      res.json({ ok: true, status });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/budget/toggle', requireOwnerAuth, (req, res) => {
+    try {
+      const isPaused = budgetService.isPaused();
+      if (isPaused) {
+        budgetService.resumeAiActivity();
+      } else {
+        budgetService.pauseAiActivity('Manual owner toggle from Studio');
+      }
+      res.json({ ok: true, isPaused: !isPaused });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/budget/limits', requireOwnerAuth, (req, res) => {
+    try {
+      const { dailyLimit, monthlyLimit } = req.body;
+      if (dailyLimit !== undefined) budgetService.setDailyLimit(dailyLimit);
+      if (monthlyLimit !== undefined) budgetService.setMonthlyLimit(monthlyLimit);
+      res.json({ ok: true, status: budgetService.getBudgetStatus() });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 6. Self-Improvement Proposals
+  app.get('/api/workspace/proposals', requireOwnerAuth, (req, res) => {
+    try {
+      const proposals = selfImprovementService.listProposals();
+      res.json({ ok: true, proposals });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/proposals', requireOwnerAuth, (req, res) => {
+    try {
+      const proposal = selfImprovementService.createProposal(req.body);
+      res.json({ ok: true, proposal });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/proposals/:id/review', requireOwnerAuth, (req, res) => {
+    try {
+      const { approved, reviewer } = req.body;
+      const result = selfImprovementService.reviewProposal(req.params.id, { approved, reviewer });
+      res.json({ ok: result.success, ...result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/proposals/:id/rollback', requireOwnerAuth, (req, res) => {
+    try {
+      const result = selfImprovementService.rollbackProposal(req.params.id);
+      res.json({ ok: result.success, ...result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 7. Speed & Latency Mode
+  app.post('/api/workspace/speed', requireOwnerAuth, (req, res) => {
+    try {
+      const { mode } = req.body;
+      if (mode !== 'fast' && mode !== 'deep') {
+        return res.status(400).json({ ok: false, error: 'Mode must be fast or deep' });
+      }
+      setConfig('sandy_speed_mode', mode);
+      res.json({ ok: true, speedMode: mode });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // 8. Permissions Registry
+  app.get('/api/workspace/permissions', requireOwnerAuth, (req, res) => {
+    try {
+      const permissions = permissionService.listPermissions();
+      res.json({ ok: true, permissions });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/permissions/:key', requireOwnerAuth, (req, res) => {
+    try {
+      const { tier } = req.body;
+      const updated = permissionService.updatePermissionTier(req.params.key, tier);
+      res.json({ ok: Boolean(updated), permission: updated });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ============================================================================
+  // MYRA SELF-EXPANDING MASTER FRAMEWORK ENDPOINTS
+  // ============================================================================
+
+  // --- 1. Web Intelligence Endpoints ---
+  app.post('/api/research/conduct', requireOwnerAuth, async (req, res) => {
+    try {
+      const { topic, query, fetchMedia } = req.body;
+      const dossier = await webResearchService.conductResearch({ topic, query, fetchMedia });
+      res.json({ ok: true, dossier });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/research/dossiers', requireOwnerAuth, (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit, 10) || 20;
+      const dossiers = webResearchService.listDossiers(limit);
+      res.json({ ok: true, dossiers });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/research/dossiers/:uuid', requireOwnerAuth, (req, res) => {
+    try {
+      const dossier = webResearchService.getDossier(req.params.uuid);
+      if (!dossier) return res.status(404).json({ ok: false, error: 'Dossier not found' });
+      res.json({ ok: true, dossier });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/research/dossiers/:uuid/resume', requireOwnerAuth, async (req, res) => {
+    try {
+      const { followUpQuery } = req.body;
+      const updated = await webResearchService.resumeResearch(req.params.uuid, followUpQuery);
+      res.json({ ok: true, dossier: updated });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 2. Media Intelligence & Drive Endpoints ---
+  app.post('/api/media/search', requireOwnerAuth, async (req, res) => {
+    try {
+      const { query } = req.body;
+      const results = await mediaIntelligenceService.findOrSearchMedia(query);
+      res.json({ ok: true, ...results });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/media/quota', requireOwnerAuth, async (req, res) => {
+    try {
+      const quota = await mediaIntelligenceService.inspectStorageQuota();
+      res.json({ ok: true, ...quota });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/media/screenshot', requireOwnerAuth, async (req, res) => {
+    try {
+      const { url } = req.body;
+      const shot = await mediaIntelligenceService.captureWebpageScreenshot(url);
+      res.json({ ok: true, ...shot });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 3. Universal Media Downloader Endpoints ---
+  app.post('/api/download/start', requireOwnerAuth, async (req, res) => {
+    try {
+      const { url } = req.body;
+      const wizard = await mediaDownloaderService.startDownloadWizard(url);
+      res.json({ ok: true, ...wizard });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/download/execute', requireOwnerAuth, async (req, res) => {
+    try {
+      const { jobUuid, format, resolution } = req.body;
+      const outcome = await mediaDownloaderService.executeDownload(jobUuid, { format, resolution });
+      res.json({ ok: true, ...outcome });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/download/:token', (req, res) => {
+    try {
+      const item = mediaDownloaderService.getDownloadByToken(req.params.token);
+      if (!item) return res.status(404).json({ ok: false, error: 'Download token not found or expired' });
+      if (item.expired) return res.status(410).json({ ok: false, error: 'Download link has expired (24h limit)' });
+
+      if (item.filePath && fs.existsSync(item.filePath)) {
+        res.download(item.filePath, item.fileName);
+      } else {
+        res.status(404).json({ ok: false, error: 'File payload no longer available on disk' });
+      }
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 4. Dynamic Skill Tree Endpoints ---
+  app.get('/api/skills/tree', requireOwnerAuth, async (req, res) => {
+    try {
+      const tree = await skillTreeService.getSkillTree();
+      res.json({ ok: true, ...tree });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/skills/register', requireOwnerAuth, (req, res) => {
+    try {
+      const skill = skillTreeService.registerSkill(req.body);
+      res.json({ ok: true, skill });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/skills/:skillId/prerequisites', requireOwnerAuth, async (req, res) => {
+    try {
+      const prereqs = await skillTreeService.checkPrerequisites(req.params.skillId);
+      res.json({ ok: true, ...prereqs });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 5. MyraScript DSL Endpoints ---
+  app.post('/api/myrascript/execute', requireOwnerAuth, async (req, res) => {
+    try {
+      const { code, env } = req.body;
+      const execution = await myraScriptTranspiler.execute(code, {}, env);
+      res.json({ ok: true, ...execution });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/myrascript/transpile', requireOwnerAuth, (req, res) => {
+    try {
+      const { code, target = 'javascript' } = req.body;
+      const transpiled = target === 'python'
+        ? myraScriptTranspiler.toPython(code)
+        : myraScriptTranspiler.toJavaScript(code);
+      res.json({ ok: true, target, code: transpiled });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 6. Tool Creation Pipeline Endpoints ---
+  app.get('/api/tools', requireOwnerAuth, (req, res) => {
+    try {
+      const status = req.query.status || null;
+      const tools = toolCreationPipeline.listTools(status);
+      res.json({ ok: true, tools });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/tools/create', requireOwnerAuth, async (req, res) => {
+    try {
+      const result = await toolCreationPipeline.createCustomTool(req.body);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/tools/:name/approve', requireOwnerAuth, async (req, res) => {
+    try {
+      const approved = await toolCreationPipeline.approveAndActivateTool(req.params.name, 'Sandy');
+      res.json({ ok: true, tool: approved });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/tools/:name/execute', requireOwnerAuth, async (req, res) => {
+    try {
+      const outcome = await toolCreationPipeline.executeTool(req.params.name, req.body.args || {});
+      res.json({ ok: true, ...outcome });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/tools/:name/rollback', requireOwnerAuth, async (req, res) => {
+    try {
+      const reverted = await toolCreationPipeline.rollbackTool(req.params.name, req.body.reason);
+      res.json({ ok: true, tool: reverted });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 7. Universal MCP Endpoints ---
+  app.get('/api/mcp/servers', requireOwnerAuth, (req, res) => {
+    try {
+      const servers = universalMcpManager.listServers();
+      res.json({ ok: true, servers });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/mcp/servers', requireOwnerAuth, async (req, res) => {
+    try {
+      const registered = await universalMcpManager.registerServer(req.body);
+      res.json({ ok: true, server: registered });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/mcp/servers/:id/connect', requireOwnerAuth, async (req, res) => {
+    try {
+      const connected = await universalMcpManager.connectServer(req.params.id);
+      res.json({ ok: true, server: connected });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/mcp/servers/:id/disconnect', requireOwnerAuth, async (req, res) => {
+    try {
+      const disconnected = await universalMcpManager.disconnectServer(req.params.id);
+      res.json({ ok: true, server: disconnected });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/api/mcp/servers/health', requireOwnerAuth, async (req, res) => {
+    try {
+      const health = await universalMcpManager.checkAllHealth();
+      res.json({ ok: true, health });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // --- 8. Minecraft Framework Endpoints ---
+  app.get('/api/minecraft/framework/profiles', requireOwnerAuth, (req, res) => {
+    try {
+      const profiles = minecraftFramework.listProfiles(req.query.edition);
+      res.json({ ok: true, profiles });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/minecraft/framework/profiles', requireOwnerAuth, async (req, res) => {
+    try {
+      const profile = await minecraftFramework.configureServerProfile(req.body);
+      res.json({ ok: true, profile });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/minecraft/framework/packs/generate', requireOwnerAuth, async (req, res) => {
+    try {
+      const bundle = await minecraftFramework.bundleAddonPack(req.body);
+      res.json({ ok: true, ...bundle });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/minecraft/framework/companion/broadcast', requireOwnerAuth, (req, res) => {
+    try {
+      const { event, details, isSandy } = req.body;
+      const formatted = minecraftFramework.formatCompanionMessage(event, details, isSandy);
+      res.json({ ok: true, ...formatted });
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message });
     }

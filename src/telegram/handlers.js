@@ -505,7 +505,7 @@ export function registerBotHandlers(bot) {
       let text = `🛠️ *EDIT MODE & MAINTENANCE STATUS*\n\n`;
       text += `• *Status*: ${report.active ? '🔴 ACTIVE (Replies Paused)' : '🟢 INACTIVE (Operational)'}\n`;
       text += `• *Started At*: \`${report.startedAt || 'N/A'}\`\n`;
-      text += `• *Active Management Model*: \`gemini-3.5-flash-lite\`\n`;
+      text += `• *Active Management Model*: \`gpt-6-luna\`\n`;
       text += `• *Broadcast Delivery Summary*:\n`;
       text += `  - Sent: ${report.summary.sent}\n`;
       text += `  - Failed: ${report.summary.failed}\n`;
@@ -528,7 +528,7 @@ export function registerBotHandlers(bot) {
     reply += `  - Failed: ${result.failedCount} chats 🔴\n`;
     reply += `  - Skipped: ${result.skippedCount} chats ⚪\n`;
     reply += `• *Authorized Controller*: Sandy (\`${userId}\`)\n`;
-    reply += `• *Management & Coder Model*: \`gemini-3.5-flash-lite\`\n\n`;
+    reply += `• *Management & Coder Model*: \`gpt-6-luna\`\n\n`;
     reply += `_Ordinary group & user replies are suspended. Only owner management directives and coding tools are accepted._\n\n`;
     reply += `Send \`/edit_mode off\` or tell me *"exit edit mode"* to resume service.`;
 
@@ -601,7 +601,7 @@ export function registerBotHandlers(bot) {
 
   // Minecraft features decommissioned
   bot.command(['game_mode', 'gamemode', 'game_status', 'gamestatus', 'game_reasoning', 'gamereasoning', 'game_group', 'mc', 'minecraft', 'narrow', 'setskin', 'set_skin'], async (ctx) => {
-    return ctx.reply('ℹ️ Minecraft companion features have been disabled. Nero is operating 24/7 as your AI conversational assistant powered by Gemini 3.5 Flash Lite.');
+    return ctx.reply('ℹ️ Minecraft companion features have been disabled. Nero is operating 24/7 as your AI conversational assistant powered by GPT-6 Luna.');
   });
 
   // /master on | off (Owner only)
@@ -1094,8 +1094,8 @@ export function registerBotHandlers(bot) {
       `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
       `• *WhatsApp Status:* 🟢 \`${status.status}\`\n` +
       `• *WhatsApp Messages:* ${status.messageCount}\n` +
-      `• *Public Talk Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
-      `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Coder & Manager)\n` +
+      `• *Public Talk Engine:* \`gpt-6-luna\` (Low Reasoning / Fast Response)\n` +
+      `• *MasterBot Engine:* \`gpt-6-luna\` (Extra High Reasoning / Coder & Manager)\n` +
       `• *Device Linked:* \`${status.connectedUser?.name || 'Waiting for scan'}\``;
     return ctx.reply(text, { parse_mode: 'Markdown' });
   });
@@ -2446,7 +2446,7 @@ export function registerBotHandlers(bot) {
         const compTok = analysis.usage.completion_tokens ?? 0;
         const totalTok = analysis.usage.total_tokens ?? (promptTok + compTok);
         const lat = analysis.latencyMs ? `${analysis.latencyMs}ms` : '';
-        const modelLabel = analysis.model || 'gemini-3.8-flash';
+        const modelLabel = analysis.model || 'gpt-6-luna';
         replyDesc += `\n\n📊 [Token Usage: ${compTok} output tokens (${promptTok} in / ${totalTok} total) • ${modelLabel}${lat ? ' • ' + lat : ''}]`;
       }
 
@@ -3146,8 +3146,9 @@ export function registerBotHandlers(bot) {
       replyContext,
       userIsOwner,
     });
-    const chatRouting = getAgentRouting('chat');
-    const activeModel = getActiveModelId() || chatRouting.model;
+    const isOwnerPrivateDm = isPrivate && userIsOwner;
+    const reasoningEffort = isOwnerPrivateDm ? 'xhigh' : 'low';
+    const activeModel = getActiveModelId() || 'gpt-6-luna';
 
     await ctx.replyWithChatAction('typing').catch(() => {});
     const typingPulse = setInterval(() => {
@@ -3155,7 +3156,6 @@ export function registerBotHandlers(bot) {
     }, 3500);
 
     try {
-      const reasoningEffort = getConfig('reasoning_effort', chatRouting.reasoning || 'low');
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages,
@@ -3383,9 +3383,7 @@ export function registerBotHandlers(bot) {
           if (dispatched) return;
         }
 
-        const activeModel = getActiveModelId();
-        const chatRouting = getAgentRouting('chat');
-        const modelToUse = activeModel || chatRouting.model;
+        const modelToUse = getActiveModelId() || 'gpt-6-luna';
 
         const aiResponse = await scaleMaxAdapter.createChatCompletion({
           model: modelToUse,
@@ -3397,7 +3395,7 @@ export function registerBotHandlers(bot) {
             { role: 'user', content: text || 'Hello' },
           ],
           chatId: String(targetChatId),
-          reasoningEffort: 'high',
+          reasoningEffort: 'xhigh',
         });
 
         const replyContent = aiResponse.text || 'Nero Labs system active. Direct owner connection established. ✨';

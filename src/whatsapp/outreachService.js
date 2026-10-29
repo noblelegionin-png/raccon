@@ -279,7 +279,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
 
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
-        model: 'gemini-3.8-flash',
+        model: 'gpt-6-luna',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -365,7 +365,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
         `⚠️ *Recipient Not Found: "${targetQuery}"*\n\n` +
         `Boss Sandy! Mujhe "${targetQuery}" naam ya number se koi contact nahi mila.\n` +
         `Please provide their phone number directly (e.g. \`text 918091785996: ${instruction}\`)! 🔍`;
-      recordAssistantMessage('wa_sandy_master', notFoundText, 35, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', notFoundText, 35, 'gpt-6-luna');
       await whatsAppService.safeSendMessage(remoteJid, { text: notFoundText }, { quoted: msg });
       return { handled: true, success: false, error: 'Recipient not found' };
     }
@@ -378,7 +378,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
     // Typing presence to acknowledge instruction
     await whatsAppService.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
-    // Craft message in Nero's AI voice using Gemini
+    // Craft message in Nero's AI voice using Luna
     const aiMessage = await this.composeAiOutreach({
       recipientName: targetName,
       recipientNumber: targetNumber,
@@ -392,7 +392,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
       await whatsAppService.safeSendMessage(targetJid, { text: aiMessage });
 
       // 2. Record in recipient's chat memory so Nero has full context when they reply
-      recordAssistantMessage(`wa_${targetJid}`, aiMessage, 80, 'gemini-3.8-flash');
+      recordAssistantMessage(`wa_${targetJid}`, aiMessage, 80, 'gpt-6-luna');
 
       // 3. Register active outreach dispatch for instant reply alerting
       this.registerDispatchedOutreach({
@@ -412,7 +412,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
         `"${aiMessage}"\n\n` +
         `_Composed and dispatched in Nero's AI voice. I will hold the conversation and notify you as soon as they reply!_ 📱`;
 
-      recordAssistantMessage('wa_sandy_master', confirmationReport, 60, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', confirmationReport, 60, 'gpt-6-luna');
       await whatsAppService.safeSendMessage(remoteJid, { text: confirmationReport }, { quoted: msg });
 
       logAudit('whatsapp', 'AI_OUTREACH_DISPATCHED', `To: +${targetNumber} (${targetName}), Instruction: "${instruction.slice(0, 60)}"`);
@@ -427,7 +427,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
       };
     } catch (sendErr) {
       const failText = `❌ *Failed to deliver message to +${targetNumber}:* ${sendErr.message}`;
-      recordAssistantMessage('wa_sandy_master', failText, 30, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', failText, 30, 'gpt-6-luna');
       await whatsAppService.safeSendMessage(remoteJid, { text: failText }, { quoted: msg });
       await whatsAppService.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
       return { handled: true, success: false, error: sendErr.message };

@@ -28,18 +28,18 @@ test('Advanced Ultra-Intelligence & Command Suite Verification', async (t) => {
 
   await t.test('Uncapped Token Routing & Reasoning', () => {
     const chatRouting = getAgentRouting('chat');
-    assert.equal(chatRouting.model, 'gemini-3.8-flash');
+    assert.equal(chatRouting.model, 'gpt-6-luna');
     assert.ok(chatRouting.maxInputTokens >= 16000);
     assert.ok(chatRouting.maxOutputTokens >= 8000);
 
     const codingRouting = getAgentRouting('coding');
-    assert.equal(codingRouting.model, 'gemini-3.5-flash-lite');
-    assert.equal(codingRouting.reasoning, 'high');
+    assert.equal(codingRouting.model, 'gpt-6-luna');
+    assert.equal(codingRouting.reasoning, 'low');
   });
 
   await t.test('Ultra-Intelligence System Directive', () => {
-    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('Nero Labs AI'));
-    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('Gemini 3.8 Flash'));
+    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('MYRA AI'));
+    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('GPT-6 Luna'));
   });
 
   await t.test('Personal Notes API (CRUD)', () => {

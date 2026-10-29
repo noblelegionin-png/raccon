@@ -53,7 +53,7 @@ console.error = function (...args) {
 
 async function main() {
   console.log('====================================================');
-  console.log('⚡ NERO LABS — TELEGRAM AI BOT & MINI APP (PHASE 1)');
+  console.log('⚡ MYRA AI — WHATSAPP AUTONOMOUS PLATFORM (MYRA / NERO)');
   console.log('====================================================');
 
   // 1. Initialize SQLite Database

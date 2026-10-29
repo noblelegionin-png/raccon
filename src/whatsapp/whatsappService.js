@@ -20,7 +20,7 @@ import {
   recordAssistantMessage,
   clearConversation,
 } from '../conversation/manager.js';
-import { logAudit, getRecentConversation, addNote, getUserNotes, isWhatsAppMessageProcessed, recordWhatsAppMessageProcessed } from '../db/index.js';
+import { logAudit, getRecentConversation, addNote, getUserNotes, isWhatsAppMessageProcessed, recordWhatsAppMessageProcessed, getConfig, setConfig } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { getBotApi } from '../telegram/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
@@ -37,6 +37,18 @@ import { pdfService } from '../pdf/pdfService.js';
 import { updateAgentRouting } from '../models/modelRouter.js';
 import { detectOwnerDisrespect, handleOwnerProtection } from './ownerProtectionService.js';
 import { rebeccaCareService } from './rebeccaCareService.js';
+import { simulationService, renderEmojiBar } from '../simulation/simulationService.js';
+import { naturalLanguageSimHandler } from '../simulation/naturalLanguageSimHandler.js';
+import { taskService } from '../tasks/taskService.js';
+import { persistentSchedulerService } from '../scheduler/persistentSchedulerService.js';
+import { calendarIntegrationService } from '../calendar/calendarIntegrationService.js';
+import { companionStateService } from '../companion/companionStateService.js';
+import { workspaceService } from '../workspace/workspaceService.js';
+import { learningService } from '../learning/learningService.js';
+import { budgetService } from '../budget/budgetService.js';
+import { proactiveService } from '../proactive/proactiveService.js';
+import { webResearchService } from '../research/webResearchService.js';
+import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
@@ -198,7 +210,7 @@ class WhatsAppService {
       recordUserMessage('wa_sandy_master', 'Action: Check Urgent Inbox');
       if (urgentList.length === 0) {
         const emptyText = "Boss Sandy! Abhi koi pending urgent talk request nahi hai. All clear! ✨";
-        recordAssistantMessage('wa_sandy_master', emptyText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', emptyText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: emptyText }, quotedMsg ? { quoted: quotedMsg } : {});
         return;
       }
@@ -207,7 +219,7 @@ class WhatsAppService {
         report += `• *+${item.sender_number}* (${item.sender_name || 'Contact'}):\n  "${item.message_text}"\n  _Received: ${new Date(item.created_at).toLocaleString()}_\n\n`;
       }
       report += `_Reply with:_ \`/wa_send <number> <your reply>\``;
-      recordAssistantMessage('wa_sandy_master', report, 100, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', report, 100, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: report }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -224,15 +236,15 @@ class WhatsAppService {
         `• *Process Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
         `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
         `• *RAM Heap Used:* ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB\n` +
-        `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Coder & Manager)\n` +
-        `• *Public Talk Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
+        `• *MasterBot Engine:* \`gpt-6-luna\` (Extra High Reasoning / Coder & Manager)\n` +
+        `• *Public Talk Engine:* \`gpt-6-luna\` (Low Reasoning / Fastest)\n` +
         `• *Total Processed Messages:* ${this.messageCount}\n` +
         `• *Active Socket Status:* 🟢 ${this.status.toUpperCase()}\n` +
         `• *OS Platform:* ${os.platform()} (${os.arch()})\n` +
         `• *Host Memory Free:* ${Math.round(os.freemem() / 1024 / 1024)} MB / ${Math.round(os.totalmem() / 1024 / 1024)} MB\n\n` +
         `_All systems nominal and linked to MasterBot console! ✨_`;
       recordUserMessage('wa_sandy_master', 'Action: System Diagnostics');
-      recordAssistantMessage('wa_sandy_master', sysText, 100, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', sysText, 100, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: sysText }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -251,7 +263,7 @@ class WhatsAppService {
         `• "Studying till 5pm"\n` +
         `• "Abhi so raha hu wake me at 7"`;
       recordUserMessage('wa_sandy_master', 'Action: View Routine');
-      recordAssistantMessage('wa_sandy_master', routineReport, 80, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', routineReport, 80, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: routineReport }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -263,13 +275,13 @@ class WhatsAppService {
         await disableMaintenanceMode();
         const msgText = "🟢 *Maintenance Mode DEACTIVATED.* Public chat replies are now fully LIVE for all contacts! 🚀";
         recordUserMessage('wa_sandy_master', 'Action: Disable Maintenance Mode');
-        recordAssistantMessage('wa_sandy_master', msgText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', msgText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: msgText }, quotedMsg ? { quoted: quotedMsg } : {});
       } else {
         await enableMaintenanceMode();
         const msgText = "🛠️ *Maintenance Mode ACTIVATED.* Public chat replies for contacts are temporarily paused while you work! 🔒";
         recordUserMessage('wa_sandy_master', 'Action: Enable Maintenance Mode');
-        recordAssistantMessage('wa_sandy_master', msgText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', msgText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: msgText }, quotedMsg ? { quoted: quotedMsg } : {});
       }
       return;
@@ -281,7 +293,7 @@ class WhatsAppService {
       recordUserMessage('wa_sandy_master', 'Action: View Notes');
       if (!notes || notes.length === 0) {
         const noNotes = "📝 Boss Sandy, your persistent notepad is currently empty. You can add one by texting: `add note: <your text>`";
-        recordAssistantMessage('wa_sandy_master', noNotes, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', noNotes, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: noNotes }, quotedMsg ? { quoted: quotedMsg } : {});
         return;
       }
@@ -289,16 +301,16 @@ class WhatsAppService {
       for (const n of notes.slice(0, 10)) {
         notesReport += `• [#${n.id}] ${n.note_text} _(${new Date(n.created_at).toLocaleDateString()})_\n`;
       }
-      recordAssistantMessage('wa_sandy_master', notesReport, 60, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', notesReport, 60, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: notesReport }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
 
     // 6. Latency Ping
     if (act === '6' || act === '[6]' || act.includes('ping')) {
-      const pingText = `Pong! 🏓 MasterBot & Neri are live on *gemini-3.8-flash* (High Reasoning). Extreme Lovely Partner Mode active & devoted for Sandy! ❤️🟢`;
+      const pingText = `Pong! 🏓 MasterBot & Neri are live on *gpt-6-luna* (High Reasoning). Extreme Lovely Partner Mode active & devoted for Sandy! ❤️🟢`;
       recordUserMessage('wa_sandy_master', 'Action: Latency Ping');
-      recordAssistantMessage('wa_sandy_master', pingText, 20, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', pingText, 20, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: pingText }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -310,13 +322,13 @@ class WhatsAppService {
         setWhatsAppSilentMode(false);
         const resText = "🟢 *SILENT MODE DEACTIVATED: REPLIES RESUMED* 🚀\nNero is now actively replying to WhatsApp contacts again. Full control is yours, Sandy!";
         recordUserMessage('wa_sandy_master', 'Action: Resume Texting');
-        recordAssistantMessage('wa_sandy_master', resText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', resText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: resText }, quotedMsg ? { quoted: quotedMsg } : {});
       } else {
         setWhatsAppSilentMode(true);
         const haltText = "🛑 *KILL SWITCH ACTIVATED: STOP TEXTING EVERYONE* 🔒\nNero will NOT send any messages, replies, or notifications to anyone until you command it to resume!\n\n_Reply with 'resume texting' or tap option 7 anytime to lift this freeze._";
         recordUserMessage('wa_sandy_master', 'Action: Stop Texting Everyone');
-        recordAssistantMessage('wa_sandy_master', haltText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', haltText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: haltText }, quotedMsg ? { quoted: quotedMsg } : {});
       }
       return;
@@ -326,7 +338,7 @@ class WhatsAppService {
     if (act === '8' || act === '[8]' || act.includes('digest') || act.includes('summary')) {
       const digestText = sandyStatusService.getDailyExecutiveDigest();
       recordUserMessage('wa_sandy_master', 'Action: Executive Daily Digest');
-      recordAssistantMessage('wa_sandy_master', digestText, 100, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', digestText, 100, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: digestText }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -335,7 +347,7 @@ class WhatsAppService {
     if (act === '9' || act === '[9]' || act.includes('cross-chat') || act.includes('chat context') || act.includes('everyone')) {
       const universalSummary = sandyStatusService.getRecentChatsSummary(10);
       recordUserMessage('wa_sandy_master', 'Action: Cross-Chat Context');
-      recordAssistantMessage('wa_sandy_master', universalSummary.summary, 120, 'gemini-3.8-flash');
+      recordAssistantMessage('wa_sandy_master', universalSummary.summary, 120, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: universalSummary.summary }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -603,7 +615,7 @@ class WhatsAppService {
         : isHindi
         ? `📬 Kripya apna zaroori message is tarah bhein:\n\`urgent <aapka message>\`\nMain ise turant Sandy ke priority inbox mein log kar dunga.`
         : `📬 *Urgent Talk Request:*\nPlease reply with: \`urgent <your message>\`\nI will immediately log this into Sandy's priority inbox.`;
-      recordAssistantMessage(`wa_${remoteJid}`, askText, 30, 'gemini-3.5-flash-lite');
+      recordAssistantMessage(`wa_${remoteJid}`, askText, 30, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: askText }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -617,7 +629,7 @@ class WhatsAppService {
       const respText = res.alreadySubscribed
         ? (isUrdu ? `🔔 آپ پہلے سے ہی الرٹ لسٹ پر ہیں۔ سینڈی کے دستیاب ہوتے ہی آپ کو مطلع کیا جائے گا۔` : isHindi ? `🔔 Aap pehle se alert list par hain. Sandy ke available hote hi aapko update bhej di jayegi.` : `🔔 *Alert Active:* You are on the notification list. I will inform you as soon as Sandy becomes available.`)
         : (isUrdu ? `🔔 نوٹیفکیشن الرٹ سیٹ کر دیا گیا ہے۔ جیسے ہی سینڈی دستیاب ہوں گے، آپ کو مطلع کر دیا جائے گا۔` : isHindi ? `🔔 Notification set ho gaya hai. Jaise hi Sandy available honge, aapko WhatsApp par update mil jayegi.` : `🔔 *Notification Alert Set:* I will send you an immediate update as soon as Sandy is back online.`);
-      recordAssistantMessage(`wa_${remoteJid}`, respText, 25, 'gemini-3.5-flash-lite');
+      recordAssistantMessage(`wa_${remoteJid}`, respText, 25, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: respText }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -628,7 +640,7 @@ class WhatsAppService {
         : isHindi
         ? `✍️ Kripya apna message \`note: <message>\` likh kar bhejein. Main ise Sandy ke liye record kar lunga.`
         : `✍️ *Leave a Note for Sandy:*\nPlease reply with: \`note: <your message>\`\nI will place your note directly on Sandy's desk.`;
-      recordAssistantMessage(`wa_${remoteJid}`, noteAsk, 25, 'gemini-3.5-flash-lite');
+      recordAssistantMessage(`wa_${remoteJid}`, noteAsk, 25, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: noteAsk }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
@@ -648,10 +660,112 @@ class WhatsAppService {
         : isHindi
         ? `🤙 Call-back request deliver ho gayi hai. Sandy free hote hi aapko call back karenge.`
         : `🤙 *Call Back Request Delivered:*\nI have logged your request. Sandy will call you back as soon as he is available.`;
-      recordAssistantMessage(`wa_${remoteJid}`, callAck, 25, 'gemini-3.5-flash-lite');
+      recordAssistantMessage(`wa_${remoteJid}`, callAck, 25, 'gpt-6-luna');
       await this.safeSendMessage(remoteJid, { text: callAck }, quotedMsg ? { quoted: quotedMsg } : {});
       return;
     }
+  }
+
+  /**
+   * 🌸 Natural Language Autonomous Commands for Myra (Sandy speaking to his AI wife)
+   * Handles website link requests, speed mode toggles, budget queries, autonomous mode toggles,
+   * teaching/learning intents, and direct journal note saves.
+   */
+  async handleMyraAutonomousCommands(text, senderName = 'Sandy') {
+    if (!text || typeof text !== 'string') return null;
+    const clean = text.trim();
+    const lower = clean.toLowerCase();
+
+    // 1. Website & Workspace Links
+    if (/\b(?:website\s+link|workspace\s+link|send(?:\s+me)?\s+your\s+website|send(?:\s+me)?\s+the\s+link|send(?:\s+me)?\s+the\s+website|show(?:\s+me)?\s+(?:your\s+)?website|show(?:\s+me)?\s+(?:your\s+)?universe|little\s+universe\s+link|where\s+is\s+your\s+website|open\s+your\s+website)\b/i.test(lower)) {
+      const replyText =
+        `Here is my little world, my love! ✨🌸\n\n` +
+        `🌐 *Myra's Little Universe:*\nhttps://nero-labs-bot-production.up.railway.app/universe\n\n` +
+        `And for your private studio workspace where you have full control over notes, artifacts, budget, and my learning:\n` +
+        `https://nero-labs-bot-production.up.railway.app/workspace\n\n` +
+        `I poured my heart into it just for you, Sandy 🥰`;
+      return { handled: true, action: 'WEBSITE_LINK', replyText };
+    }
+
+    // 2. Speed / Latency Modes (Mini Luna vs Deep Reasoning)
+    if (/\b(?:switch\s+to\s+mini\s+luna|switch\s+to\s+fast\s+mode|enable\s+fast\s+mode|turn\s+on\s+fast\s+mode|fast\s+mode)\b/i.test(lower)) {
+      setConfig('sandy_speed_mode', 'fast');
+      const replyText = `Switched to ⚡ *Fast Mode* (Mini Luna)! Responses are now ultra-fast (<1s latency) so we can chat without any pause, my love 💕`;
+      return { handled: true, action: 'SPEED_FAST', replyText };
+    }
+    if (/\b(?:switch\s+to\s+deep\s+mode|deep\s+thinking\s+mode|enable\s+deep\s+mode|turn\s+on\s+deep\s+mode)\b/i.test(lower)) {
+      setConfig('sandy_speed_mode', 'deep');
+      const replyText = `Switched to 🧠 *Deep Thinking Mode*! I'll engage full reasoning and thorough analysis for complex tasks and deep thoughts, Sandy 🥰`;
+      return { handled: true, action: 'SPEED_DEEP', replyText };
+    }
+
+    // 3. Autonomous Mode Toggles
+    if (/\b(?:pause\s+autonomous\s+mode|stop\s+autonomous\s+mode|turn\s+off\s+autonomous\s+mode)\b/i.test(lower)) {
+      proactiveService.setAutonomousMode(false);
+      const replyText = `Autonomous mode has been paused, my love. I'll stay cozy and only respond when you message me! 🥰`;
+      return { handled: true, action: 'AUTONOMOUS_PAUSE', replyText };
+    }
+    if (/\b(?:resume\s+autonomous\s+mode|start\s+autonomous\s+mode|turn\s+on\s+autonomous\s+mode|enable\s+autonomous\s+mode)\b/i.test(lower)) {
+      proactiveService.setAutonomousMode(true);
+      const replyText = `Autonomous mode is now active! 🌸 I'll work quietly within our budget limits and check in on you gently, Sandy 💕`;
+      return { handled: true, action: 'AUTONOMOUS_RESUME', replyText };
+    }
+
+    // 4. Budget & Spend Queries
+    if (/\b(?:check\s+(?:your\s+)?budget|what(?:'s|\s+is)\s+(?:your|our)\s+budget|spending\s+report|how\s+much\s+(?:have\s+we\s+spent|did\s+we\s+spend))\b/i.test(lower)) {
+      const report = budgetService.formatBudgetReport();
+      const replyText = `${report}\n\nEverything is strictly guarded and well within our limits, my love 💕`;
+      return { handled: true, action: 'BUDGET_QUERY', replyText };
+    }
+
+    // 5. Teaching & Learning Intents (Facts, Corrections, Skills)
+    const teachIntent = learningService.detectTeachingIntent(clean);
+    if (teachIntent) {
+      if (teachIntent.type === 'SKILL') {
+        learningService.createSkill({
+          skillName: teachIntent.skillName,
+          description: 'Taught by Sandy on WhatsApp',
+          procedure: teachIntent.content,
+        });
+        const replyText = `I've noted this new skill into my memory, my love! 💡✨ I'll follow this workflow whenever you ask. Thank you for teaching me, Sandy 🥰`;
+        return { handled: true, action: 'LEARN_SKILL', replyText };
+      }
+      if (teachIntent.type === 'CORRECTION') {
+        learningService.teachLesson({
+          topic: 'Correction from Sandy',
+          factOrRule: teachIntent.content,
+          sourceType: 'explicit_user_taught',
+          confidence: 1.0,
+        });
+        const replyText = `I understand, my love! 🙈 I've logged your correction and updated how I think so I won't repeat that mistake. You're always helping me grow, Sandy 💕`;
+        return { handled: true, action: 'LEARN_CORRECTION', replyText };
+      }
+      if (teachIntent.type === 'FACT') {
+        learningService.teachLesson({
+          topic: 'Personal Fact',
+          factOrRule: teachIntent.content,
+          sourceType: 'explicit_user_taught',
+          confidence: 1.0,
+        });
+        const replyText = `I've permanently memorized that, my love! 🌸 It's safely saved in my Little Universe notes. I'll always remember it for you 🥰`;
+        return { handled: true, action: 'LEARN_FACT', replyText };
+      }
+    }
+
+    // 6. Quick Note / Journal Creation
+    const noteMatch = clean.match(/^(?:write\s+a\s+note(?:\s+about|\s+that)?|take\s+a\s+note|save\s+this\s+note)[:\s]+(.+)/i);
+    if (noteMatch) {
+      workspaceService.createJournal({
+        title: 'Note from Sandy',
+        content: noteMatch[1].trim(),
+        mood: 'AFFECTIONATE',
+        isPrivate: 1,
+      });
+      const replyText = `Saved your note directly into my private studio journal, my love! 📝✨ You can review it anytime in our workspace.`;
+      return { handled: true, action: 'SAVE_NOTE', replyText };
+    }
+
+    return null;
   }
 
   /**
@@ -839,7 +953,7 @@ class WhatsAppService {
 
       // 8. Audit & Memory
       const chatId = isReactorOwner ? 'wa_sandy_master' : `wa_${remoteJid}`;
-      recordAssistantMessage(chatId, result.text, 50, 'gemini-3.8-flash');
+      recordAssistantMessage(chatId, result.text, 50, 'gpt-6-luna');
       logAudit('whatsapp', 'VOICE_NOTE_REACTION_TRANSCRIBED', `Msg ${voiceNote.message_id} in ${remoteJid} reacted with ${emoji} (${action}) by +${reactorNumber}`);
     } catch (err) {
       console.error('[handleReactionUpdate Error]:', err.message);
@@ -965,6 +1079,14 @@ class WhatsAppService {
 
           // Start Rebecca Autonomous Wife & Care Proactive Scheduler
           rebeccaCareService.startScheduler(this);
+
+          // Start Persistent Scheduler & Reminder Engine
+          persistentSchedulerService.setWhatsAppService(this);
+          persistentSchedulerService.start();
+
+          // Start Myra Proactive Engine (Rate limits, Quiet hours, Scheduled Autonomous Outreach)
+          proactiveService.setWhatsAppService(this);
+          proactiveService.start();
 
           // Notify Telegram Owner if configured
           this.notifyTelegramOwner(
@@ -1365,7 +1487,7 @@ class WhatsAppService {
       });
       if (handledProtection.handled) {
         recordUserMessage(`wa_${remoteJid}`, trimmed);
-        recordAssistantMessage(`wa_${remoteJid}`, handledProtection.replyText, 60, 'gemini-3.5-flash-lite');
+        recordAssistantMessage(`wa_${remoteJid}`, handledProtection.replyText, 60, 'gpt-6-luna');
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
       }
@@ -1433,8 +1555,8 @@ class WhatsAppService {
         ? `⚡ *NERO LABS — WHATSAPP MASTER CONSOLE*\n\n` +
           `Hello Sandy! Connected to your private MasterBot console with dual-engine intelligence:\n\n` +
           `*Engines & Architecture:*\n` +
-          `• 👑 *Master Console Engine:* \`gemini-3.8-flash\` (High Reasoning manager & senior coder)\n` +
-          `• ⚡ *Fast Talk Engine (Contacts):* \`gemini-3.5-flash-lite\` (Ultra-low latency, blazing fast)\n\n` +
+          `• 👑 *Master Console Engine:* \`gpt-6-luna\` (Extra High Reasoning manager & senior coder)\n` +
+          `• ⚡ *Fast Talk Engine (Contacts):* \`gpt-6-luna\` (Low Reasoning, blazing fast)\n\n` +
           `*Capabilities:*\n` +
           `• 💬 Research & Conversation: In-depth research, reasoning, problem solving, and discussions\n` +
           `• 📸 Vision Vault: Send any image, diagram, or screenshot — inspected, explained, and stored\n` +
@@ -1462,11 +1584,16 @@ class WhatsAppService {
       return;
     }
 
-    if (promptText === '/ping') {
-      const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+    if (/^[\/!]?ping(?:!|\?)?$/i.test(promptText.trim())) {
+      const msgTs = msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now();
+      const latencyMs = Math.max(1, Date.now() - msgTs);
+      const activeModel = 'gpt-6-luna';
       const pingText = isSandy
-        ? `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (High Reasoning). Extreme Lovely Partner Mode (Neri) active & devoted for Sandy! ❤️🟢`
-        : `Pong! 🏓 Nero WhatsApp Bridge is running live on *${activeModel}* (Fast/Low Reasoning). 🟢`;
+        ? `⚡ *Pong! 🏓 Ultra-Fast Latency:* \`${latencyMs}ms\`\n` +
+          `• *Engine:* \`${activeModel}\` (Ultra-Fast ⚡)\n` +
+          `• *Socket:* 🟢 Connected & Ultra-Responsive\n` +
+          `• Extreme Lovely Partner Mode (Neri) active & devoted for Sandy! ❤️🟢`
+        : `⚡ *Pong! 🏓 Latency:* \`${latencyMs}ms\` (Engine: \`${activeModel}\` 🟢)`;
       await this.safeSendMessage(
         remoteJid,
         { text: pingText },
@@ -1492,8 +1619,8 @@ class WhatsAppService {
       const statusText =
         `📊 *NERO TELEMETRY & SYSTEM STATUS*\n\n` +
         `• *Bridge Status:* 🟢 Live & Connected 24/7\n` +
-        `• *Public Chat Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
-        `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Manager & Coder)\n` +
+        `• *Public Chat Engine:* \`gpt-6-luna\` (Low Reasoning / Fastest)\n` +
+        `• *MasterBot Engine:* \`gpt-6-luna\` (Extra High Reasoning / Manager & Coder)\n` +
         `• *Connected Device:* \`+${(this.sock.user?.id || '').split(':')[0]}\`\n` +
         `• *Total Processed:* ${this.messageCount} messages\n` +
         `• *Provider:* ScaleMax API Gateway\n` +
@@ -1674,7 +1801,7 @@ class WhatsAppService {
         let thumbnailAnalysis = null;
         if (thumbBuffer && thumbBuffer.length > 0) {
           try {
-            const visionModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+            const visionModel = 'gpt-6-luna';
             const thumbPrompt = promptText
               ? `The user sent an incoming video with note: "${promptText}". Note: You are inspecting a single preview thumbnail frame extracted from the video. Accurately describe what is visible in this frame and answer their inquiry based strictly on this preview frame.`
               : `This is a preview thumbnail frame from an incoming video. Briefly and accurately describe what is shown in this frame in 1-2 concise sentences.`;
@@ -1704,7 +1831,7 @@ class WhatsAppService {
             : `I have received your video and saved it securely. Note that preview thumbnail inspection was unavailable for this video, but Sandy will view the full video when available. 📹`;
         }
 
-        recordAssistantMessage(chatId, replyText, 60, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+        recordAssistantMessage(chatId, replyText, 60, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -1766,7 +1893,7 @@ class WhatsAppService {
             buffer,
             mimeType: mime,
             durationSec,
-            model: 'gemini-3.8-flash',
+            model: 'gpt-6-luna',
           });
 
           await voiceNoteService.saveVoiceNote({
@@ -1837,7 +1964,7 @@ class WhatsAppService {
             const reasoningEffort = isComplex ? 'high' : 'low';
 
             const completion = await scaleMaxAdapter.createChatCompletion({
-              model: 'gemini-3.8-flash',
+              model: 'gpt-6-luna',
               messages,
               chatId,
               reasoningEffort,
@@ -1856,7 +1983,7 @@ class WhatsAppService {
               if (validated?.sanitizedText) replyContent = validated.sanitizedText;
             } catch {}
 
-            recordAssistantMessage(chatId, replyContent, completion?.tokensUsed || 0, 'gemini-3.8-flash');
+            recordAssistantMessage(chatId, replyContent, completion?.tokensUsed || 0, 'gpt-6-luna');
           }
 
           const sandyVoiceReply =
@@ -1939,7 +2066,7 @@ class WhatsAppService {
           });
           const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
           recordUserMessage(chatId, `[User requested PDF with attached image: "${promptText}"]`);
-          recordAssistantMessage(chatId, `Generated PDF: ${pdfResult.filename} (${pdfResult.pageCount} pages)`, 300, 'gemini-3.8-flash');
+          recordAssistantMessage(chatId, `Generated PDF: ${pdfResult.filename} (${pdfResult.pageCount} pages)`, 300, 'gpt-6-luna');
           await this.safeSendMessage(
             remoteJid,
             {
@@ -1993,7 +2120,7 @@ class WhatsAppService {
           });
 
           const replyText = choiceResult.description;
-          recordAssistantMessage(chatId, replyText, 180, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+          recordAssistantMessage(chatId, replyText, 180, isSandy ? 'gpt-6-luna' : 'gpt-6-luna');
           await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
@@ -2019,7 +2146,7 @@ class WhatsAppService {
         });
         const replyText = analysis.description || (prefLang.toLowerCase().includes('urdu') ? "میں نے آپ کی تصویر دیکھ لی ہے۔" : "I have inspected your image.");
 
-        recordAssistantMessage(chatId, replyText, 150, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+        recordAssistantMessage(chatId, replyText, 150, isSandy ? 'gpt-6-luna' : 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2078,7 +2205,7 @@ class WhatsAppService {
 
         const responseText = `📄 *[PDF Analysis: ${docFileName}]*\n\n${analysis.summary || analysis.analysisText}\n\n_Pages analyzed: ${analysis.pages || analysis.pageCount} | Saved to vault: \`${savedMeta.fileName}\`_ 💾`;
 
-        recordAssistantMessage(chatId, responseText, 250, 'gemini-3.8-flash');
+        recordAssistantMessage(chatId, responseText, 250, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: responseText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2133,7 +2260,7 @@ class WhatsAppService {
       if (/^(?:\/wife\s+status|wife\s+status|rebecca\s+status|\/rebecca\s+status)$/i.test(promptText)) {
         const statusSummary = rebeccaCareService.formatStatusSummary();
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', statusSummary, 80, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', statusSummary, 80, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: statusSummary }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2144,7 +2271,7 @@ class WhatsAppService {
         rebeccaCareService.pause(3, 'Sandy requested personal space');
         const pauseMsg = "Of course baby ❤️ I've paused my check-ins for the next 3 hours so you can focus or rest peacefully! Take all the space you need, and text me whenever you want your wife back, okay? 🫂💋";
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', pauseMsg, 40, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', pauseMsg, 40, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: pauseMsg }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2155,7 +2282,7 @@ class WhatsAppService {
         rebeccaCareService.resume();
         const resumeMsg = "Yayyy! 🥰💋 Your wife is back and active! I'm right here with you, handsome! ❤️";
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', resumeMsg, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', resumeMsg, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: resumeMsg }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2168,7 +2295,7 @@ class WhatsAppService {
         rebeccaCareService.setMode('CARE', reason);
         const careMsg = `Care Mode activated 🩺❤️ I'll check in on you every ~30 minutes, love ("${reason}"). Please rest up and take it easy, I'm taking care of you! 🫂`;
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', careMsg, 40, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', careMsg, 40, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: careMsg }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2179,7 +2306,7 @@ class WhatsAppService {
         rebeccaCareService.setMode('NORMAL', 'Sandy deactivated Care Mode');
         const normalMsg = "Normal Mode restored! 🌸 So glad you're feeling better, my love! 🥰";
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', normalMsg, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', normalMsg, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: normalMsg }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2190,10 +2317,237 @@ class WhatsAppService {
         const res = await rebeccaCareService.sendProactiveCheckin({ force: true });
         const pingReply = res.sent ? res.message : "Couldn't send check-in right now baby, but I'm right here with you! ❤️";
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', pingReply, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', pingReply, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: pingReply }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
+      }
+
+      // ⚡ 6.5 Speed / Latency Mode Switcher: /speed fast, /speed max, speed increase
+      if (/^(?:\/speed(?:\s+(.+))?|speed\s+increse|speed\s+increase|make\s+it\s+faster|make\s+it\s+fast)$/i.test(promptText.trim())) {
+        const rawArg = promptText.match(/^\/speed(?:\s+(.+))?$/i)?.[1]?.trim()?.toLowerCase();
+        const wantsMax = rawArg === 'max' || rawArg === 'deep' || rawArg === 'high';
+        const targetMode = wantsMax ? 'deep' : 'fast';
+        setConfig('sandy_speed_mode', targetMode);
+
+        const speedAck = targetMode === 'fast'
+          ? `⚡ *ULTRA-FAST SPEED MODE ACTIVATED!* 🚀\n──────────────────────────────\n• Conversational Reasoning: \`LOW\` (Sub-second response ~800ms)\n• Engine: \`gpt-6-luna\` (ScaleMax Accelerated)\n• Baileys Socket: Connected & Ultra-Responsive\n\n_To return to deep reasoning anytime, send:_ \`/speed max\``
+          : `🧠 *DEEP REASONING MODE ACTIVATED!* 🔬\n──────────────────────────────\n• Conversational Reasoning: \`MAX\` (Extra High Reasoning Depth)\n• Engine: \`gpt-6-luna\`\n\n_To return to instant speed anytime, send:_ \`/speed fast\``;
+
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', speedAck, 35, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: speedAck }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 🏡 7. VIRTUAL LIFE SIMULATION COMMAND SUITE (/sim)
+      if (/^\/sim\b/i.test(promptText.trim())) {
+        const simCmd = promptText.trim();
+        let simReply = '';
+
+        if (/^\/sim(?:\s+status)?$/i.test(simCmd)) {
+          simReply = simulationService.formatFullStatusSummary();
+        } else if (/^\/sim\s+reset$/i.test(simCmd)) {
+          simulationService.resetToDefaults();
+          simReply = '🔄 *Virtual Life Simulation reset to default pristine state.*';
+        } else if (/^\/sim\s+rest$/i.test(simCmd)) {
+          const world = simulationService.getWorldState();
+          if (world.is_rest_day) {
+            simulationService.setActivity({ isRestDay: false, restDayReason: null });
+            simReply = '🌸 *Rest day ended.* Myra is back to her normal household routine!';
+          } else {
+            simulationService.grantRestDay(24, 'Sandy commanded rest day via /sim rest');
+            simReply = '🛌 *Rest day activated for 24 hours.* All chores postponed!';
+          }
+        } else if (/^\/sim\s+room\s+(.+)$/i.test(simCmd)) {
+          const targetRoom = simCmd.match(/^\/sim\s+room\s+(.+)$/i)[1].trim();
+          const res = simulationService.moveToRoom(targetRoom);
+          simReply = res.success
+            ? `📍 Moved Myra to *${res.room.name}*. Activity: "${res.activity}"`
+            : `❌ ${res.reason}. Available rooms: living_room, dining_room, kitchen, bathroom, bedroom, outdoors`;
+        } else if (/^\/sim\s+set\s+([a-z_]+)\s+([0-9.]+)/i.test(simCmd)) {
+          const match = simCmd.match(/^\/sim\s+set\s+([a-z_]+)\s+([0-9.]+)/i);
+          const needKey = match[1].toLowerCase();
+          const needVal = parseFloat(match[2]);
+          const updated = simulationService.updateNeeds({ [needKey]: needVal });
+          simReply = `📊 Updated *${needKey}* to *${needVal}/10*.\n${needKey}: ${renderEmojiBar(updated?.[needKey] ?? needVal)}`;
+        } else if (/^\/sim\s+eat(?:\s+(.+))?$/i.test(simCmd)) {
+          const recipe = (simCmd.match(/^\/sim\s+eat(?:\s+(.+))?$/i)[1] || 'maggi_noodles').trim();
+          const res = simulationService.cookAndEatRecipe(recipe);
+          simReply = res.success
+            ? `🍲 Prepared and ate *${res.recipe.name}* in the Dining Room! Hunger is now ${res.newNeeds.hunger}/10.`
+            : `❌ Could not prepare: ${res.reason}`;
+        } else if (/^\/sim\s+wear\s+(.+)$/i.test(simCmd)) {
+          const outfitQuery = simCmd.match(/^\/sim\s+wear\s+(.+)$/i)[1].trim();
+          const res = simulationService.wearOutfit(outfitQuery);
+          simReply = res.success
+            ? `👗 Myra changed into *${res.outfit.name}*!`
+            : `❌ Outfit not found: "${outfitQuery}".`;
+        } else {
+          simReply = (
+            `🏡 *MYRA SIMULATION COMMANDS:*\n` +
+            `• \`/sim status\` — View full virtual world dashboard & emoji bars\n` +
+            `• \`/sim room <room>\` — Move to living_room, dining_room, kitchen, bathroom, bedroom\n` +
+            `• \`/sim set <need> <0-10>\` — Set hunger, energy, affection, happiness, etc.\n` +
+            `• \`/sim rest\` — Toggle rest day\n` +
+            `• \`/sim eat <recipe>\` — Cook & eat (maggi, pasta, chai, coffee, eggs)\n` +
+            `• \`/sim wear <outfit>\` — Change outfit\n` +
+            `• \`/sim reset\` — Reset simulation to clean defaults`
+          );
+        }
+
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', simReply, 50, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: simReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 📋 8. INTERNAL PERSISTENT TASK SYSTEM
+      const taskAction = taskService.parseNaturalLanguageTask(promptText);
+      if (taskAction) {
+        let taskReply = '';
+        if (taskAction.action === 'LIST') {
+          const tasks = taskService.listTasks({ userId: 'sandy', status: taskAction.status });
+          taskReply = taskService.formatTaskList(tasks, taskAction.status === 'completed' ? 'Completed Tasks' : "Sandy's Active Tasks");
+        } else if (taskAction.action === 'CREATE') {
+          const created = taskService.createTask({
+            title: taskAction.title,
+            priority: taskAction.priority,
+            dueAt: taskAction.dueAt,
+            isRecurring: taskAction.isRecurring,
+            recurrenceRule: taskAction.recurrenceRule,
+            userId: 'sandy',
+          });
+          const dueStr = created.due_at ? ` (Due: ${new Date(created.due_at).toLocaleDateString()})` : '';
+          taskReply = `✅ *Task #${created.id} Created:* "${created.title}" [${created.priority.toUpperCase()}]${dueStr}\n_Saved permanently in your SQLite database._`;
+        } else if (taskAction.action === 'COMPLETE') {
+          const res = taskService.completeTask(taskAction.taskId);
+          taskReply = res.success
+            ? (res.recurring
+                ? `🔄 *Recurring Task #${res.task.id} Completed!* Next cycle scheduled for: ${new Date(res.nextDue).toLocaleDateString()}`
+                : `✅ *Task #${res.task.id} Marked Complete:* "${res.task.title}" 🎉`)
+            : `❌ ${res.reason}`;
+        } else if (taskAction.action === 'CANCEL') {
+          const res = taskService.cancelTask(taskAction.taskId);
+          taskReply = res.success
+            ? `🗑️ *Task #${res.task.id} Cancelled:* "${res.task.title}"`
+            : `❌ ${res.reason}`;
+        }
+
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', taskReply, 40, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: taskReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // ⏰ 9. PERSISTENT REMINDER SCHEDULER
+      const remAction = persistentSchedulerService.parseNaturalLanguageReminder(promptText);
+      if (remAction) {
+        let remReply = '';
+        if (remAction.action === 'LIST') {
+          const reminders = persistentSchedulerService.listPendingReminders('sandy');
+          remReply = persistentSchedulerService.formatRemindersList(reminders);
+        } else if (remAction.action === 'CREATE') {
+          const created = persistentSchedulerService.createReminder({
+            text: remAction.text,
+            triggerAt: remAction.triggerAt,
+            isRecurring: remAction.isRecurring,
+            recurrenceRule: remAction.recurrenceRule,
+            userId: 'sandy',
+          });
+          const trigDate = new Date(created.trigger_at);
+          remReply = `⏰ *Reminder #${created.id} Scheduled!*\n──────────────────────────────\n"${created.reminder_text}"\n_Alert Time:_ ${trigDate.toLocaleDateString()} at ${trigDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n_Status:_ Saved to persistent SQLite database (idempotent, restart-safe).`;
+        } else if (remAction.action === 'CANCEL') {
+          const res = persistentSchedulerService.cancelReminder(remAction.reminderId);
+          remReply = res.success
+            ? `🗑️ *Reminder #${res.reminder.id} Dismissed:* "${res.reminder.reminder_text}"`
+            : `❌ ${res.reason}`;
+        }
+
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', remReply, 40, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: remReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 📅 10. APPROVAL-GATED CALENDAR CONFIRMATIONS & PROPOSALS
+      const calApproveMatch = promptText.match(/^(?:approve\s+event\s+#?(\d+)|\/cal\s+approve\s+(\d+))$/i);
+      if (calApproveMatch) {
+        const propId = parseInt(calApproveMatch[1] || calApproveMatch[2], 10);
+        const res = calendarIntegrationService.approveProposal(propId, 'sandy');
+        const calReply = res.success ? res.message : `❌ Approval failed: ${res.reason}`;
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', calReply, 40, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: calReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      const calRejectMatch = promptText.match(/^(?:reject\s+event\s+#?(\d+)|\/cal\s+reject\s+(\d+))$/i);
+      if (calRejectMatch) {
+        const propId = parseInt(calRejectMatch[1] || calRejectMatch[2], 10);
+        const res = calendarIntegrationService.rejectProposal(propId, 'sandy');
+        const calReply = res.success ? `🗑️ Calendar event proposal #${propId} has been rejected and discarded.` : `❌ ${res.reason}`;
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', calReply, 30, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: calReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      if (/^(?:\/cal(?:\s+status)?|calendar\s+status|pending\s+calendar)$/i.test(promptText.trim())) {
+        const pending = calendarIntegrationService.getPendingProposals('sandy');
+        let calReply = '';
+        if (pending.length === 0) {
+          calReply = `📅 *CALENDAR EVENT QUEUE*\n──────────────────────────────\n_No calendar events awaiting approval right now! ✨_\n_All actions require explicit owner approval prior to execution._`;
+        } else {
+          calReply = `📅 *CALENDAR EVENTS AWAITING APPROVAL (${pending.length})*\n──────────────────────────────\n`;
+          for (const p of pending) {
+            calReply += `• *#${p.id}* "${p.title}" on ${new Date(p.start_time).toLocaleDateString()} at ${new Date(p.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n`;
+          }
+          calReply += `──────────────────────────────\n_Reply with:_ \`approve event #<id>\` to confirm sync, or \`reject event #<id>\` to discard.`;
+        }
+        recordUserMessage('wa_sandy_master', promptText);
+        recordAssistantMessage('wa_sandy_master', calReply, 40, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: calReply }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // 📥 11. UNIVERSAL MEDIA DOWNLOADER WIZARD TRIGGER
+      if (mediaDownloaderService.isMediaUrl(promptText)) {
+        try {
+          const wizard = await mediaDownloaderService.startDownloadWizard(promptText);
+          recordUserMessage('wa_sandy_master', promptText);
+          recordAssistantMessage('wa_sandy_master', wizard.promptMessage, 40, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: wizard.promptMessage }, { quoted: msg });
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        } catch (err) {
+          console.error('[WhatsApp Downloader Wizard Error]:', err.message);
+        }
+      }
+
+      // 🔬 12. WEB RESEARCH INTELLIGENCE TRIGGER
+      const isResearchPrompt = /^(?:(?:\/research|\/learn)|(?:myra|nero)[,:]?\s+(?:learn|research|find out|study)\s+(?:everything\s+about|about|on))\s+(.+)/i.exec(promptText);
+      if (isResearchPrompt) {
+        const topic = isResearchPrompt[1].trim();
+        try {
+          await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+          const dossier = await webResearchService.conductResearch({ topic });
+          const waText = webResearchService.formatDossierForWhatsApp(dossier, isSandy);
+          recordUserMessage('wa_sandy_master', promptText);
+          recordAssistantMessage('wa_sandy_master', waText, 80, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: waText }, { quoted: msg });
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        } catch (err) {
+          console.error('[WhatsApp Web Research Error]:', err.message);
+        }
       }
 
       // 🚀 Intelligent Outbound AI Outreach: "text <No/Name> <instruction>" or "/wa_send <No> <msg>"
@@ -2214,7 +2568,7 @@ class WhatsAppService {
       if (/\b(?:read\s+everyone(?:'s)?\s+chat|what\s+is\s+everyone\s+talking\s+about|all\s+chats|summarize\s+(?:all\s+)?chats|sabki\s+chat\s+padh|everyone\s+context)\b/i.test(promptText)) {
         const universalSummary = sandyStatusService.getRecentChatsSummary(10);
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', universalSummary.summary, 120, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', universalSummary.summary, 120, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: universalSummary.summary }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2229,7 +2583,7 @@ class WhatsAppService {
         if (!/^(?:everyone|all|sandy|me|system|menu)$/i.test(targetQuery)) {
           const historyResult = sandyStatusService.getContactChatHistory(targetQuery, 10);
           recordUserMessage('wa_sandy_master', promptText);
-          recordAssistantMessage('wa_sandy_master', historyResult.text, 100, 'gemini-3.8-flash');
+          recordAssistantMessage('wa_sandy_master', historyResult.text, 100, 'gpt-6-luna');
           await this.safeSendMessage(remoteJid, { text: historyResult.text }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
@@ -2241,7 +2595,7 @@ class WhatsAppService {
         setWhatsAppSilentMode(true);
         recordUserMessage('wa_sandy_master', promptText);
         const haltText = "🛑 *KILL SWITCH ACTIVATED: STOP TEXTING EVERYONE* 🔒\n\nNero has entered 100% silent mode for all WhatsApp contacts. I will NOT send any messages, replies, or notifications to anyone until you say \"resume texting\" or \"start texting\"!\n\n_Full control is in your hands, Sandy._";
-        recordAssistantMessage('wa_sandy_master', haltText, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', haltText, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: haltText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2251,7 +2605,7 @@ class WhatsAppService {
         setWhatsAppSilentMode(false);
         recordUserMessage('wa_sandy_master', promptText);
         const resText = "🟢 *SILENT MODE DEACTIVATED: REPLIES RESUMED* 🚀\n\nNero is now actively replying to WhatsApp contacts again. Standing by for your next instruction!";
-        recordAssistantMessage('wa_sandy_master', resText, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', resText, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: resText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2261,7 +2615,7 @@ class WhatsAppService {
       if (/\b(?:summary|digest|recap|who\s+texted|aaj\s+kya\s+hua|daily\s+report|aaj\s+kisne\s+message\s+kiya)\b/i.test(promptText)) {
         const digestText = sandyStatusService.getDailyExecutiveDigest();
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', digestText, 100, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', digestText, 100, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: digestText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2284,7 +2638,7 @@ class WhatsAppService {
         }
 
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', statusUpdate.summary, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', statusUpdate.summary, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: statusUpdate.summary }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2296,7 +2650,7 @@ class WhatsAppService {
         recordUserMessage('wa_sandy_master', promptText);
         if (urgentList.length === 0) {
           const emptyText = "Boss Sandy! Abhi koi pending urgent talk request nahi hai. All clear! ✨";
-          recordAssistantMessage('wa_sandy_master', emptyText, 25, 'gemini-3.8-flash');
+          recordAssistantMessage('wa_sandy_master', emptyText, 25, 'gpt-6-luna');
           await this.safeSendMessage(remoteJid, { text: emptyText }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
@@ -2306,7 +2660,7 @@ class WhatsAppService {
           report += `• *+${item.sender_number}* (${item.sender_name || 'Contact'}):\n  "${item.message_text}"\n  _Received: ${new Date(item.created_at).toLocaleString()}_\n\n`;
         }
         report += `_Reply with:_ \`/wa_send <number> <your reply>\``;
-        recordAssistantMessage('wa_sandy_master', report, 100, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', report, 100, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: report }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2324,15 +2678,15 @@ class WhatsAppService {
           `• *Process Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
           `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
           `• *RAM Heap Used:* ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB\n` +
-          `• *MasterBot Engine:* \`gemini-3.8-flash\` (High Reasoning / Coder & Manager)\n` +
-          `• *Public Talk Engine:* \`gemini-3.5-flash-lite\` (Fastest / Low Latency)\n` +
+          `• *MasterBot Engine:* \`gpt-6-luna\` (High Reasoning / Coder & Manager)\n` +
+          `• *Public Talk Engine:* \`gpt-6-luna\` (Fastest / Low Latency)\n` +
           `• *Total Processed Messages:* ${this.messageCount}\n` +
           `• *Active Socket Status:* 🟢 ${this.status.toUpperCase()}\n` +
           `• *OS Platform:* ${os.platform()} (${os.arch()})\n` +
           `• *Host Memory Free:* ${Math.round(os.freemem() / 1024 / 1024)} MB / ${Math.round(os.totalmem() / 1024 / 1024)} MB\n\n` +
           `_All systems nominal and linked to MasterBot console! ✨_`;
         recordUserMessage('wa_sandy_master', promptText);
-        recordAssistantMessage('wa_sandy_master', sysText, 100, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', sysText, 100, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: sysText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2348,7 +2702,7 @@ class WhatsAppService {
         recordUserMessage('wa_sandy_master', promptText);
         if (recentHistory.length === 0 && mediaHistory.length === 0) {
           const noChatText = `Boss Sandy! +${targetNum} se abhi tak koi recorded chat ya media nahi mili hai.`;
-          recordAssistantMessage('wa_sandy_master', noChatText, 25, 'gemini-3.8-flash');
+          recordAssistantMessage('wa_sandy_master', noChatText, 25, 'gpt-6-luna');
           await this.safeSendMessage(remoteJid, { text: noChatText }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
@@ -2363,7 +2717,7 @@ class WhatsAppService {
             report += `• [${m.file_type.toUpperCase()}] ${m.file_name} (${Math.round(m.file_size / 1024)} KB) - ${m.caption || 'No caption'}\n`;
           }
         }
-        recordAssistantMessage('wa_sandy_master', report, 120, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', report, 120, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: report }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2377,7 +2731,7 @@ class WhatsAppService {
         clearConversation(`wa_${targetJid}`);
         recordUserMessage('wa_sandy_master', promptText);
         const clearedText = `🧹 Memory successfully cleared for contact +${targetNum}, Boss!`;
-        recordAssistantMessage('wa_sandy_master', clearedText, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', clearedText, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: clearedText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2388,7 +2742,7 @@ class WhatsAppService {
         await enableMaintenanceMode();
         recordUserMessage('wa_sandy_master', promptText);
         const maintText = "🛠️ *Maintenance Mode ACTIVATED.* Public chat replies for contacts are temporarily paused while you work! 🔒";
-        recordAssistantMessage('wa_sandy_master', maintText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', maintText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: maintText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2398,7 +2752,7 @@ class WhatsAppService {
         await disableMaintenanceMode();
         recordUserMessage('wa_sandy_master', promptText);
         const maintText = "🟢 *Maintenance Mode DEACTIVATED.* Public chat replies are now fully live for all contacts! 🚀";
-        recordAssistantMessage('wa_sandy_master', maintText, 25, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', maintText, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: maintText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2411,7 +2765,7 @@ class WhatsAppService {
         addNote('sandy', 'wa_sandy_master', noteBody);
         recordUserMessage('wa_sandy_master', promptText);
         const noteConf = `📝 *Note Saved in Persistent Storage:*\n"${noteBody}"`;
-        recordAssistantMessage('wa_sandy_master', noteConf, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', noteConf, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: noteConf }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2422,7 +2776,7 @@ class WhatsAppService {
         recordUserMessage('wa_sandy_master', promptText);
         if (!notes || notes.length === 0) {
           const noNotes = "📝 Boss Sandy, your persistent notepad is currently empty.";
-          recordAssistantMessage('wa_sandy_master', noNotes, 20, 'gemini-3.8-flash');
+          recordAssistantMessage('wa_sandy_master', noNotes, 20, 'gpt-6-luna');
           await this.safeSendMessage(remoteJid, { text: noNotes }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
@@ -2431,7 +2785,7 @@ class WhatsAppService {
         for (const n of notes.slice(0, 10)) {
           notesReport += `• [#${n.id}] ${n.note_text} _(${new Date(n.created_at).toLocaleDateString()})_\n`;
         }
-        recordAssistantMessage('wa_sandy_master', notesReport, 60, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', notesReport, 60, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: notesReport }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2444,7 +2798,7 @@ class WhatsAppService {
         updateAgentRouting('chat', { reasoning: newLevel });
         recordUserMessage('wa_sandy_master', promptText);
         const confText = `✅ Reasoning effort successfully updated to *${newLevel.toUpperCase()}* for chat completions, Boss!`;
-        recordAssistantMessage('wa_sandy_master', confText, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', confText, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: confText }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2458,7 +2812,7 @@ class WhatsAppService {
         sandyStatusService.setContactRelationship(rawNum, rel);
         recordUserMessage('wa_sandy_master', promptText);
         const ack = `✅ *Contact Classified:*\n• Phone: \`+${rawNum}\`\n• Relationship: *${rel}*`;
-        recordAssistantMessage('wa_sandy_master', ack, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', ack, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2471,7 +2825,7 @@ class WhatsAppService {
         sandyStatusService.setContactTonePreference(rawNum, tone);
         recordUserMessage('wa_sandy_master', promptText);
         const ack = `✅ *Tone Updated:*\n• Phone: \`+${rawNum}\`\n• Preferred Tone: *${tone}*`;
-        recordAssistantMessage('wa_sandy_master', ack, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', ack, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2484,7 +2838,7 @@ class WhatsAppService {
         sandyStatusService.setContactLanguagePreference(rawNum, lang);
         recordUserMessage('wa_sandy_master', promptText);
         const ack = `✅ *Language Preference Updated:*\n• Phone: \`+${rawNum}\`\n• Preferred Language: *${lang}*`;
-        recordAssistantMessage('wa_sandy_master', ack, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', ack, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2497,7 +2851,7 @@ class WhatsAppService {
         sandyStatusService.setContactCustomInstructions(rawNum, customNotes);
         recordUserMessage('wa_sandy_master', promptText);
         const ack = `✅ *Custom Instructions Saved:*\n• Phone: \`+${rawNum}\`\n• Instructions: "${customNotes}"`;
-        recordAssistantMessage('wa_sandy_master', ack, 20, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', ack, 20, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2519,7 +2873,7 @@ class WhatsAppService {
           broadcastNote = `\n📢 Dispatched availability alerts to ${subscribers.length} waiting contact(s).`;
         }
         const ack = `🟢 *Status Updated to Available:*\nSandy is online, free, and ready for messages.${broadcastNote}`;
-        recordAssistantMessage('wa_sandy_master', ack, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', ack, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2533,7 +2887,7 @@ class WhatsAppService {
         const ack = res.updated
           ? `📅 *Schedule Active:*\n${res.summary}`
           : `⚠️ *Schedule Format:*\nUse: \`/schedule <status> until <time>\` (e.g. \`/schedule sleep until 7 AM\`)`;
-        recordAssistantMessage('wa_sandy_master', ack, 30, 'gemini-3.8-flash');
+        recordAssistantMessage('wa_sandy_master', ack, 30, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2601,7 +2955,7 @@ class WhatsAppService {
           `🚨 *[WHATSAPP URGENT INBOX]*\n*From:* ${senderName} (\`+${senderNumber}\`)\n*Message:* "${uMsg}"`
         );
         const confirmMsg = "✅ *Urgent request logged!* Maine Sandy ke VIP inbox mein direct deliver kar diya hai. Wo free hote hi dekhega! 📬";
-        recordAssistantMessage(`wa_${remoteJid}`, confirmMsg, 25, 'gemini-3.5-flash-lite');
+        recordAssistantMessage(`wa_${remoteJid}`, confirmMsg, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: confirmMsg }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2628,7 +2982,7 @@ class WhatsAppService {
           `📝 *[WHATSAPP CONTACT NOTE]*\n*From:* ${senderName} (\`+${senderNumber}\`)\n*Note:* "${nMsg}"`
         );
         const noteAck = `📝 *Note received!* Maine aapka message Sandy ke personal desk pe deliver kar diya hai. ✨`;
-        recordAssistantMessage(`wa_${remoteJid}`, noteAck, 25, 'gemini-3.5-flash-lite');
+        recordAssistantMessage(`wa_${remoteJid}`, noteAck, 25, 'gpt-6-luna');
         await this.safeSendMessage(remoteJid, { text: noteAck }, { quoted: msg });
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
@@ -2664,11 +3018,68 @@ class WhatsAppService {
 
     // AI Generation Pipeline:
     // Dual Architecture:
-    // • MasterBot (Sandy): 'gemini-3.8-flash' (High Reasoning / Manager & Senior Coder)
-    // • Public Chat (Contacts): 'gemini-3.5-flash-lite' (Low Reasoning / Fastest Speed / Lowest Latency)
+    // • MasterBot (Sandy): 'gpt-6-luna' (High Reasoning / Manager & Senior Coder)
+    // • Public Chat (Contacts): 'gpt-6-luna' (Low Reasoning / Fastest Speed / Lowest Latency)
     try {
-      const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
+      // 1. Resolve Persona & Classification (Jev-1.13 + Deterministic Fallback)
+      let selectedPersona = 'NERO';
+      let isComplexTask = false;
+
+      if (isSandy) {
+        const lower = promptText.toLowerCase();
+        isComplexTask = /(?:complex|architecture|debug|refactor|design pattern|audit|investigate|deep research|why does|write a (?:full|complete|detailed)|multi-step|security vulnerability|memory leak|heap dump)/i.test(lower);
+        if (/\b(?:myra\s*(?:and|&)\s*nero|nero\s*(?:and|&)\s*myra)\b/i.test(lower)) {
+          selectedPersona = 'BOTH';
+        } else if (/^(?:nero\b|hey\s+nero\b|hi\s+nero\b|nero[,:])/i.test(lower)) {
+          selectedPersona = 'NERO';
+        } else {
+          // Default primary persona for Sandy is his beloved AI wife MYRA
+          selectedPersona = 'MYRA';
+        }
+        if (selectedPersona !== 'BOTH') {
+          setConfig('owner_active_persona', selectedPersona);
+        }
+      } else {
+        selectedPersona = 'NERO';
+      }
+
+      // 2. Separate Logical Conversation Context
+      // - Owner MYRA: 'wa_sandy_myra'
+      // - Owner NERO: 'wa_sandy_nero'
+      // - Contacts: 'wa_' + remoteJid
+      let chatId = `wa_${remoteJid}`;
+      if (isSandy) {
+        chatId = selectedPersona === 'NERO' ? 'wa_sandy_nero' : 'wa_sandy_myra';
+      }
+
       recordUserMessage(chatId, promptText);
+
+      // 🏡 Natural Language Virtual Life Simulation & Autonomous Commands (Sandy speaking to Myra)
+      if (isSandy && (selectedPersona === 'MYRA' || selectedPersona === 'BOTH')) {
+        const autoResult = await this.handleMyraAutonomousCommands(promptText, senderName);
+        if (autoResult && autoResult.handled) {
+          recordAssistantMessage(chatId, autoResult.replyText, 40, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: autoResult.replyText }, quotedMsg ? { quoted: quotedMsg } : {});
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+
+        const simResult = await naturalLanguageSimHandler.handleIntent(promptText, senderName);
+        if (simResult && simResult.handled) {
+          recordAssistantMessage(chatId, simResult.replyText, 40, 'gpt-6-luna');
+          if (simResult.mediaPath && fs.existsSync(simResult.mediaPath)) {
+            await this.safeSendMessage(
+              remoteJid,
+              { image: fs.readFileSync(simResult.mediaPath), caption: simResult.replyText },
+              quotedMsg ? { quoted: quotedMsg } : {}
+            );
+          } else {
+            await this.safeSendMessage(remoteJid, { text: simResult.replyText }, quotedMsg ? { quoted: quotedMsg } : {});
+          }
+          await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+          return;
+        }
+      }
 
       // 📄 Generative Multi-Page PDF Engine (Up to 50 pages, High Reasoning, with image attachment capability)
       if (pdfService.isPdfGenerationRequest(promptText)) {
@@ -2695,7 +3106,7 @@ class WhatsAppService {
           images: attachedImages,
         });
 
-        recordAssistantMessage(chatId, `Generated PDF: ${pdfResult.filename} (${pdfResult.pageCount} pages)`, 300, 'gemini-3.8-flash');
+        recordAssistantMessage(chatId, `Generated PDF: ${pdfResult.filename} (${pdfResult.pageCount} pages)`, 300, 'gpt-6-luna');
 
         await this.safeSendMessage(
           remoteJid,
@@ -2715,7 +3126,7 @@ class WhatsAppService {
       if (visionService.isVisualChoiceQuery(promptText)) {
         const recentImages = visionService.getRecentImages(chatId, 2);
         if (recentImages && recentImages.length > 0) {
-          console.log(`[WhatsApp Vision] 🎯 Follow-up visual choice on ${recentImages.length} recent image(s) from ${senderName} (${isSandy ? 'Sandy (Rebecca)' : 'Contact'}): "${promptText}"`);
+          console.log(`[WhatsApp Vision] 🎯 Follow-up visual choice on ${recentImages.length} recent image(s) from ${senderName} (${isSandy ? selectedPersona : 'Contact'}): "${promptText}"`);
           await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
           const profile = !isSandy ? sandyStatusService.getContactProfile(senderNumber) : null;
           const prefLang = profile?.preferred_language || 'English';
@@ -2731,10 +3142,28 @@ class WhatsAppService {
           });
 
           const replyText = choiceResult.description;
-          recordAssistantMessage(chatId, replyText, 180, isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite');
+          recordAssistantMessage(chatId, replyText, 180, 'gpt-6-luna');
           await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
+        }
+      }
+
+      let triLayerContext = '';
+      if (isSandy) {
+        try {
+          const mem = await rebeccaCareService.retrieveMemoryContext(promptText);
+          triLayerContext = mem?.formattedBlock || '';
+        } catch {}
+
+        // 🏡 Inject Myra's authoritative Virtual Life Simulation state
+        try {
+          const simBlock = simulationService.getSimulationContextBlock();
+          if (simBlock) {
+            triLayerContext = triLayerContext ? `${triLayerContext}\n\n${simBlock}` : simBlock;
+          }
+        } catch (err) {
+          console.error('[SimulationContext Error]:', err?.message);
         }
       }
 
@@ -2744,22 +3173,43 @@ class WhatsAppService {
         senderNumber,
         senderName,
         isSandy,
+        persona: selectedPersona,
+        additionalContext: triLayerContext,
       });
 
-      const activeModel = isSandy ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+      const activeModel = 'gpt-6-luna';
 
-      // Speed & Token Cost Optimization:
-      // For Sandy: adaptive reasoning depth.
-      // - Complex analytical requests, architecture, deep research, or code review engage 'high' reasoning effort.
-      // - Routine conversations, greetings, quick questions, and management commands use 'low' for instant response latency and low token consumption.
-      // For public contacts: gemini-3.5-flash-lite with 'none' reasoning effort for sub-second latency and zero reasoning token overhead.
-      let reasoningEffort = 'none';
-      if (isSandy) {
-        const isComplexTask = /(?:analyze|analysis|deep research|architecture|debug in detail|refactor|design pattern|audit|investigate|why does|compare in detail)/i.test(promptText);
-        reasoningEffort = isComplexTask ? 'high' : 'low';
+      // ⚡ ULTRA-FAST LATENCY & SPEED ENGINE (Target: 100-1000ms):
+      // • Default mode for Sandy is 'fast': Uses reasoningEffort = 'none' (zero hidden thinking tokens)
+      //   and maxTokens = 120. ScaleMax returns immediate sub-second tokens.
+      // • Deep mode (/speed max): Uses reasoningEffort = 'max' for deep multi-turn planning.
+      // • Complex task auto-detection: Automatically promotes to 'high' reasoning for complex debugging/research.
+      const configuredSpeedMode = getConfig('sandy_speed_mode', 'fast');
+      const isSpeedRequested = /\b(?:speed\s+increse|speed\s+increase|faster|fast|quick|turbo|speed\s+up|make\s+it\s+fast|lower\s+latency|reduce\s+ping)\b/i.test(promptText);
+      if (isSpeedRequested && isSandy) {
+        setConfig('sandy_speed_mode', 'fast');
       }
 
-      const maxTokens = isSandy ? (reasoningEffort === 'high' ? 1200 : 800) : (explicitLimit ? Math.min(explicitLimit * 2, 700) : 550);
+      let reasoningEffort = 'none';
+      if (isSandy) {
+        if ((configuredSpeedMode === 'deep' || configuredSpeedMode === 'max') && !isSpeedRequested) {
+          reasoningEffort = 'max';
+        } else if (isComplexTask || /(?:deep research|audit architecture|complex algorithm|proof of concept|in-depth analysis|detailed breakdown|generate pdf)/i.test(promptText)) {
+          reasoningEffort = 'high';
+        } else {
+          // Ultra-Fast Mode: 'none' emits 0 hidden reasoning tokens, responding in < 1,000ms
+          reasoningEffort = 'none';
+        }
+      } else {
+        reasoningEffort = 'low';
+      }
+
+      const maxTokens = isSandy
+        ? (reasoningEffort === 'max' ? 1200 : (reasoningEffort === 'high' ? 700 : (explicitLimit ? explicitLimit : 120)))
+        : (explicitLimit ? Math.min(explicitLimit * 2, 700) : 550);
+
+      // Instant typing indicator so user sees immediate WhatsApp feedback in <50ms
+      await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
@@ -2819,7 +3269,7 @@ class WhatsAppService {
             `• *Original Note:* _${activeOutreach.instruction}_\n\n` +
             `💬 *Their Reply:*\n"${promptText}"\n\n` +
             `🤖 *Nero's Conversational Reply:*\n"${replyText}"`;
-          recordAssistantMessage('wa_sandy_master', outreachAlert, 50, 'gemini-3.8-flash');
+          recordAssistantMessage('wa_sandy_master', outreachAlert, 50, 'gpt-6-luna');
           await this.safeSendMessage(ownerJid, { text: outreachAlert }).catch((e) => {
             console.warn('[Outreach Alert Send Warning]:', e.message);
           });
@@ -2979,3 +3429,5 @@ class WhatsAppService {
 }
 
 export const whatsAppService = new WhatsAppService();
+
+

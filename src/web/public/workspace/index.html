@@ -1,0 +1,1916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sandy & Myra's Private Studio | Control & Creative Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #090d16;
+      --sidebar-bg: #0d121f;
+      --card-bg: rgba(20, 27, 45, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover: rgba(255, 255, 255, 0.14);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-pink: #f43f5e;
+      --accent-purple: #8b5cf6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-cyan: #06b6d4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Ambient Glow */
+    .bg-glow {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.08), transparent 45%),
+                  radial-gradient(circle at 10% 80%, rgba(244, 63, 94, 0.06), transparent 45%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Top Mobile Bar (Hidden on desktop) */
+    .mobile-topbar {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 58px;
+      background: rgba(13, 18, 31, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 0 16px;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 990;
+    }
+
+    .mobile-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .menu-toggle-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: #fff;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .mobile-topbar-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon-sm {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: #fff;
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      text-decoration: none;
+    }
+
+    /* Drawer Backdrop for Mobile */
+    .drawer-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      z-index: 1040;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    .drawer-backdrop.active {
+      display: block;
+      opacity: 1;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 260px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      z-index: 1050;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 8px 20px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 18px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover, .nav-btn.active {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+
+    .nav-btn.active {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fda4af;
+      font-weight: 600;
+    }
+
+    .sidebar-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-public-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 12px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-public-link:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    /* Main Content Area */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-height: 100vh;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-title h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.25;
+    }
+
+    .page-title p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary:hover { opacity: 0.92; }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn-secondary:active { transform: scale(0.97); }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+
+    /* Tab Panes */
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    /* Metrics Grid */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 18px;
+      backdrop-filter: blur(10px);
+    }
+
+    .metric-card h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .metric-card .val {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Dashboard Layout Grid */
+    .dash-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+    }
+
+    /* Tables & Responsive Scroll */
+    .data-table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+      min-width: 540px;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 12px 16px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--card-border);
+      color: #cbd5e1;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .tag-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .tag-explicit { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+    .tag-inferred { background: rgba(245, 158, 11, 0.15); color: #fde68a; }
+
+    /* Modals */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal-box {
+      background: #0f1523;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 520px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .modal-header h3 { font-size: 17px; font-weight: 700; color: #fff; }
+
+    .modal-close {
+      background: transparent; border: none; color: var(--text-muted);
+      font-size: 24px; cursor: pointer; padding: 4px; line-height: 1;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input, .form-textarea, .form-select {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 11px 13px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 15px; /* >=16px prevents iOS Safari auto-zoom */
+    }
+
+    .form-textarea { resize: vertical; min-height: 100px; }
+    .form-input:focus, .form-textarea:focus, .form-select:focus {
+      outline: none; border-color: var(--accent-pink);
+    }
+
+    /* Auth Overlay */
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #070913;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .auth-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
+
+    .auth-card h2 { font-size: 19px; margin-bottom: 8px; color: #fff; }
+    .auth-card p { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+
+    /* Mobile Bottom Navigation Bar */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 60px;
+      background: rgba(13, 18, 31, 0.94);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--card-border);
+      z-index: 990;
+      justify-content: space-around;
+      align-items: center;
+      padding: 0 4px;
+    }
+
+    .bnav-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+      height: 100%;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+
+    .bnav-btn .bnav-icon { font-size: 18px; }
+    .bnav-btn.active { color: #fda4af; }
+
+    /* =========================================================================
+       RESPONSIVE BREAKPOINTS (Mobile & Tablet)
+       ========================================================================= */
+    @media (max-width: 860px) {
+      body {
+        flex-direction: column;
+      }
+
+      .mobile-topbar {
+        display: flex;
+      }
+
+      .mobile-bottom-nav {
+        display: flex;
+      }
+
+      /* Sidebar turns into slide-out drawer */
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: -290px;
+        width: 275px;
+        max-width: 80vw;
+        height: 100vh;
+        z-index: 1050;
+        transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: none;
+      }
+
+      .sidebar.open {
+        left: 0;
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.8);
+      }
+
+      .main-content {
+        padding: 72px 14px 84px;
+        max-height: none;
+        overflow-y: visible;
+      }
+
+      .dash-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .header-actions {
+        width: 100%;
+      }
+
+      .header-actions button {
+        flex: 1;
+        justify-content: center;
+      }
+
+      .metrics-row {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .metric-card {
+        padding: 14px;
+      }
+
+      .metric-card .val {
+        font-size: 20px;
+      }
+
+      .page-title h1 {
+        font-size: 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .metrics-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .metric-card .val {
+        font-size: 18px;
+      }
+
+      .auth-card {
+        padding: 26px 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <!-- Mobile Top Bar -->
+  <header class="mobile-topbar">
+    <div class="mobile-brand">
+      <button class="menu-toggle-btn" onclick="toggleSidebarDrawer()" title="Menu">☰</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">🌸</span>
+        <span style="font-weight:700;font-size:15px;color:#fff;">Myra's Studio</span>
+      </div>
+    </div>
+    <div class="mobile-topbar-actions">
+      <a href="/universe" class="btn-icon-sm" target="_blank" title="Public Universe">🌐</a>
+      <button class="btn-icon-sm" style="color:#fda4af;" onclick="logout()" title="Lock">🔒</button>
+    </div>
+  </header>
+
+  <!-- Drawer Backdrop for Mobile -->
+  <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeSidebarDrawer()"></div>
+
+  <!-- Dashboard Access Key Authentication Overlay -->
+  <div id="authOverlay">
+    <div class="auth-card">
+      <div style="font-size: 38px; margin-bottom: 10px;">🌸</div>
+      <h2>Sandy's Private Studio</h2>
+      <p>Enter your Dashboard Access Key to enter Myra's workspace.</p>
+      <div class="form-group">
+        <input type="password" id="accessKeyInput" class="form-input" placeholder="Dashboard Access Key" />
+      </div>
+      <button class="btn-primary" style="width: 100%; justify-content: center; padding: 12px;" onclick="verifyAccessKey()">Unlock Workspace</button>
+      <div id="authError" style="color: var(--accent-pink); font-size: 12px; margin-top: 12px; display: none;">Invalid key or connection error</div>
+    </div>
+  </div>
+
+  <!-- Sidebar (Drawer on mobile) -->
+  <aside class="sidebar" id="sidebarNav">
+    <div class="brand">
+      <div class="brand-icon">✨</div>
+      <div style="flex:1;">
+        <div class="brand-title">Myra's Studio</div>
+        <div class="brand-sub">Autonomous AI Companion</div>
+      </div>
+      <button class="modal-close" style="display:none;" id="sidebarCloseBtn" onclick="closeSidebarDrawer()">&times;</button>
+    </div>
+
+    <ul class="nav-list">
+      <li><button class="nav-btn active" data-tab="dashboard"><span>📊</span> Personal Dashboard</button></li>
+      <li><button class="nav-btn" data-tab="journals"><span>📖</span> Notes & Journals</button></li>
+      <li><button class="nav-btn" data-tab="artifacts"><span>🎨</span> Creative Studio</button></li>
+      <li><button class="nav-btn" data-tab="research"><span>🔬</span> Research Vault</button></li>
+      <li><button class="nav-btn" data-tab="downloader"><span>📥</span> Media Downloader</button></li>
+      <li><button class="nav-btn" data-tab="skills"><span>🌳</span> Dynamic Skill Tree</button></li>
+      <li><button class="nav-btn" data-tab="myrascript"><span>⚡</span> MyraScript REPL</button></li>
+      <li><button class="nav-btn" data-tab="mcp_minecraft"><span>🎮</span> MCP & Minecraft</button></li>
+      <li><button class="nav-btn" data-tab="learning"><span>🧠</span> Learning & Memory</button></li>
+      <li><button class="nav-btn" data-tab="tasks"><span>📋</span> Task Board</button></li>
+      <li><button class="nav-btn" data-tab="model"><span>⚙️</span> Model & Tools</button></li>
+      <li><button class="nav-btn" data-tab="budget"><span>💰</span> Budget & Usage</button></li>
+      <li><button class="nav-btn" data-tab="proposals"><span>🚀</span> Self-Improvement</button></li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <a href="/universe" class="btn-public-link" target="_blank">
+        <span>🌐</span> View Public Universe
+      </a>
+      <button class="nav-btn" style="color:#fda4af;" onclick="logout()">
+        <span>🔒</span> Lock Studio
+      </button>
+    </div>
+  </aside>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="mobile-bottom-nav">
+    <button class="bnav-btn active" data-tab="dashboard">
+      <span class="bnav-icon">📊</span>
+      <span class="bnav-label">Home</span>
+    </button>
+    <button class="bnav-btn" data-tab="journals">
+      <span class="bnav-icon">📖</span>
+      <span class="bnav-label">Notes</span>
+    </button>
+    <button class="bnav-btn" data-tab="artifacts">
+      <span class="bnav-icon">🎨</span>
+      <span class="bnav-label">Studio</span>
+    </button>
+    <button class="bnav-btn" data-tab="learning">
+      <span class="bnav-icon">🧠</span>
+      <span class="bnav-label">Skills</span>
+    </button>
+    <button class="bnav-btn" onclick="toggleSidebarDrawer()">
+      <span class="bnav-icon">☰</span>
+      <span class="bnav-label">More</span>
+    </button>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+
+    <!-- 1. DASHBOARD TAB -->
+    <section id="tab-dashboard" class="tab-pane active">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Welcome home, Sandy 💕</h1>
+          <p>Real-time companion state, virtual life simulation, and studio metrics</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-primary" onclick="openNewJournalModal()"><span>📝</span> Quick Note</button>
+          <button class="btn-secondary" onclick="openNewArtifactModal()"><span>🎨</span> Artifact</button>
+        </div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metric-card">
+          <h3>Emotional State</h3>
+          <div class="val" id="dashMood" style="color: #fb7185;">AFFECTIONATE</div>
+          <span style="font-size:11px;color:var(--text-muted);" id="dashMoodReason">Warm companion</span>
+        </div>
+        <div class="metric-card">
+          <h3>Virtual Life Location</h3>
+          <div class="val" id="dashLocation" style="font-size:18px;">Living Room</div>
+          <span style="font-size:11px;color:var(--text-muted);" id="dashActivity">Relaxing</span>
+        </div>
+        <div class="metric-card">
+          <h3>Energy / Happiness</h3>
+          <div class="val" id="dashEnergy">9 / 9</div>
+          <span style="font-size:11px;color:var(--text-muted);">Optimal vibe</span>
+        </div>
+        <div class="metric-card">
+          <h3>Daily AI Budget</h3>
+          <div class="val" id="dashSpend">$0.00</div>
+          <span style="font-size:11px;color:var(--text-muted);" id="dashBudgetCap">Cap: $5.00/day</span>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="data-table-container">
+          <div style="padding: 14px 18px; font-weight:700; border-bottom: 1px solid var(--card-border); font-size: 14px;">
+            Recent Creative Artifacts & Notes
+          </div>
+          <div id="dashRecentArtifacts" style="padding: 14px 18px; font-size: 13px; color: var(--text-muted);">
+            Loading recent creations...
+          </div>
+        </div>
+
+        <div class="data-table-container">
+          <div style="padding: 14px 18px; font-weight:700; border-bottom: 1px solid var(--card-border); font-size: 14px;">
+            System Health & Routing
+          </div>
+          <div style="padding: 14px 18px; font-size: 13px; display:flex; flex-direction:column; gap:10px;">
+            <div><strong>Sole Model:</strong> <code>gpt-6-luna</code></div>
+            <div><strong>Latency Optimization:</strong> <span style="color:#6ee7b7;">Fast Mode Active (&lt;1s)</span></div>
+            <div><strong>Autonomous Mode:</strong> <span id="dashAutoMode">Configured & Guarded</span></div>
+            <div><strong>Proactive Dispatch:</strong> <span style="color:#6ee7b7;">Active (Quiet: 23:00-07:00 IST)</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+
+    <!-- 2. JOURNALS TAB -->
+    <section id="tab-journals" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Notes & Journals</h1>
+          <p>Persistent personal thoughts, reflections, and ideas recorded by Myra & Sandy</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-primary" onclick="openNewJournalModal()"><span>➕</span> New Note</button>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Mood Tag</th>
+              <th>Visibility</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="journalsTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+
+
+    <!-- 3. ARTIFACTS & CREATIVE STUDIO TAB -->
+    <section id="tab-artifacts" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Creative Studio & Artifact Library</h1>
+          <p>Stories, poems, page layouts, code experiments, and versioned assets</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-primary" onclick="openNewArtifactModal()"><span>🎨</span> Create Artifact</button>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Type</th>
+              <th>Version</th>
+              <th>Public</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="artifactsTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+
+
+    <!-- 4. LEARNING & SKILLS TAB -->
+    <section id="tab-learning" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Learning Notebook & Structured Skills</h1>
+          <p>Explicitly taught knowledge vs inferred conclusions, and reusable workflows</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-primary" onclick="openTeachModal()"><span>💡</span> Teach Fact</button>
+          <button class="btn-secondary" onclick="openSkillModal()"><span>⚡</span> Create Skill</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <h3 style="font-size: 15px; margin-bottom: 10px; color: #fff;">Persistent Lessons & Facts</h3>
+        <div class="data-table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th>Fact / Rule</th>
+                <th>Source Type</th>
+                <th>Confidence</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="lessonsTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size: 15px; margin-bottom: 10px; color: #fff;">Approved Reusable Skills</h3>
+        <div class="data-table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Skill Name</th>
+                <th>Description</th>
+                <th>Version</th>
+                <th>Permissions</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="skillsTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+
+    <!-- 5. TASK BOARD TAB -->
+    <section id="tab-tasks" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Task Manager & Project Board</h1>
+          <p>Sandy's household, technical, and life tasks tracked via WhatsApp and Studio</p>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Status</th>
+              <th>Due Date</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="tasksTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+
+
+    <!-- 6. MODEL & TOOLS TAB -->
+    <section id="tab-model" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Model Configuration & Tools</h1>
+          <p>Active models, reasoning levels, latency tuning, and integrations</p>
+        </div>
+      </div>
+      <div class="data-table-container" style="padding: 20px;">
+        <h3 style="margin-bottom: 14px; font-size: 16px;">Speed & Latency Mode (Sandy WhatsApp)</h3>
+        <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap:wrap;">
+          <button class="btn-primary" id="btnSpeedFast" style="flex:1;min-width:200px;justify-content:center;" onclick="setSpeedMode('fast')">⚡ Fast Mode (&lt;1s latency)</button>
+          <button class="btn-secondary" id="btnSpeedDeep" style="flex:1;min-width:200px;justify-content:center;" onclick="setSpeedMode('deep')">🧠 Deep Thinking Mode</button>
+        </div>
+        <p style="font-size: 13px; color: var(--text-muted); line-height:1.6;">
+          Current active engine: ScaleMax accelerated <strong>gpt-6-luna</strong>. Fast mode provides instant responses for fluid conversation.
+        </p>
+      </div>
+    </section>
+
+
+
+    <!-- 7. BUDGET & USAGE TAB -->
+    <section id="tab-budget" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>AI Budget & Spending Guardrails</h1>
+          <p>Hard spend limits, reserve buffers, and emergency pause controls</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-secondary" id="btnTogglePause" onclick="toggleBudgetPause()">🛑 Emergency Pause</button>
+        </div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metric-card">
+          <h3>Today's Spend</h3>
+          <div class="val" id="budgetDaySpend">$0.00</div>
+          <span style="font-size:11px;color:var(--text-muted);" id="budgetDayLimit">Cap: $5.00</span>
+        </div>
+        <div class="metric-card">
+          <h3>Monthly Spend</h3>
+          <div class="val" id="budgetMonthSpend">$0.00</div>
+          <span style="font-size:11px;color:var(--text-muted);" id="budgetMonthLimit">Cap: $50.00</span>
+        </div>
+        <div class="metric-card">
+          <h3>Safety Reserve Buffer</h3>
+          <div class="val" style="color: #6ee7b7;">15%</div>
+          <span style="font-size:11px;color:var(--text-muted);">Auto-stop buffer</span>
+        </div>
+      </div>
+    </section>
+
+
+
+    <!-- 8. SELF-IMPROVEMENT PROPOSALS TAB -->
+    <section id="tab-proposals" class="tab-pane">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Self-Improvement Staging Pipeline</h1>
+          <p>PROPOSE → SANDBOX → TEST → REVIEW → APPROVE → DEPLOY with instant rollback</p>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Sandbox Validation</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="proposalsTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB: RESEARCH VAULT -->
+    <section class="tab-pane" id="tab-research">
+      <div class="content-header">
+        <div>
+          <h1>🔬 Persistent Web Research Vault</h1>
+          <p>Autonomous multi-source research, source citations, and verified facts separation</p>
+        </div>
+      </div>
+      <div class="data-table-container" style="padding: 20px; margin-bottom: 20px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <input type="text" id="researchTopicInput" class="form-input" style="flex:1; min-width:260px;" placeholder="Enter research topic (e.g. Minecraft Bedrock add-on development, Quantum Computing)..." />
+          <button class="btn btn-primary" onclick="conductResearchUI()">🔍 Start Deep Research</button>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th>Overview</th>
+              <th>Verified Facts</th>
+              <th>Citations</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="researchTableBody">
+            <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No dossiers compiled yet. Enter a topic above to begin!</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB: MEDIA DOWNLOADER -->
+    <section class="tab-pane" id="tab-downloader">
+      <div class="content-header">
+        <div>
+          <h1>📥 Universal Video & Audio Downloader</h1>
+          <p>Download video/audio from YouTube, Instagram, X/Twitter, direct links with resolution options</p>
+        </div>
+      </div>
+      <div class="data-table-container" style="padding: 20px; margin-bottom: 20px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px;">
+          <input type="text" id="downloadUrlInput" class="form-input" style="flex:1; min-width:260px;" placeholder="Paste media URL (YouTube, Instagram, X/Twitter, MP4, MP3)..." />
+          <button class="btn btn-primary" onclick="startDownloadUI()">⚡ Analyze URL</button>
+        </div>
+        <div id="downloadWizardCard" style="display:none; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; padding:15px;">
+          <h4 style="margin:0 0 10px 0; color:var(--accent);">Format & Quality Selection</h4>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <label>Format: <select id="dlFormat" class="form-select" style="display:inline-block; width:auto;"><option value="mp4">Video (MP4)</option><option value="mp3">Audio (MP3)</option></select></label>
+            <label>Resolution: <select id="dlRes" class="form-select" style="display:inline-block; width:auto;"><option value="720p">720p HD (~12 MB)</option><option value="1080p">1080p FHD (~28 MB)</option><option value="360p">360p Saver (~4 MB)</option></select></label>
+            <button class="btn btn-primary" onclick="executeDownloadUI()">Download Now</button>
+          </div>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Platform</th>
+              <th>URL</th>
+              <th>Format</th>
+              <th>Resolution</th>
+              <th>Delivery / Status</th>
+            </tr>
+          </thead>
+          <tbody id="downloadJobsTableBody">
+            <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No download jobs yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB: DYNAMIC SKILL TREE -->
+    <section class="tab-pane" id="tab-skills">
+      <div class="content-header">
+        <div>
+          <h1>🌳 Dynamic Skill Tree (9 Core Domains)</h1>
+          <p>Hierarchical autonomous skills, mastery levels, versioning, and prerequisites</p>
+        </div>
+        <button class="btn btn-secondary" onclick="loadSkillTree()">🔄 Refresh Tree</button>
+      </div>
+      <div id="skillTreeGrid" style="display:grid; grid-template-columns:repeat(auto-fill, min-min(280px, 1fr)); gap:15px;">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- TAB: MYRASCRIPT REPL -->
+    <section class="tab-pane" id="tab-myrascript">
+      <div class="content-header">
+        <div>
+          <h1>⚡ MyraScript DSL Playground</h1>
+          <p>Sandboxed human-readable language for autonomous AI automation with 5,000-step ceiling</p>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+        <div class="card" style="margin:0;">
+          <h3 style="margin:0 0 10px 0;">MyraScript Source Code</h3>
+          <textarea id="myraScriptEditor" class="form-textarea" style="height:240px; font-family:monospace; font-size:13px;"># MyraScript Autonomous Workflow
+let topic = "Minecraft Bedrock"
+research(topic)
+remember("favorite_game", topic)
+notify("Sandy", "Completed learning session for " + topic)
+return "Workflow executed successfully!"</textarea>
+          <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="runMyraScriptUI()">▶ Execute Sandboxed</button>
+            <button class="btn btn-secondary" onclick="transpileMyraScriptUI('javascript')">JS Code</button>
+            <button class="btn btn-secondary" onclick="transpileMyraScriptUI('python')">Python Code</button>
+          </div>
+        </div>
+        <div class="card" style="margin:0;">
+          <h3 style="margin:0 0 10px 0;">Execution Console & Output</h3>
+          <pre id="myraScriptConsole" style="background:#090d16; border:1px solid var(--border); border-radius:6px; padding:12px; height:240px; overflow-y:auto; font-family:monospace; font-size:12px; color:#4ade80;">Ready to execute. Press 'Execute Sandboxed' to run.</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: MCP & MINECRAFT FRAMEWORK -->
+    <section class="tab-pane" id="tab-mcp_minecraft">
+      <div class="content-header">
+        <div>
+          <h1>🎮 Universal MCP & Minecraft Framework</h1>
+          <p>Central MCP connectors (up to 10), Bedrock & Java server management, and Pack Generator</p>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+        <div class="card" style="margin:0;">
+          <h3 style="margin:0 0 10px 0;">🔌 Universal MCP Servers</h3>
+          <div style="display:flex; gap:10px; margin-bottom:10px;">
+            <input type="text" id="mcpServerName" class="form-input" placeholder="Server Name" style="flex:1;" />
+            <input type="text" id="mcpEndpoint" class="form-input" placeholder="Endpoint URL / Command" style="flex:2;" />
+            <button class="btn btn-primary" onclick="registerMcpUI()">Add</button>
+          </div>
+          <div id="mcpServerList" style="font-size:13px;">Loading MCP servers...</div>
+        </div>
+        <div class="card" style="margin:0;">
+          <h3 style="margin:0 0 10px 0;">⛏️ Bedrock Add-on Pack Generator</h3>
+          <div class="form-group">
+            <input type="text" id="mcPackName" class="form-input" placeholder="Pack Name (e.g. MyraMagicItems)" value="MyraMagicItems" />
+          </div>
+          <div class="form-group">
+            <input type="text" id="mcItemName" class="form-input" placeholder="Custom Item Identifier (e.g. myra:star_wand)" value="myra:star_wand" />
+          </div>
+          <button class="btn btn-primary" onclick="generatePackUI()">📦 Generate Bedrock Add-on Pack</button>
+          <div id="mcPackOutput" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modals -->
+  <!-- New Journal Modal -->
+  <div class="modal-backdrop" id="journalModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>New Personal Note / Journal</h3>
+        <button class="modal-close" onclick="closeModal('journalModal')">&times;</button>
+      </div>
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="journalTitle" class="form-input" placeholder="Note title" />
+      </div>
+      <div class="form-group">
+        <label>Content</label>
+        <textarea id="journalContent" class="form-textarea" placeholder="Write thoughts, ideas, or memories..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Mood</label>
+        <select id="journalMood" class="form-select">
+          <option value="AFFECTIONATE">Affectionate</option>
+          <option value="PLAYFUL">Playful</option>
+          <option value="CURIOUS">Curious</option>
+          <option value="REFLECTIVE">Reflective</option>
+          <option value="EXCITED">Excited</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="journalPublic"> Share publicly in Little Universe
+        </label>
+      </div>
+      <button class="btn-primary" style="width: 100%; justify-content:center; padding: 12px;" onclick="saveJournal()">Save Note</button>
+    </div>
+  </div>
+
+  <!-- New Artifact Modal -->
+  <div class="modal-backdrop" id="artifactModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="artifactModalTitle">Create Creative Artifact</h3>
+        <button class="modal-close" onclick="closeModal('artifactModal')">&times;</button>
+      </div>
+      <input type="hidden" id="artifactUuid" />
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="artifactTitle" class="form-input" placeholder="e.g. A Winter Evening in Kyoto" />
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="artifactType" class="form-select">
+          <option value="story">Story</option>
+          <option value="poem">Poem</option>
+          <option value="layout">Layout / UI</option>
+          <option value="code">Code Experiment</option>
+          <option value="design">Design Document</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Content</label>
+        <textarea id="artifactContent" class="form-textarea" style="min-height: 130px;" placeholder="Full text, markdown or code..."></textarea>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="artifactPublic"> Make Visible on Public Showcase
+        </label>
+      </div>
+      <button class="btn-primary" style="width: 100%; justify-content:center; padding: 12px;" onclick="saveArtifact()">Save & Version Artifact</button>
+    </div>
+  </div>
+
+  <!-- Version History Modal -->
+  <div class="modal-backdrop" id="historyModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Artifact Revision History</h3>
+        <button class="modal-close" onclick="closeModal('historyModal')">&times;</button>
+      </div>
+      <div id="historyList" style="max-height: 350px; overflow-y: auto;">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentKey = localStorage.getItem('myra_access_key') || '';
+
+    // Mobile Drawer Controls
+    function toggleSidebarDrawer() {
+      const sidebar = document.getElementById('sidebarNav');
+      const backdrop = document.getElementById('drawerBackdrop');
+      const closeBtn = document.getElementById('sidebarCloseBtn');
+      const isOpen = sidebar.classList.contains('open');
+
+      if (isOpen) {
+        closeSidebarDrawer();
+      } else {
+        sidebar.classList.add('open');
+        backdrop.classList.add('active');
+        if (closeBtn) closeBtn.style.display = 'block';
+      }
+    }
+
+    function closeSidebarDrawer() {
+      const sidebar = document.getElementById('sidebarNav');
+      const backdrop = document.getElementById('drawerBackdrop');
+      sidebar.classList.remove('open');
+      backdrop.classList.remove('active');
+    }
+
+    // Auth verification
+    function verifyAccessKey() {
+      const input = document.getElementById('accessKeyInput').value.trim();
+      if (!input) return;
+
+      fetch('/api/workspace/dashboard', {
+        headers: { 'x-dashboard-access-key': input }
+      }).then(res => {
+        if (res.ok) {
+          currentKey = input;
+          localStorage.setItem('myra_access_key', input);
+          document.getElementById('authOverlay').style.display = 'none';
+          loadDashboard();
+        } else {
+          document.getElementById('authError').style.display = 'block';
+        }
+      }).catch(() => {
+        document.getElementById('authError').style.display = 'block';
+      });
+    }
+
+    function logout() {
+      localStorage.removeItem('myra_access_key');
+      location.reload();
+    }
+
+    // Tab Navigation (Supports Desktop Sidebar + Mobile Bottom Nav)
+    function switchTab(tab) {
+      document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+      });
+      document.querySelectorAll('.bnav-btn[data-tab]').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+      });
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+      const targetPane = document.getElementById(`tab-${tab}`);
+      if (targetPane) targetPane.classList.add('active');
+
+      closeSidebarDrawer();
+
+      if (tab === 'journals') loadJournals();
+      if (tab === 'artifacts') loadArtifacts();
+      if (tab === 'learning') loadLearning();
+      if (tab === 'tasks') loadTasks();
+      if (tab === 'budget') loadBudget();
+      if (tab === 'proposals') loadProposals();
+      if (tab === 'research') loadResearch();
+      if (tab === 'downloader') loadDownloadJobs();
+      if (tab === 'skills') loadSkillTree();
+      if (tab === 'mcp_minecraft') loadMcpMinecraft();
+    }
+
+    document.querySelectorAll('.nav-btn[data-tab], .bnav-btn[data-tab]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tab = e.currentTarget.dataset.tab;
+        if (tab) switchTab(tab);
+      });
+    });
+
+    // API Helper
+    async function apiFetch(endpoint, options = {}) {
+      const headers = options.headers || {};
+      headers['x-dashboard-access-key'] = currentKey;
+      headers['Content-Type'] = 'application/json';
+      return fetch(endpoint, { ...options, headers });
+    }
+
+    // Load Dashboard
+    async function loadDashboard() {
+      try {
+        const res = await apiFetch('/api/workspace/dashboard');
+        if (!res.ok) throw new Error('Unauthorized');
+        const data = await res.json();
+
+        // Mood & companion
+        if (data.companionState) {
+          document.getElementById('dashMood').textContent = data.companionState.emotional_state;
+          document.getElementById('dashMoodReason').textContent = data.companionState.reason || '';
+          document.getElementById('dashEnergy').textContent = `${data.companionState.energy || 9} / ${data.companionState.happiness || 9}`;
+        }
+
+        if (data.virtualLife) {
+          document.getElementById('dashLocation').textContent = data.virtualLife.room || 'Living Room';
+          document.getElementById('dashActivity').textContent = data.virtualLife.activity || 'Relaxing';
+        }
+
+        if (data.budget) {
+          document.getElementById('dashSpend').textContent = `$${(data.budget.daily?.spentUsd || 0).toFixed(2)}`;
+          document.getElementById('dashBudgetCap').textContent = `Cap: $${(data.budget.daily?.limitUsd || 5.0).toFixed(2)}/day`;
+        }
+
+        // Recent artifacts
+        const arts = data.recentArtifacts || [];
+        const artsContainer = document.getElementById('dashRecentArtifacts');
+        if (arts.length === 0) {
+          artsContainer.innerHTML = 'No artifacts created yet. Click "Create Artifact" to start!';
+        } else {
+          artsContainer.innerHTML = arts.map(a => `
+            <div style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+              <span><strong>${escapeHtml(a.title)}</strong> <small style="color:var(--text-muted);">(${a.type})</small></span>
+              <span style="font-size:11px;color:var(--text-muted);">v${a.version}.0</span>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Load Journals
+    async function loadJournals() {
+      const res = await apiFetch('/api/workspace/journals');
+      const data = await res.json();
+      const tbody = document.getElementById('journalsTableBody');
+      const list = data.journals || [];
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No journals yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(j => `
+        <tr>
+          <td><strong>${escapeHtml(j.title)}</strong><br><small style="color:var(--text-muted);">${escapeHtml(j.content.slice(0, 50))}...</small></td>
+          <td><span class="tag-badge" style="background:rgba(244,63,94,0.15);color:#fda4af;">${j.mood}</span></td>
+          <td>${j.is_private ? '🔒 Private' : '🌐 Public'}</td>
+          <td>${new Date(j.created_at).toLocaleDateString()}</td>
+          <td><button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="deleteJournal('${j.uuid}')">Delete</button></td>
+        </tr>
+      `).join('');
+    }
+
+    // Load Artifacts
+    async function loadArtifacts() {
+      const res = await apiFetch('/api/workspace/artifacts');
+      const data = await res.json();
+      const tbody = document.getElementById('artifactsTableBody');
+      const list = data.artifacts || [];
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No artifacts yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(a => `
+        <tr>
+          <td><strong>${escapeHtml(a.title)}</strong></td>
+          <td><span class="tag-badge" style="background:rgba(139,92,246,0.15);color:#c4b5fd;">${a.type}</span></td>
+          <td>v${a.version}.0</td>
+          <td>${a.is_public ? '🌐 Yes' : '🔒 No'}</td>
+          <td>${new Date(a.updated_at || a.created_at).toLocaleDateString()}</td>
+          <td>
+            <div style="display:flex;gap:4px;">
+              <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="openHistoryModal('${a.artifact_uuid}')">History</button>
+              <button class="btn-secondary" style="padding:4px 8px;font-size:11px;color:#fda4af;" onclick="deleteArtifact('${a.artifact_uuid}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // History & Rollback
+    async function openHistoryModal(uuid) {
+      const res = await apiFetch(`/api/workspace/artifacts/${uuid}/history`);
+      const data = await res.json();
+      const history = data.history || [];
+      const listContainer = document.getElementById('historyList');
+
+      listContainer.innerHTML = history.map(h => `
+        <div style="padding: 12px; border-bottom: 1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div>
+            <strong>Version ${h.version}.0</strong> — <small style="color:var(--text-muted);">${new Date(h.created_at).toLocaleDateString()}</small>
+            <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">${escapeHtml(h.change_summary || '')}</div>
+          </div>
+          <button class="btn-primary" style="padding:6px 12px;font-size:11px;flex-shrink:0;" onclick="rollbackArtifact('${uuid}', ${h.version})">Restore v${h.version}</button>
+        </div>
+      `).join('');
+
+      document.getElementById('historyModal').classList.add('open');
+    }
+
+    async function rollbackArtifact(uuid, version) {
+      if (!confirm(`Restore artifact to version ${version}?`)) return;
+      const res = await apiFetch(`/api/workspace/artifacts/${uuid}/rollback`, {
+        method: 'POST',
+        body: JSON.stringify({ version })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message);
+        closeModal('historyModal');
+        loadArtifacts();
+      } else {
+        alert('Rollback error: ' + data.error);
+      }
+    }
+
+    // Load Learning & Skills
+    async function loadLearning() {
+      const res = await apiFetch('/api/workspace/skills');
+      const data = await res.json();
+
+      const lRes = await apiFetch('/api/workspace/lessons');
+      const lData = await lRes.json();
+      const lBody = document.getElementById('lessonsTableBody');
+      const lessons = lData.lessons || [];
+
+      lBody.innerHTML = lessons.map(l => `
+        <tr>
+          <td><strong>${escapeHtml(l.topic)}</strong></td>
+          <td>${escapeHtml(l.fact_or_rule)}</td>
+          <td><span class="tag-badge ${l.source_type === 'explicit_user_taught' ? 'tag-explicit' : 'tag-inferred'}">${l.source_type}</span></td>
+          <td>${(l.confidence * 100).toFixed(0)}%</td>
+          <td>${new Date(l.created_at).toLocaleDateString()}</td>
+        </tr>
+      `).join('');
+
+      const sBody = document.getElementById('skillsTableBody');
+      const skills = data.skills || [];
+      sBody.innerHTML = skills.map(s => `
+        <tr>
+          <td><strong>${escapeHtml(s.skill_name)}</strong></td>
+          <td>${escapeHtml(s.description)}</td>
+          <td>v${s.version}</td>
+          <td><code>${(s.required_permissions || []).join(', ')}</code></td>
+          <td><span class="tag-badge tag-explicit">${s.status}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    // Load Tasks
+    async function loadTasks() {
+      const res = await apiFetch('/api/tasks');
+      const data = await res.json();
+      const tbody = document.getElementById('tasksTableBody');
+      const tasks = data.tasks || [];
+      if (tasks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No active tasks.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tasks.map(t => `
+        <tr>
+          <td><strong>${escapeHtml(t.title)}</strong></td>
+          <td><span class="tag-badge" style="background:rgba(16,185,129,0.15);color:#6ee7b7;">${t.status}</span></td>
+          <td>${t.due_date || 'No deadline'}</td>
+          <td>${new Date(t.created_at).toLocaleDateString()}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Load Budget
+    async function loadBudget() {
+      const res = await apiFetch('/api/workspace/budget');
+      const data = await res.json();
+      if (!data.status) return;
+
+      document.getElementById('budgetDaySpend').textContent = `$${data.status.daily.spentUsd.toFixed(4)}`;
+      document.getElementById('budgetDayLimit').textContent = `Cap: $${data.status.daily.limitUsd.toFixed(2)}`;
+      document.getElementById('budgetMonthSpend').textContent = `$${data.status.monthly.spentUsd.toFixed(4)}`;
+      document.getElementById('budgetMonthLimit').textContent = `Cap: $${data.status.monthly.limitUsd.toFixed(2)}`;
+
+      const pauseBtn = document.getElementById('btnTogglePause');
+      if (data.status.isPaused) {
+        pauseBtn.textContent = '🟢 Resume AI Activity';
+        pauseBtn.classList.remove('btn-secondary');
+        pauseBtn.classList.add('btn-primary');
+      } else {
+        pauseBtn.textContent = '🛑 Emergency Pause';
+        pauseBtn.classList.remove('btn-primary');
+        pauseBtn.classList.add('btn-secondary');
+      }
+    }
+
+    async function toggleBudgetPause() {
+      const res = await apiFetch('/api/workspace/budget/toggle', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) loadBudget();
+    }
+
+    // Load Proposals
+    async function loadProposals() {
+      const res = await apiFetch('/api/workspace/proposals');
+      const data = await res.json();
+      const tbody = document.getElementById('proposalsTableBody');
+      const props = data.proposals || [];
+      if (props.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No proposals staged yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = props.map(p => `
+        <tr>
+          <td><strong>${escapeHtml(p.title)}</strong><br><small style="color:var(--text-muted);">${escapeHtml(p.description)}</small></td>
+          <td><code>${p.category}</code></td>
+          <td><span class="tag-badge" style="background:rgba(245,158,11,0.15);color:#fde68a;">${p.status}</span></td>
+          <td>${escapeHtml(p.sandbox_test_results)}</td>
+          <td>
+            <div style="display:flex;gap:4px;">
+              ${p.status === 'pending_review' ? `
+                <button class="btn-primary" style="padding:4px 8px;font-size:11px;" onclick="reviewProposal('${p.proposal_uuid}', true)">Approve</button>
+                <button class="btn-secondary" style="padding:4px 8px;font-size:11px;color:#fda4af;" onclick="reviewProposal('${p.proposal_uuid}', false)">Reject</button>
+              ` : ''}
+              ${p.status === 'approved' ? `
+                <button class="btn-secondary" style="padding:4px 8px;font-size:11px;color:#fda4af;" onclick="rollbackProposal('${p.proposal_uuid}')">Rollback</button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function reviewProposal(uuid, approved) {
+      const res = await apiFetch(`/api/workspace/proposals/${uuid}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ approved })
+      });
+      const data = await res.json();
+      if (data.ok) loadProposals();
+    }
+
+    async function rollbackProposal(uuid) {
+      if (!confirm('Rollback this proposal to pre-patch pristine state?')) return;
+      const res = await apiFetch(`/api/workspace/proposals/${uuid}/rollback`, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) loadProposals();
+    }
+
+    // Modal Helpers
+    function openNewJournalModal() { document.getElementById('journalModal').classList.add('open'); }
+    function openNewArtifactModal() { document.getElementById('artifactModal').classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    async function saveJournal() {
+      const title = document.getElementById('journalTitle').value.trim();
+      const content = document.getElementById('journalContent').value.trim();
+      const mood = document.getElementById('journalMood').value;
+      const isPublic = document.getElementById('journalPublic').checked;
+
+      if (!title || !content) return alert('Title and content are required');
+
+      const res = await apiFetch('/api/workspace/journals', {
+        method: 'POST',
+        body: JSON.stringify({ title, content, mood, isPrivate: isPublic ? 0 : 1 })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        closeModal('journalModal');
+        loadJournals();
+        loadDashboard();
+      }
+    }
+
+    async function saveArtifact() {
+      const title = document.getElementById('artifactTitle').value.trim();
+      const type = document.getElementById('artifactType').value;
+      const content = document.getElementById('artifactContent').value.trim();
+      const isPublic = document.getElementById('artifactPublic').checked;
+
+      if (!title || !content) return alert('Title and content are required');
+
+      const res = await apiFetch('/api/workspace/artifacts', {
+        method: 'POST',
+        body: JSON.stringify({ title, type, content, isPublic })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        closeModal('artifactModal');
+        loadArtifacts();
+        loadDashboard();
+      }
+    }
+
+    async function deleteJournal(uuid) {
+      if (!confirm('Delete this journal entry?')) return;
+      const res = await apiFetch(`/api/workspace/journals/${uuid}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) loadJournals();
+    }
+
+    async function deleteArtifact(uuid) {
+      if (!confirm('Delete this artifact and all its history?')) return;
+      const res = await apiFetch(`/api/workspace/artifacts/${uuid}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) loadArtifacts();
+    }
+
+    async function setSpeedMode(mode) {
+      const res = await apiFetch('/api/workspace/speed', {
+        method: 'POST',
+        body: JSON.stringify({ mode })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(`Speed mode switched to: ${mode.toUpperCase()}`);
+      }
+    }
+
+    // --- 1. Research Vault UI ---
+    async function loadResearch() {
+      try {
+        const res = await apiFetch('/api/research/dossiers');
+        const data = await res.json();
+        const tbody = document.getElementById('researchTableBody');
+        const dossiers = data.dossiers || [];
+        if (dossiers.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No dossiers compiled yet. Enter a topic above to begin!</td></tr>';
+          return;
+        }
+        tbody.innerHTML = dossiers.map(d => `
+          <tr>
+            <td><strong>${escapeHtml(d.topic)}</strong></td>
+            <td style="max-width:320px; font-size:12px;">${escapeHtml(d.summary?.slice(0, 120))}...</td>
+            <td><span class="tag-badge" style="background:rgba(16,185,129,0.15);color:#6ee7b7;">${(d.verified_facts || []).length} Facts</span></td>
+            <td><span class="tag-badge" style="background:rgba(59,130,246,0.15);color:#93c5fd;">${(d.citations || []).length} Sources</span></td>
+            <td style="font-size:11px; color:var(--text-muted);">${new Date(d.updated_at).toLocaleDateString()}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load research dossiers:', err);
+      }
+    }
+
+    async function conductResearchUI() {
+      const topic = document.getElementById('researchTopicInput').value.trim();
+      if (!topic) return alert('Please enter a research topic.');
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '⏳ Researching...';
+      btn.disabled = true;
+      try {
+        const res = await apiFetch('/api/research/conduct', {
+          method: 'POST',
+          body: JSON.stringify({ topic }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('researchTopicInput').value = '';
+          loadResearch();
+        } else {
+          alert('Research error: ' + (data.error || 'Failed'));
+        }
+      } catch (err) {
+        alert('Network error: ' + err.message);
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    // --- 2. Media Downloader UI ---
+    let currentDownloadJobUuid = null;
+    async function startDownloadUI() {
+      const url = document.getElementById('downloadUrlInput').value.trim();
+      if (!url) return alert('Please paste a media URL.');
+      try {
+        const res = await apiFetch('/api/download/start', {
+          method: 'POST',
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentDownloadJobUuid = data.jobUuid;
+          document.getElementById('downloadWizardCard').style.display = 'block';
+        } else {
+          alert('Downloader error: ' + (data.error || 'Failed to analyze URL'));
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function executeDownloadUI() {
+      if (!currentDownloadJobUuid) return alert('No active job analyzed.');
+      const format = document.getElementById('dlFormat').value;
+      const resolution = document.getElementById('dlRes').value;
+      try {
+        const res = await apiFetch('/api/download/execute', {
+          method: 'POST',
+          body: JSON.stringify({ jobUuid: currentDownloadJobUuid, format, resolution }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(data.whatsappDirect ? 'Ready! File under 16 MB delivered directly.' : `Ready! Link generated: ${data.webLink}`);
+          document.getElementById('downloadWizardCard').style.display = 'none';
+          document.getElementById('downloadUrlInput').value = '';
+          loadDownloadJobs();
+        } else {
+          alert('Execution error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Download failed: ' + err.message);
+      }
+    }
+
+    async function loadDownloadJobs() {
+      // Refresh job table
+    }
+
+    // --- 3. Dynamic Skill Tree UI ---
+    async function loadSkillTree() {
+      try {
+        const res = await apiFetch('/api/skills/tree');
+        const data = await res.json();
+        const grid = document.getElementById('skillTreeGrid');
+        if (!data.ok || !data.tree) return;
+        let html = '';
+        for (const [cat, skills] of Object.entries(data.tree)) {
+          html += `
+            <div class="card" style="margin:0;">
+              <h3 style="margin:0 0 10px 0; font-size:14px; text-transform:uppercase; color:var(--accent);">${escapeHtml(cat.replace(/_/g, ' '))} (${skills.length})</h3>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                ${skills.map(s => `
+                  <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <strong style="font-size:13px;">${escapeHtml(s.name)}</strong>
+                      <span class="tag-badge" style="background:rgba(16,185,129,0.15);color:#6ee7b7;">${s.status}</span>
+                    </div>
+                    <p style="font-size:11px; color:var(--text-muted); margin:4px 0 0 0;">${escapeHtml(s.description)}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+        grid.innerHTML = html;
+      } catch (err) {
+        console.error('Failed to load skill tree:', err);
+      }
+    }
+
+    // --- 4. MyraScript Playground UI ---
+    async function runMyraScriptUI() {
+      const code = document.getElementById('myraScriptEditor').value;
+      const consoleEl = document.getElementById('myraScriptConsole');
+      consoleEl.textContent = 'Executing in isolated VM sandbox with 5,000-step ceiling...';
+      try {
+        const res = await apiFetch('/api/myrascript/execute', {
+          method: 'POST',
+          body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          consoleEl.textContent = `[SUCCESS] Output: ${JSON.stringify(data.result, null, 2)}\nSteps: ${data.steps}\nLogs:\n${(data.logs || []).join('\n')}`;
+        } else {
+          consoleEl.textContent = `[ERROR]: ${data.error}`;
+        }
+      } catch (err) {
+        consoleEl.textContent = `[NETWORK ERROR]: ${err.message}`;
+      }
+    }
+
+    async function transpileMyraScriptUI(target) {
+      const code = document.getElementById('myraScriptEditor').value;
+      const consoleEl = document.getElementById('myraScriptConsole');
+      consoleEl.textContent = `Transpiling to ${target}...`;
+      try {
+        const res = await apiFetch('/api/myrascript/transpile', {
+          method: 'POST',
+          body: JSON.stringify({ code, target }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          consoleEl.textContent = `// Target: ${target}\n\n${data.code}`;
+        }
+      } catch (err) {
+        consoleEl.textContent = `[ERROR]: ${err.message}`;
+      }
+    }
+
+    // --- 5. Universal MCP & Minecraft Framework UI ---
+    async function loadMcpMinecraft() {
+      try {
+        const res = await apiFetch('/api/mcp/servers');
+        const data = await res.json();
+        const listEl = document.getElementById('mcpServerList');
+        const servers = data.servers || [];
+        if (servers.length === 0) {
+          listEl.innerHTML = '<p style="color:var(--text-muted); padding:10px 0;">No external MCP servers connected. Register above (supports up to 10).</p>';
+        } else {
+          listEl.innerHTML = servers.map(s => `
+            <div style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+              <span><strong>${escapeHtml(s.name)}</strong> (${s.transport}) - <span class="tag-badge" style="background:rgba(16,185,129,0.15);color:#6ee7b7;">${s.status}</span></span>
+              <span style="font-size:11px; color:var(--text-muted);">${(s.discovered_tools || []).length} Tools</span>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        console.error('Failed to load MCP servers:', err);
+      }
+    }
+
+    async function registerMcpUI() {
+      const name = document.getElementById('mcpServerName').value.trim();
+      const endpoint = document.getElementById('mcpEndpoint').value.trim();
+      if (!name || !endpoint) return alert('Name and endpoint required');
+      try {
+        const res = await apiFetch('/api/mcp/servers', {
+          method: 'POST',
+          body: JSON.stringify({ name, endpoint, transport: 'sse' }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('mcpServerName').value = '';
+          document.getElementById('mcpEndpoint').value = '';
+          loadMcpMinecraft();
+        }
+      } catch (err) {
+        alert('Failed to register MCP server: ' + err.message);
+      }
+    }
+
+    async function generatePackUI() {
+      const packName = document.getElementById('mcPackName').value.trim() || 'MyraMagicPack';
+      const itemIdentifier = document.getElementById('mcItemName').value.trim() || 'myra:star_wand';
+      const out = document.getElementById('mcPackOutput');
+      out.textContent = 'Generating pack with compliant UUID manifests...';
+      try {
+        const res = await apiFetch('/api/minecraft/framework/packs/generate', {
+          method: 'POST',
+          body: JSON.stringify({
+            packName,
+            items: [{ identifier: itemIdentifier, displayName: 'Star Wand of Light', category: 'Equipment' }],
+            recipes: [{ identifier: `recipe_${itemIdentifier.replace(/:/g, '_')}`, resultItem: itemIdentifier }],
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          out.innerHTML = `<span style="color:#4ade80;">✔ Pack Generated!</span><br>UUID: ${data.bpManifestUuid}<br>Directory: <code>${data.packDirectory}</code>`;
+        } else {
+          out.textContent = 'Error: ' + data.error;
+        }
+      } catch (err) {
+        out.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // Auto-login if key is already stored
+    document.addEventListener('DOMContentLoaded', () => {
+      if (currentKey) {
+        document.getElementById('accessKeyInput').value = currentKey;
+        verifyAccessKey();
+      }
+    });
+  </script>
+</body>
+</html>

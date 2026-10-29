@@ -191,7 +191,7 @@ RULES:
 2. State the date or approximate timeframe when available.
 3. Name the participant who said it or made the decision.
 4. Keep the answer concise and direct.
-5. NEVER fabricate or guess facts not present in the records. If evidence is partial, explicitly state what is known and what is missing.
+5. NEVER fabricate or guess facts not present in the records. If the topic is unrecorded or not discussed in the records below, explicitly state: "There is no information or mention of this topic in the recorded archives."
 
 ${evidenceBlock}
 
@@ -199,7 +199,7 @@ USER QUESTION:
 "${queryText}"`;
 
         const completion = await scaleMaxAdapter.createChatCompletion({
-          model: 'gemini-3.8-flash',
+          model: 'gpt-6-luna',
           messages: [{ role: 'user', content: prompt }],
           chatId,
         });

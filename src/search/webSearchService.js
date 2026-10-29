@@ -279,7 +279,7 @@ Instructions:
 5. Keep the tone helpful, natural, and objective.`;
 
     try {
-      const activeModel = getActiveModelId() || 'gemini-3.8-flash';
+      const activeModel = getActiveModelId() || 'gpt-6-luna';
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages: [{ role: 'user', content: prompt }],

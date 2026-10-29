@@ -129,7 +129,7 @@ Model latency decreases proportionally with batch tensor parallelization.
   // --------------------------------------------------------------------------
   // 4. High-Reasoning PDF Generation with Gemini 3.8 Flash (reasoningEffort: 'high')
   // --------------------------------------------------------------------------
-  test('4. Generates publication PDF using Gemini 3.8 Flash with high reasoning effort', async () => {
+  test('4. Generates publication PDF using GPT-6 Luna with high reasoning effort', async () => {
     const origCreateChat = scaleMaxAdapter.createChatCompletion;
     let capturedModel = null;
     let capturedReasoningEffort = null;
@@ -150,7 +150,7 @@ Model latency decreases proportionally with batch tensor parallelization.
         targetPages: 5,
       });
 
-      assert.strictEqual(capturedModel, 'gemini-3.8-flash');
+      assert.strictEqual(capturedModel, 'gpt-6-luna');
       assert.strictEqual(capturedReasoningEffort, 'high');
       assert.ok(capturedMessages.some(m => m.content.includes('5 pages')));
       assert.strictEqual(result.ok, true);
@@ -204,7 +204,7 @@ Failure to meet 99.95% results in a 10% invoice credit. Downtime exceeding 4 hou
         filename: 'sla_agreement.pdf',
       });
 
-      assert.strictEqual(capturedModel, 'gemini-3.8-flash');
+      assert.strictEqual(capturedModel, 'gpt-6-luna');
       assert.strictEqual(capturedReasoningEffort, 'high');
       assert.ok(capturedUserPrompt.includes('Confidential Cloud SLA Agreement'));
       assert.strictEqual(analysis.ok, true);

@@ -4,24 +4,24 @@ import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 // Base priority models
 export const BASE_CATALOGUE = [
   {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash',
-    provider: 'Google / ScaleMax',
-    category: 'General Reasoning & Research',
-    description: 'Advanced reasoning model with deep search, browsing, image and media capabilities.',
-    isDefault: true,
-    capabilities: ['chat', 'search', 'browsing', 'media', 'reasoning', 'speed'],
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'DeepSeek / ScaleMax',
+    category: 'High-Speed Reasoning & Intelligence',
+    description: 'Ultra-fast synthetic reasoning model with 1M context window, high efficiency, and deep analytical intelligence.',
+    isDefault: false,
+    capabilities: ['chat', 'search', 'browsing', 'code', 'reasoning', 'speed'],
     pricing: 'Verified available on ScaleMax',
     supported: true,
   },
   {
-    id: 'gemini-3.5-flash-lite',
-    name: 'Gemini 3.5 Flash Light',
-    provider: 'Google / ScaleMax',
-    category: 'High Speed Chat & Management',
-    description: 'Ultra-efficient, high-speed reasoning engine for fast conversations, tool execution, and code maintenance.',
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    provider: 'DeepSeek / ScaleMax',
+    category: 'General Reasoning & Math',
+    description: 'High-performance reasoning and synthetic thought model.',
     isDefault: false,
-    capabilities: ['chat', 'management', 'code', 'tools', 'speed'],
+    capabilities: ['text', 'reasoning', 'math'],
     pricing: 'Verified available on ScaleMax',
     supported: true,
   },
@@ -44,28 +44,6 @@ export const BASE_CATALOGUE = [
     description: '1M token extended-context hybrid reasoning and code analysis engine.',
     isDefault: false,
     capabilities: ['text', 'code', '1m-context'],
-    pricing: 'Unknown — verify provider pricing',
-    supported: true,
-  },
-  {
-    id: 'deepseek-v4-pro',
-    name: 'DeepSeek V4 Pro',
-    provider: 'DeepSeek / ScaleMax',
-    category: 'General Reasoning & Text',
-    description: 'High-performance reasoning and synthetic thought model.',
-    isDefault: false,
-    capabilities: ['text', 'reasoning', 'math'],
-    pricing: 'Unknown — verify provider pricing',
-    supported: true,
-  },
-  {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash',
-    provider: 'Google / ScaleMax',
-    category: 'General Reasoning & Text',
-    description: 'Low-latency multimodal foundation model with rapid responsiveness.',
-    isDefault: false,
-    capabilities: ['text', 'speed'],
     pricing: 'Unknown — verify provider pricing',
     supported: true,
   },
@@ -114,7 +92,7 @@ const latencyCache = new Map();
  * Get active model ID from persistent database
  */
 export function getActiveModelId() {
-  return getConfig('active_model_id', 'gemini-3.8-flash');
+  return getConfig('active_model_id', 'deepseek-v4-flash');
 }
 
 /**
@@ -215,10 +193,11 @@ export async function getModelCatalogue(forceRefresh = false) {
     processedIds.add(item.id);
   }
 
-  // 2. Merge all 46 live models from ScaleMax
+  // 2. Merge live models from ScaleMax (excluding any Gemini models)
   if (cachedLiveModels) {
     for (const liveM of cachedLiveModels) {
       const liveId = liveM.id || liveM.name;
+      if (!liveId || liveId.toLowerCase().includes('gemini')) continue;
       if (!processedIds.has(liveId)) {
         const isSelected = liveId === activeId;
         const latencyRecord = latencyCache.get(liveId) || null;

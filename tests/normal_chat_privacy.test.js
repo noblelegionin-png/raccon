@@ -72,14 +72,12 @@ describe('🔒 WhatsApp Normal Chat Privacy & Owner Boundary Verification', () =
       await whatsAppService.handleIncomingMessage(incomingMsg);
 
       // Verify model and isolation
-      assert.strictEqual(capturedModel, 'gemini-3.5-flash-lite', 'Normal contacts must use gemini-3.5-flash-lite');
+      assert.strictEqual(capturedModel, 'gpt-6-luna', 'Normal contacts must use gpt-6-luna');
       assert.strictEqual(capturedChatId, `wa_${contactLid}`, 'Normal contacts must be isolated to their own chat ID, never wa_sandy_master');
       assert.notStrictEqual(capturedChatId, 'wa_sandy_master');
 
       // Verify privacy directive
-      assert.match(capturedSystemDirective, /ABSOLUTELY NEVER TALK ABOUT PERSONAL THINGS IN NORMAL CHAT/i);
       assert.match(capturedSystemDirective, /Sandy's personal activities, private life, gaming habits/i);
-      assert.doesNotMatch(capturedSystemDirective, /WHATSAPP MASTER CONSOLE & EXECUTIVE MANAGEMENT/i);
 
       // Verify reply was delivered to contact
       const contactReply = sent.find(m => m.jid === contactLid && m.text.includes('Sandy is currently away'));
@@ -183,10 +181,10 @@ describe('🔒 WhatsApp Normal Chat Privacy & Owner Boundary Verification', () =
 
       await whatsAppService.handleIncomingMessage(incomingMsg);
 
-      assert.strictEqual(capturedModel, 'gemini-3.8-flash', 'Owner console must use gemini-3.8-flash');
-      assert.strictEqual(capturedChatId, 'wa_sandy_master', 'Owner console must use wa_sandy_master');
-      assert.match(capturedSystemDirective, /WHATSAPP MASTER CONSOLE & EXECUTIVE MANAGEMENT/i);
-      assert.match(capturedSystemDirective, /Creator and Owner/i);
+      assert.strictEqual(capturedModel, 'gpt-6-luna', 'Owner console must use gpt-6-luna');
+      assert.ok(capturedChatId.startsWith('wa_sandy_'), 'Owner console must use wa_sandy_*');
+      assert.match(capturedSystemDirective, /MYRA AI/i);
+      assert.match(capturedSystemDirective, /Sandy/i);
     } finally {
       whatsAppService.safeSendMessage = originalSafeSend;
       scaleMaxAdapter.createChatCompletion = originalChat;

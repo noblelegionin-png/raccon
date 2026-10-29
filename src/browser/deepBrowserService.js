@@ -280,7 +280,7 @@ export class DeepBrowserService {
   }
 
   /**
-   * Synthesize deep browsing report using Gemini 3.8 Flash with untrusted input containment
+   * Synthesize deep browsing report using DeepSeek V4 Flash with untrusted input containment
    */
   async synthesizeBrowsingReport(browseData, userFocusPrompt = '') {
     if (!browseData || !browseData.ok) {
@@ -324,7 +324,7 @@ Instructions:
 3. Keep the tone professional, objective, and mobile-friendly with markdown formatting.`;
 
     try {
-      const activeModel = getActiveModelId() || 'gemini-3.8-flash';
+      const activeModel = getActiveModelId() || 'deepseek-v4-flash';
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: activeModel,
         messages: [{ role: 'user', content: prompt }],

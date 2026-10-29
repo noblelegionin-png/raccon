@@ -783,6 +783,80 @@ export class GoogleDriveAdapter {
 
     return false;
   }
+
+  /**
+   * Search through archived summaries and transcripts for past conversation recall
+   * Supports local memory directories and Google Drive search when connected.
+   */
+  async searchArchivedMemories(query, limit = 5) {
+    if (!query || typeof query !== 'string') return [];
+    const results = [];
+    const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+    // 1. Search locally in Summaries and Conversations
+    const searchDirs = [
+      path.join(this.memoryBaseDir, 'Summaries'),
+      path.join(this.memoryBaseDir, 'Conversations'),
+    ];
+
+    for (const baseDir of searchDirs) {
+      if (!fs.existsSync(baseDir)) continue;
+      try {
+        const groups = fs.readdirSync(baseDir);
+        for (const grp of groups) {
+          const grpDir = path.join(baseDir, grp);
+          if (!fs.statSync(grpDir).isDirectory()) continue;
+          const files = fs.readdirSync(grpDir).sort().reverse(); // newest first
+          for (const file of files) {
+            if (results.length >= limit) break;
+            const fullPath = path.join(grpDir, file);
+            try {
+              const text = fs.readFileSync(fullPath, 'utf8');
+              const lower = text.toLowerCase();
+              const matchCount = keywords.filter(kw => lower.includes(kw)).length;
+              if (matchCount > 0 || keywords.length === 0) {
+                const snippet = text.length > 300 ? text.slice(0, 300) + '...' : text;
+                results.push({
+                  source: file,
+                  date: file.slice(0, 10),
+                  snippet,
+                  cloud: false,
+                });
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Search in Google Drive if connected
+    const drive = await this.getDriveClient();
+    if (drive && results.length < limit) {
+      try {
+        const cleanQuery = query.replace(/['"\\]/g, ' ');
+        const driveRes = await drive.files.list({
+          q: `fullText contains '${cleanQuery}' and trashed = false`,
+          fields: 'files(id, name, createdTime, description)',
+          pageSize: limit - results.length,
+        });
+        if (driveRes.data?.files) {
+          for (const f of driveRes.data.files) {
+            results.push({
+              source: f.name,
+              date: f.createdTime?.slice(0, 10) || 'Archived',
+              snippet: f.description || `Cloud document: ${f.name}`,
+              cloud: true,
+              driveId: f.id,
+            });
+          }
+        }
+      } catch (err) {
+        // Cloud search fallback
+      }
+    }
+
+    return results.slice(0, limit);
+  }
 }
 
 export const googleDriveAdapter = new GoogleDriveAdapter();

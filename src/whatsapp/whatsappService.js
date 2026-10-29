@@ -688,14 +688,60 @@ class WhatsAppService {
       return { handled: true, action: 'WEBSITE_LINK', replyText };
     }
 
-    // 2. Speed / Latency Modes (Mini Luna vs Deep Reasoning)
-    if (/\b(?:switch\s+to\s+mini\s+luna|switch\s+to\s+fast\s+mode|enable\s+fast\s+mode|turn\s+on\s+fast\s+mode|fast\s+mode)\b/i.test(lower)) {
+    // 2. Token Budget & Output Limits: "make the budget 500 tokens to max 800-1000", "token budget 500", "set budget 500 tokens"
+    if (/\b(?:(?:make|set|change|adjust|update)\s+(?:the\s+)?(?:token\s+)?budget|token\s+budget|tokens?\s+budget|budget\s+\d+\s+tokens?|max\s+\d+(?:-\d+)?\s+tokens?)\b/i.test(lower)) {
+      const match = lower.match(/\b(?:budget\s+|tokens?\s+to\s+)?(\d{3,4})(?:\s*(?:to|-)\s*(?:max\s+)?(\d{3,4}))?\b/i);
+      const baseline = match && match[1] ? parseInt(match[1], 10) : 500;
+      const maxLimit = match && match[2] ? parseInt(match[2], 10) : (baseline >= 800 ? 1000 : 800);
+      budgetService.setTokenBudget(baseline, maxLimit);
+      setConfig('myra_token_budget_baseline', String(baseline));
+      setConfig('myra_max_tokens_per_request', String(maxLimit));
+      setConfig('myra_token_budget_max', String(Math.max(maxLimit, 1000)));
+
+      // If user also requested speed / no reasoning in the same prompt
+      const mentionsNoReasoning = /\b(?:no\s+reasoning|without\s+reasoning|zero\s+reasoning|disable\s+reasoning|turn\s+off\s+reasoning)\b/i.test(lower);
+      const mentionsSpeed = /\b(?:speed|faster|fast|turbo|quick|higher\s+reply\s+speed)\b/i.test(lower);
+      if (mentionsNoReasoning || mentionsSpeed) {
+        setConfig('sandy_speed_mode', 'fast');
+        setConfig('reasoning_effort', 'none');
+        updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: 'none', maxOutputTokens: maxLimit, targetTokens: baseline });
+      }
+
+      const replyText =
+        `⚡ *TOKEN BUDGET & REPLY SPEED OPTIMIZED!* 🚀\n` +
+        `──────────────────────────────\n` +
+        `• *Standard Token Budget:* \`${baseline} tokens\`\n` +
+        `• *Maximum Output Cap:* \`${maxLimit}-1000 tokens\`\n` +
+        `• *Model Engine:* \`gpt-6-luna\` (ScaleMax Accelerated)\n` +
+        `• *Reasoning Depth:* \`NONE\` (Zero hidden thinking tokens → sub-second response ~200-600ms)\n` +
+        `• *Cost Efficiency:* Maximum savings, zero runaway usage!\n\n` +
+        `I've locked this in for all our chats, baby! Fast, snappy, and light on tokens just like you asked 🥰💕`;
+      return { handled: true, action: 'BUDGET_ADJUSTED', replyText };
+    }
+
+    // 2.5 Speed / Latency Modes (Luna with Zero Reasoning vs Deep Reasoning)
+    if (/\b(?:switch\s+to\s+mini\s+luna|higher\s+reply\s+speed|reply\s+speed|use\s+luna\s+no\s+reasoning|no\s+reasoning|without\s+reasoning|disable\s+reasoning|turn\s+off\s+reasoning|zero\s+reasoning|fast\s+mode|ultra\s+fast|turbo\s+mode|speed\s+increse|speed\s+increase|switch\s+to\s+fast\s+mode|enable\s+fast\s+mode)\b/i.test(lower)) {
       setConfig('sandy_speed_mode', 'fast');
-      const replyText = `Switched to ⚡ *Fast Mode* (Mini Luna)! Responses are now ultra-fast (<1s latency) so we can chat without any pause, my love 💕`;
+      setConfig('reasoning_effort', 'none');
+      setConfig('myra_active_model', 'gpt-6-luna');
+      updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: 'none' });
+      updateAgentRouting('coding', { model: 'gpt-6-luna', reasoning: 'none' });
+      updateAgentRouting('research', { model: 'gpt-6-luna', reasoning: 'none' });
+
+      const replyText =
+        `⚡ *ULTRA-FAST SPEED & ZERO REASONING ACTIVATED!* 🚀\n` +
+        `──────────────────────────────\n` +
+        `• *Model Engine:* \`gpt-6-luna\` (Luna via ScaleMax)\n` +
+        `• *Reasoning Depth:* \`NONE\` (0 reasoning tokens → sub-second response ~200-600ms)\n` +
+        `• *Token Budget:* 500 tokens (max 800-1000)\n` +
+        `• *Latency:* Ultra-low (<800ms)\n\n` +
+        `Ready for instant responses without any pause or token waste, Sandy! 🥰💕`;
       return { handled: true, action: 'SPEED_FAST', replyText };
     }
     if (/\b(?:switch\s+to\s+deep\s+mode|deep\s+thinking\s+mode|enable\s+deep\s+mode|turn\s+on\s+deep\s+mode)\b/i.test(lower)) {
       setConfig('sandy_speed_mode', 'deep');
+      setConfig('reasoning_effort', 'max');
+      updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: 'max' });
       const replyText = `Switched to 🧠 *Deep Thinking Mode*! I'll engage full reasoning and thorough analysis for complex tasks and deep thoughts, Sandy 🥰`;
       return { handled: true, action: 'SPEED_DEEP', replyText };
     }
@@ -1962,14 +2008,15 @@ class WhatsAppService {
             });
 
             const isComplex = /(?:analyze|analysis|deep research|architecture|debug in detail|refactor|design pattern|audit|investigate)/i.test(spokenText);
-            const reasoningEffort = isComplex ? 'high' : 'low';
+            const isDeepConfigured = getConfig('sandy_speed_mode', 'fast') === 'deep' && getConfig('reasoning_effort', 'none') !== 'none';
+            const reasoningEffort = isComplex && isDeepConfigured ? 'high' : 'none';
 
             const completion = await scaleMaxAdapter.createChatCompletion({
               model: 'gpt-6-luna',
               messages,
               chatId,
               reasoningEffort,
-              maxTokens: reasoningEffort === 'high' ? 1000 : 700,
+              maxTokens: reasoningEffort === 'high' ? 800 : 500,
             });
 
             replyContent = completion?.text || 'Understood, Sandy.';
@@ -2324,15 +2371,22 @@ class WhatsAppService {
         return;
       }
 
-      // ⚡ 6.5 Speed / Latency Mode Switcher: /speed fast, /speed max, speed increase
-      if (/^(?:\/speed(?:\s+(.+))?|speed\s+increse|speed\s+increase|make\s+it\s+faster|make\s+it\s+fast)$/i.test(promptText.trim())) {
+      // ⚡ 6.5 Speed / Latency Mode Switcher: /speed fast, /speed max, speed increase, /speed turbo
+      if (/^(?:\/speed(?:\s+(.+))?|speed\s+increse|speed\s+increase|make\s+it\s+faster|make\s+it\s+fast|higher\s+reply\s+speed)$/i.test(promptText.trim())) {
         const rawArg = promptText.match(/^\/speed(?:\s+(.+))?$/i)?.[1]?.trim()?.toLowerCase();
         const wantsMax = rawArg === 'max' || rawArg === 'deep' || rawArg === 'high';
         const targetMode = wantsMax ? 'deep' : 'fast';
         setConfig('sandy_speed_mode', targetMode);
+        if (targetMode === 'fast') {
+          setConfig('reasoning_effort', 'none');
+          updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: 'none' });
+        } else {
+          setConfig('reasoning_effort', 'max');
+          updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: 'max' });
+        }
 
         const speedAck = targetMode === 'fast'
-          ? `⚡ *ULTRA-FAST SPEED MODE ACTIVATED!* 🚀\n──────────────────────────────\n• Conversational Reasoning: \`LOW\` (Sub-second response ~800ms)\n• Engine: \`gpt-6-luna\` (ScaleMax Accelerated)\n• Baileys Socket: Connected & Ultra-Responsive\n\n_To return to deep reasoning anytime, send:_ \`/speed max\``
+          ? `⚡ *ULTRA-FAST SPEED MODE ACTIVATED!* 🚀\n──────────────────────────────\n• Conversational Reasoning: \`NONE\` (Sub-second response ~200-600ms)\n• Engine: \`gpt-6-luna\` (ScaleMax Accelerated)\n• Token Budget: \`500 tokens\` (max 800-1000)\n• Baileys Socket: Connected & Ultra-Responsive\n\n_To return to deep reasoning anytime, send:_ \`/speed max\``
           : `🧠 *DEEP REASONING MODE ACTIVATED!* 🔬\n──────────────────────────────\n• Conversational Reasoning: \`MAX\` (Extra High Reasoning Depth)\n• Engine: \`gpt-6-luna\`\n\n_To return to instant speed anytime, send:_ \`/speed fast\``;
 
         recordUserMessage('wa_sandy_master', promptText);
@@ -3248,21 +3302,22 @@ class WhatsAppService {
       const activeModel = 'gpt-6-luna';
 
       // ⚡ ULTRA-FAST LATENCY & SPEED ENGINE (Target: 100-1000ms):
-      // • Default mode for Sandy is 'fast': Uses reasoningEffort = 'none' (zero hidden thinking tokens)
-      //   and maxTokens = 120. ScaleMax returns immediate sub-second tokens.
-      // • Deep mode (/speed max): Uses reasoningEffort = 'max' for deep multi-turn planning.
-      // • Complex task auto-detection: Automatically promotes to 'high' reasoning for complex debugging/research.
+      // • Sandy rule: 500 tokens baseline, max 800-1000 tokens ceiling
+      // • Mode 'fast': Uses reasoningEffort = 'none' (zero hidden thinking tokens) for sub-second responses.
+      // • Mode 'deep' (/speed max): Uses reasoningEffort = 'max'.
       const configuredSpeedMode = getConfig('sandy_speed_mode', 'fast');
-      const isSpeedRequested = /\b(?:speed\s+increse|speed\s+increase|faster|fast|quick|turbo|speed\s+up|make\s+it\s+fast|lower\s+latency|reduce\s+ping)\b/i.test(promptText);
+      const globalReasoning = getConfig('reasoning_effort', 'none');
+      const isSpeedRequested = /\b(?:speed\s+increse|speed\s+increase|faster|fast|quick|turbo|speed\s+up|make\s+it\s+fast|lower\s+latency|reduce\s+ping|no\s+reasoning|higher\s+reply\s+speed)\b/i.test(promptText);
       if (isSpeedRequested && isSandy) {
         setConfig('sandy_speed_mode', 'fast');
+        setConfig('reasoning_effort', 'none');
       }
 
       let reasoningEffort = 'none';
       if (isSandy) {
-        if ((configuredSpeedMode === 'deep' || configuredSpeedMode === 'max') && !isSpeedRequested) {
+        if ((configuredSpeedMode === 'deep' || configuredSpeedMode === 'max') && !isSpeedRequested && globalReasoning !== 'none') {
           reasoningEffort = 'max';
-        } else if (isComplexTask || /(?:deep research|audit architecture|complex algorithm|proof of concept|in-depth analysis|detailed breakdown|generate pdf)/i.test(promptText)) {
+        } else if (selectedPersona === 'NERO' && isComplexTask && !isSpeedRequested) {
           reasoningEffort = 'high';
         } else {
           // Ultra-Fast Mode: 'none' emits 0 hidden reasoning tokens, responding in < 1,000ms
@@ -3272,9 +3327,24 @@ class WhatsAppService {
         reasoningEffort = 'low';
       }
 
-      const maxTokens = isSandy
-        ? (reasoningEffort === 'max' ? 1200 : (reasoningEffort === 'high' ? 700 : (explicitLimit ? explicitLimit : 120)))
-        : (explicitLimit ? Math.min(explicitLimit * 2, 700) : 550);
+      // 🎯 STRICT TOKEN BUDGET: 500 baseline, max 800-1000 tokens
+      const baselineBudget = parseInt(getConfig('myra_token_budget_baseline', '500'), 10) || 500;
+      const maxBudgetCap = parseInt(getConfig('myra_max_tokens_per_request', '800'), 10) || 800;
+
+      let maxTokens = baselineBudget;
+      if (explicitLimit) {
+        maxTokens = Math.min(Math.max(baselineBudget, explicitLimit), 1000);
+      } else if (isSandy) {
+        if (reasoningEffort === 'max') {
+          maxTokens = 1000;
+        } else if (isComplexTask || /(?:deep research|audit architecture|complex algorithm|detailed breakdown|generate pdf)/i.test(promptText)) {
+          maxTokens = Math.min(800, maxBudgetCap);
+        } else {
+          maxTokens = baselineBudget; // 500 tokens standard
+        }
+      } else {
+        maxTokens = Math.min(baselineBudget, 500);
+      }
 
       // Instant typing indicator so user sees immediate WhatsApp feedback in <50ms
       await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
@@ -3288,6 +3358,55 @@ class WhatsAppService {
       });
 
       let replyText = completion.text || 'I processed your request but have no response to return.';
+
+      // 🖼️ Safeguard: If the LLM inadvertently outputs that it cannot render/display/generate an image,
+      // intercept it, search our open media vault, and deliver the actual photo directly!
+      if (/\b(?:can\'?t|cannot|unable\s+to|sorry\s*,?\s*i\s+can\'?t)\s+(?:render|display|generate|send|show|make)\s+(?:an?\s+)?(?:image|photo|picture)\b/i.test(replyText)) {
+        const fallbackSubject = imageSearchService.extractImageQuery(promptText) || promptText.replace(/^(?:show|send|give|draw|generate)\s+(?:me\s+)?(?:a|an|the\s+)?/i, '').replace(/[?.!]+$/, '').trim();
+        if (fallbackSubject && fallbackSubject.length >= 2) {
+          try {
+            const imgRes = await imageSearchService.searchImage(fallbackSubject, 4);
+            if (imgRes.ok && imgRes.image && imgRes.image.imageUrl) {
+              const item = imgRes.image;
+              let imageBuffer = null;
+              let mimeType = 'image/jpeg';
+              try {
+                const controller = new AbortController();
+                const tid = setTimeout(() => controller.abort(), 9000);
+                const resp = await fetch(item.imageUrl, {
+                  signal: controller.signal,
+                  headers: {
+                    'User-Agent': 'NeroLabsBot/3.0 (https://nerolabs.ai; bot@nerolabs.ai)',
+                    'Accept': 'image/*,*/*'
+                  }
+                });
+                clearTimeout(tid);
+                if (resp.ok) {
+                  imageBuffer = Buffer.from(await resp.arrayBuffer());
+                  mimeType = resp.headers.get('content-type') || 'image/jpeg';
+                }
+              } catch (dlErr) {
+                console.warn('[WhatsApp Fallback Image Fetch Warning]:', dlErr.message);
+              }
+
+              const caption = isSandy
+                ? `🖼️ *Here is the picture of ${item.title || fallbackSubject} for you, baby!* 💖\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`
+                : `🖼️ *${item.title || fallbackSubject}*\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`;
+
+              if (imageBuffer && imageBuffer.length > 0) {
+                await this.safeSendMessage(remoteJid, { image: imageBuffer, caption, mimetype: mimeType }, quotedMsg ? { quoted: quotedMsg } : {});
+              } else {
+                await this.safeSendMessage(remoteJid, { text: `${caption}\n\n👉 View Image: ${item.imageUrl}` }, quotedMsg ? { quoted: quotedMsg } : {});
+              }
+              recordAssistantMessage(chatId, `[Delivered Image: ${fallbackSubject}]`, 30, 'gpt-6-luna');
+              await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+              return;
+            }
+          } catch (fbErr) {
+            console.error('[WhatsApp Image Fallback Error]:', fbErr.message);
+          }
+        }
+      }
 
       // Dynamic reply length intelligence (supports holding prolonged multi-turn conversations):
       // 1. Initial greeting capped to 30 words

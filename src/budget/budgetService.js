@@ -38,7 +38,9 @@ export class BudgetService {
       dailyLimitUsd: parseFloat(getConfig('myra_daily_budget_usd', '5.00')),
       monthlyLimitUsd: parseFloat(getConfig('myra_monthly_budget_usd', '50.00')),
       reservePct: parseFloat(getConfig('myra_reserve_budget_pct', '15.0')), // 15% reserve buffer
-      maxTokensPerRequest: parseInt(getConfig('myra_max_tokens_per_request', '1200'), 10),
+      maxTokensPerRequest: parseInt(getConfig('myra_max_tokens_per_request', '800'), 10),
+      tokenBudgetBaseline: parseInt(getConfig('myra_token_budget_baseline', '500'), 10),
+      tokenBudgetMax: parseInt(getConfig('myra_token_budget_max', '1000'), 10),
       maxConcurrentJobs: parseInt(getConfig('myra_max_concurrent_jobs', '3'), 10),
     };
   }
@@ -53,6 +55,15 @@ export class BudgetService {
     const val = Math.max(1.0, parseFloat(usd) || 50.0).toFixed(2);
     setConfig('myra_monthly_budget_usd', val);
     return parseFloat(val);
+  }
+
+  setTokenBudget(baseline = 500, max = 800) {
+    const baseVal = Math.max(100, Math.min(1000, parseInt(baseline, 10) || 500));
+    const maxVal = Math.max(baseVal, Math.min(2000, parseInt(max, 10) || 800));
+    setConfig('myra_token_budget_baseline', String(baseVal));
+    setConfig('myra_max_tokens_per_request', String(maxVal));
+    setConfig('myra_token_budget_max', String(Math.max(maxVal, 1000)));
+    return { baseline: baseVal, max: maxVal, ceiling: Math.max(maxVal, 1000) };
   }
 
   /**
@@ -172,16 +183,20 @@ export class BudgetService {
 
   formatBudgetReport() {
     const s = this.getBudgetStatus();
+    const limits = this.getLimits();
     return (
       `💰 *MYRA AI USAGE & BUDGET DASHBOARD*\n` +
       `──────────────────────────────\n` +
       `• *Status:* ${s.isPaused ? '🛑 PAUSED' : '🟢 ACTIVE & GUARDED'}\n` +
+      `• *Token Budget:* ${limits.tokenBudgetBaseline} tokens baseline (max ${limits.maxTokensPerRequest}-${limits.tokenBudgetMax})\n` +
+      `• *Reasoning:* ${getConfig('reasoning_effort', 'none').toUpperCase()} (Sub-second speed)\n` +
+      `• *Model:* ${getConfig('myra_active_model', 'gpt-6-luna')}\n` +
       `• *Today''s Spend:* $${s.daily.spentUsd.toFixed(4)} / $${s.daily.limitUsd.toFixed(2)} (${s.daily.percentUsed}%)\n` +
       `• *Today''s Tokens:* ${s.daily.tokens.toLocaleString()}\n` +
       `• *Monthly Spend:* $${s.monthly.spentUsd.toFixed(4)} / $${s.monthly.limitUsd.toFixed(2)} (${s.monthly.percentUsed}%)\n` +
       `• *Reserve Buffer:* ${s.reserveBufferPct}%\n` +
       `──────────────────────────────\n` +
-      `_Safety rule: Hard stops automatically trigger when limit is reached._`
+      `_Safety rule: Strictly capped at ${limits.maxTokensPerRequest}-${limits.tokenBudgetMax} tokens with no reasoning for maximum reply speed._`
     );
   }
 }

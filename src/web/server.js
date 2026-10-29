@@ -2643,9 +2643,12 @@ export function createWebServer() {
 
   app.post('/api/workspace/budget/limits', requireOwnerAuth, (req, res) => {
     try {
-      const { dailyLimit, monthlyLimit } = req.body;
+      const { dailyLimit, monthlyLimit, tokenBudget, maxTokens } = req.body;
       if (dailyLimit !== undefined) budgetService.setDailyLimit(dailyLimit);
       if (monthlyLimit !== undefined) budgetService.setMonthlyLimit(monthlyLimit);
+      if (tokenBudget !== undefined || maxTokens !== undefined) {
+        budgetService.setTokenBudget(tokenBudget || 500, maxTokens || 800);
+      }
       res.json({ ok: true, status: budgetService.getBudgetStatus() });
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message });
@@ -2693,12 +2696,16 @@ export function createWebServer() {
   // 7. Speed & Latency Mode
   app.post('/api/workspace/speed', requireOwnerAuth, (req, res) => {
     try {
-      const { mode } = req.body;
-      if (mode !== 'fast' && mode !== 'deep') {
-        return res.status(400).json({ ok: false, error: 'Mode must be fast or deep' });
+      const { mode, reasoning } = req.body;
+      if (mode !== 'fast' && mode !== 'deep' && mode !== 'turbo') {
+        return res.status(400).json({ ok: false, error: 'Mode must be fast, turbo, or deep' });
       }
-      setConfig('sandy_speed_mode', mode);
-      res.json({ ok: true, speedMode: mode });
+      const speedMode = mode === 'deep' ? 'deep' : 'fast';
+      const reasoningEffort = reasoning !== undefined ? reasoning : (speedMode === 'fast' ? 'none' : 'max');
+      setConfig('sandy_speed_mode', speedMode);
+      setConfig('reasoning_effort', reasoningEffort);
+      updateAgentRouting('chat', { model: 'gpt-6-luna', reasoning: reasoningEffort });
+      res.json({ ok: true, speedMode, reasoning: reasoningEffort });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }

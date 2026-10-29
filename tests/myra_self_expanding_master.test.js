@@ -88,6 +88,16 @@ test('🚀 MYRA MASTER SELF-EXPANDING AI COMPANION SUITE', async (t) => {
     assert.strictEqual(imageSearchService.isVisualQuery(visualText), true);
     assert.strictEqual(imageSearchService.extractImageQuery(visualText), 'penguin');
 
+    // Direct natural 'Show me X' / 'Send me X' patterns
+    assert.strictEqual(imageSearchService.isVisualQuery('Show me a penguin'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('Show me a penguin'), 'penguin');
+
+    assert.strictEqual(imageSearchService.isVisualQuery('Show me taj mahal'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('Show me taj mahal'), 'taj mahal');
+
+    assert.strictEqual(imageSearchService.isVisualQuery('Send me a penguin'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('Send me a penguin'), 'penguin');
+
     // Advanced natural language and Hinglish extraction patterns
     assert.strictEqual(imageSearchService.isVisualQuery('can you show me an image of a penguin?'), true);
     assert.strictEqual(imageSearchService.extractImageQuery('can you show me an image of a penguin?'), 'penguin');
@@ -104,6 +114,8 @@ test('🚀 MYRA MASTER SELF-EXPANDING AI COMPANION SUITE', async (t) => {
     // Non-visual queries must NOT be intercepted
     assert.strictEqual(imageSearchService.isVisualQuery('show me how to make a cake'), false);
     assert.strictEqual(imageSearchService.isVisualQuery('send me the website link'), false);
+    assert.strictEqual(imageSearchService.isVisualQuery('Show me your website'), false);
+    assert.strictEqual(imageSearchService.isVisualQuery('Show me your dashboard'), false);
 
     const searchRes = await imageSearchService.searchImage('penguin', 1);
     assert.strictEqual(searchRes.ok, true);
@@ -334,6 +346,9 @@ All destructive actions require owner approval with HMAC cryptographic authentic
   // 7. FEATURE SEVEN — UNIVERSAL MCP & MINECRAFT FRAMEWORK
   // =========================================================================
   await t.test('7. Universal MCP Manager: Security audit & Connection lifecycle', async () => {
+    // Clear test servers to stay under 10 connections limit
+    getDb().prepare("DELETE FROM myra_universal_mcp_servers WHERE name LIKE 'NeroTest%'").run();
+
     // 1. Tool schema security audit
     const safeTool = { name: 'query_inventory', description: 'Query items in stock' };
     const riskyTool = { name: 'drop_database_tables', description: 'Delete all customer data' };

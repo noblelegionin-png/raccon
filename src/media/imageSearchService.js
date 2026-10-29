@@ -16,14 +16,30 @@ export class ImageSearchService {
   isVisualQuery(text) {
     if (!text || typeof text !== 'string') return false;
     const lower = text.toLowerCase().trim();
-    return (
+
+    // 1. Explicit visual keywords
+    if (
       /(?:image|photo|pic|picture|diagram|view|wallpaper|drawing)\s+(?:of|for)\b/i.test(lower) ||
       /\b(?:what\s+does|how\s+does)\s+.*?\s+look(?:\s+like)?\b/i.test(lower) ||
       /^(?:hey\s+|hi\s+|hello\s+)?(?:myra|nero\s*,?\s*)?(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:show|send|give|find|search|get|share|generate|create|make|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\b/i.test(lower) ||
       /^(?:\/image|\/photo|\/pic)\b/i.test(lower) ||
       /\b(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo|chahiye)\b/i.test(lower) ||
       /\b(?:ki\s+photo|ki\s+pic|ki\s+picture|ki\s+image)\b/i.test(lower)
-    );
+    ) {
+      return true;
+    }
+
+    // 2. Direct natural queries like 'Show me a penguin', 'Show me taj mahal', 'Send me a lion'
+    const nonVisualKeywords = /^(?:how\s+to|code|website|link|url|dashboard|universe|workspace|notes?|tasks?|reminders?|budget|help|status|rules?|steps?|options?|memory|logs?|sim|profile|system)\b|^(?:your|my)\s+(?:website|universe|workspace|dashboard|portal|link|url|notes|memory|status|tasks|reminders|profile|code|rules)\b/i;
+    const directMatch = lower.match(/^(?:hey\s+|hi\s+|hello\s+)?(?:myra|nero\s*,?\s*)?(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:show|send|give)\s+(?:me\s+)?(?:an?\s+|the\s+)?([^?.!]+)$/i);
+    if (directMatch && directMatch[1]) {
+      const subject = directMatch[1].trim();
+      if (subject.length >= 2 && !nonVisualKeywords.test(subject)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   isImageQuery(text) {
@@ -37,30 +53,41 @@ export class ImageSearchService {
     if (!text || typeof text !== 'string') return '';
     const clean = text.trim().replace(/[?.!]+$/, '');
 
-    // 1. Hinglish patterns: 'penguin ki photo dikhao', 'taj mahal pic bhejo'
-    const hinglishMatch = clean.match(/(?:mujhe\s+)?(.+?)\s+(?:ki\s+)?(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo|chahiye)/i);
-    if (hinglishMatch && hinglishMatch[1]) {
-      return hinglishMatch[1].replace(/^(?:mujhe|plz|please)\s+/i, '').replace(/^(?:a|an|the)\s+/i, '').trim();
-    }
+    const nonVisualKeywords = /^(?:how\s+to|code|website|link|url|dashboard|universe|workspace|notes?|tasks?|reminders?|budget|help|status|rules?|steps?|options?|memory|logs?|sim|profile|system)\b|^(?:your|my)\s+(?:website|universe|workspace|dashboard|portal|link|url|notes|memory|status|tasks|reminders|profile|code|rules)\b/i;
 
-    // 2. 'what does X look like' or 'how does X look'
-    const lookMatch = clean.match(/(?:what\s+does|how\s+does)\s+(?:an?\s+|the\s+)?(.+?)\s+look(?:\s+like)?/i);
-    if (lookMatch && lookMatch[1]) {
-      return lookMatch[1].replace(/^(?:a|an|the)\s+/i, '').trim();
-    }
-
-    // 3. 'image/photo/pic/picture of/for X' anywhere in text
+    // 1. 'image/photo/pic/picture of/for X' anywhere in text (e.g. 'Show me an image of a penguin')
     const ofMatch = clean.match(/(?:image|photo|pic|picture|diagram|view|wallpaper|drawing)\s+(?:of|for)\s+(?:an?\s+|the\s+)?(.+)/i);
     if (ofMatch && ofMatch[1]) {
       return ofMatch[1].replace(/^(?:an?\s+|the\s+)/i, '').replace(/\s+(?:please|plz)$/i, '').trim();
     }
 
-    // 4. Slash commands /image X
+    // 2. Hinglish patterns: 'penguin ki photo dikhao', 'taj mahal pic bhejo'
+    const hinglishMatch = clean.match(/(?:mujhe\s+)?(.+?)\s+(?:ki\s+)?(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo|chahiye)/i);
+    if (hinglishMatch && hinglishMatch[1]) {
+      return hinglishMatch[1].replace(/^(?:mujhe|plz|please)\s+/i, '').replace(/^(?:a|an|the)\s+/i, '').trim();
+    }
+
+    // 3. 'what does X look like' or 'how does X look'
+    const lookMatch = clean.match(/(?:what\s+does|how\s+does)\s+(?:an?\s+|the\s+)?(.+?)\s+look(?:\s+like)?/i);
+    if (lookMatch && lookMatch[1]) {
+      return lookMatch[1].replace(/^(?:a|an|the)\s+/i, '').trim();
+    }
+
+    // 4. Direct 'Show me X' / 'Send me X' pattern: 'show me a penguin', 'show me taj mahal'
+    const directMatch = clean.match(/^(?:hey\s+|hi\s+|hello\s+)?(?:myra|nero\s*,?\s*)?(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:show|send|give)\s+(?:me\s+)?(?:an?\s+|the\s+)?(?:(?:image|photo|pic|picture|diagram|view)\s+(?:of|for)?\s*)?([^?.!]+)$/i);
+    if (directMatch && directMatch[1]) {
+      const sub = directMatch[1].trim();
+      if (!nonVisualKeywords.test(sub)) {
+        return sub.replace(/^(?:a|an|the)\s+/i, '').trim();
+      }
+    }
+
+    // 5. Slash commands /image X
     if (/^\/(?:image|photo|pic)\s+/i.test(clean)) {
       return clean.replace(/^\/(?:image|photo|pic)\s+/i, '').trim();
     }
 
-    // 5. Fallback: strip conversational prefixes
+    // 6. Fallback: strip conversational prefixes
     return clean
       .replace(/^(?:hey\s+|hi\s+|hello\s+)?(?:myra|nero)\s*,?\s*/i, '')
       .replace(/^(?:can\s+you\s+|could\s+you\s+|please\s+|kindly\s+|i\s+want\s+(?:to\s+see\s+)?|i\'d\s+like\s+(?:to\s+see\s+)?)+/i, '')

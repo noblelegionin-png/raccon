@@ -123,6 +123,7 @@ class WhatsAppService {
     this.processedMessageIds = new Map();
     this.activePolls = new Map();
     this.recentReactions = new Map();
+    this.messageHistoryCache = new Map();
   }
 
   async sendMasterBotMenu(remoteJid, quotedMsg = null) {
@@ -853,6 +854,13 @@ class WhatsAppService {
     const sent = await this.sock.sendMessage(jid, content, options);
     if (sent?.key?.id) {
       this.sentMessageIds.add(sent.key.id);
+      if (sent.message) {
+        this.messageHistoryCache.set(sent.key.id, sent.message);
+        if (this.messageHistoryCache.size > 1000) {
+          const oldestKey = this.messageHistoryCache.keys().next().value;
+          this.messageHistoryCache.delete(oldestKey);
+        }
+      }
       if (this.sentMessageIds.size > 2000) {
         const ids = Array.from(this.sentMessageIds).slice(0, 500);
         ids.forEach((id) => this.sentMessageIds.delete(id));
@@ -901,6 +909,12 @@ class WhatsAppService {
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         keepAliveIntervalMs: 30000,
+        getMessage: async (key) => {
+          if (key?.id && this.messageHistoryCache.has(key.id)) {
+            return this.messageHistoryCache.get(key.id);
+          }
+          return null;
+        },
       });
 
       this.sock = sock;
@@ -1041,6 +1055,15 @@ class WhatsAppService {
   async handleIncomingMessage(msg) {
     if (!msg.message) return;
 
+    // Cache message for retry recovery (getMessage callback)
+    if (msg.key?.id) {
+      this.messageHistoryCache.set(msg.key.id, msg.message);
+      if (this.messageHistoryCache.size > 1000) {
+        const oldestKey = this.messageHistoryCache.keys().next().value;
+        this.messageHistoryCache.delete(oldestKey);
+      }
+    }
+
     // Discard stale or historical synced messages to prevent replying to old conversations
     if (msg.messageTimestamp) {
       const msgTsSec = typeof msg.messageTimestamp === 'number'
@@ -1048,7 +1071,9 @@ class WhatsAppService {
         : (msg.messageTimestamp?.low || Number(msg.messageTimestamp) || 0);
       const msgTsMs = msgTsSec * 1000;
       const now = Date.now();
-      const startup = this.startedAt || now;
+      const startup = typeof this.startedAt === 'number'
+        ? this.startedAt
+        : (new Date(this.startedAt).getTime() || now);
       // Drop any historical message older than 3 minutes or received before this process started (with 30s grace)
       if (msgTsMs > 0 && (msgTsMs < startup - 30000 || (now - msgTsMs) > 180000)) {
         console.log(`[WhatsApp Stale Message] Dropping old message ${msg.key?.id} (age: ${Math.round((now - msgTsMs) / 1000)}s)`);

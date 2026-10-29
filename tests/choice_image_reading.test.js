@@ -110,11 +110,11 @@ describe('🎯 Choice Image Reading & Visual Selection Engine Suite', () => {
   // 5. evaluateVisualChoice Handles Both Persona Paths & Rejects Shopping Cards
   // -------------------------------------------------------------------------
   test('5. evaluateVisualChoice handles Sandy (Rebecca) and Contact (Nero) personas cleanly', async () => {
-    const dummyImg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    const dummyImg = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAA=', 'base64');
 
     // Test with Sandy (Rebecca wife persona)
     const sandyRes = await visionService.evaluateVisualChoice({
-      images: [{ buffer: dummyImg, mimeType: 'image/jpeg' }],
+      images: [{ buffer: dummyImg, mimeType: 'image/png' }],
       textPrompt: 'choose between 2',
       isSandy: true,
       userLanguage: 'English',
@@ -128,7 +128,7 @@ describe('🎯 Choice Image Reading & Visual Selection Engine Suite', () => {
 
     // Test with general contact (Nero persona)
     const contactRes = await visionService.evaluateVisualChoice({
-      images: [{ buffer: dummyImg, mimeType: 'image/jpeg' }],
+      images: [{ buffer: dummyImg, mimeType: 'image/png' }],
       textPrompt: 'choose between two options',
       isSandy: false,
       userLanguage: 'English',

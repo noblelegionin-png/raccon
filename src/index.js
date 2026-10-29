@@ -5,25 +5,51 @@ import { createWebServer } from './web/server.js';
 import { whatsAppService } from './whatsapp/whatsappService.js';
 
 // Suppress high-volume internal logs from third-party libraries (e.g. libsignal's hardcoded console logs)
+function isLibsignalOrThirdPartyNoise(args) {
+  for (const arg of args) {
+    if (typeof arg === 'string') {
+      if (
+        arg.includes('session') ||
+        arg.includes('Session') ||
+        arg.includes('Bad MAC') ||
+        arg.includes('prekey bundle') ||
+        arg.includes('Expected pubkey') ||
+        arg.includes('Removing old closed session') ||
+        arg.includes('Closing open session') ||
+        arg.includes('Failed to decrypt message') ||
+        arg.includes('Decrypted message with closed session') ||
+        arg.includes('Unhandled bucket type')
+      ) {
+        return true;
+      }
+    } else if (arg && typeof arg === 'object') {
+      const name = arg?.constructor?.name || '';
+      if (name === 'SessionEntry' || name.includes('Session')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 const _origInfo = console.info;
 console.info = function (...args) {
-  if (typeof args[0] === 'string' && (args[0].includes('Closing session') || args[0].includes('SessionEntry'))) {
-    return;
-  }
+  if (isLibsignalOrThirdPartyNoise(args)) return;
   _origInfo.apply(console, args);
 };
 const _origLog = console.log;
 console.log = function (...args) {
-  if (typeof args[0] === 'string' && (args[0].includes('Closing session') || args[0].includes('SessionEntry'))) {
-    return;
-  }
+  if (isLibsignalOrThirdPartyNoise(args)) return;
   _origLog.apply(console, args);
+};
+const _origWarn = console.warn;
+console.warn = function (...args) {
+  if (isLibsignalOrThirdPartyNoise(args)) return;
+  _origWarn.apply(console, args);
 };
 const _origErr = console.error;
 console.error = function (...args) {
-  if (typeof args[0] === 'string' && (args[0].includes('Bad MAC') || args[0].includes('Session error:'))) {
-    return;
-  }
+  if (isLibsignalOrThirdPartyNoise(args)) return;
   _origErr.apply(console, args);
 };
 

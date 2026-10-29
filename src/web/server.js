@@ -573,6 +573,20 @@ export function createWebServer() {
     }
   });
 
+  // Send WhatsApp image/media
+  app.post('/api/whatsapp/send-media', requireOwnerAuth, async (req, res) => {
+    try {
+      const { to, imageUrl, caption } = req.body;
+      if (!to || !imageUrl) {
+        return res.status(400).json({ ok: false, error: 'Both "to" and "imageUrl" are required.' });
+      }
+      const result = await whatsAppService.sendOutboundMedia(to, { imageUrl, caption });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   // Restart WhatsApp Bridge socket
   app.post('/api/whatsapp/restart', requireOwnerAuth, async (req, res) => {
     try {

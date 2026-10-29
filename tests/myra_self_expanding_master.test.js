@@ -82,6 +82,18 @@ test('🚀 MYRA MASTER SELF-EXPANDING AI COMPANION SUITE', async (t) => {
     }, /SSRF Guard/);
   });
 
+  await t.test('2b. WhatsApp Direct Image Delivery: Intercepts visual query and resolves image', async () => {
+    const { imageSearchService } = await import('../src/media/imageSearchService.js');
+    const visualText = 'Show me an image of a penguin';
+    assert.strictEqual(imageSearchService.isVisualQuery(visualText), true);
+    assert.strictEqual(imageSearchService.extractImageQuery(visualText), 'penguin');
+
+    const searchRes = await imageSearchService.searchImage('penguin', 1);
+    assert.strictEqual(searchRes.ok, true);
+    assert.ok(searchRes.image.imageUrl);
+    assert.match(searchRes.image.imageUrl, /^https?:\/\//);
+  });
+
   // =========================================================================
   // 3. FEATURE THREE — UNIVERSAL MEDIA DOWNLOADER
   // =========================================================================

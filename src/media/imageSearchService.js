@@ -15,12 +15,14 @@ export class ImageSearchService {
    */
   isVisualQuery(text) {
     if (!text || typeof text !== 'string') return false;
-    const lower = text.toLowerCase();
+    const lower = text.toLowerCase().trim();
     return (
-      /^(?:show|send|give|find|search|get)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\s+of\b/i.test(lower) ||
+      /^(?:show|send|give|find|search|get|share|generate|create|make|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\s+(?:of|for)\b/i.test(lower) ||
       /\b(?:what\s+does\s+.*?\s+look\s+like|how\s+does\s+.*?\s+look)\b/i.test(lower) ||
       /\b(?:image|photo|picture)\s+(?:of|for)\b/i.test(lower) ||
-      /^(?:\/image|\/photo|\/pic)\b/i.test(lower)
+      /^(?:\/image|\/photo|\/pic)\b/i.test(lower) ||
+      /\b(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo)\b/i.test(lower) ||
+      /\b(?:ki\s+photo|ki\s+pic|ki\s+picture|ki\s+image)\b/i.test(lower)
     );
   }
 
@@ -35,9 +37,11 @@ export class ImageSearchService {
     if (!text) return '';
     return text
       .replace(/^(?:\/image|\/photo|\/pic)\s*/i, '')
-      .replace(/^(?:show|send|give|find|search|get)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\s+(?:of|for)?\s*/i, '')
+      .replace(/^(?:show|send|give|find|search|get|share|generate|create|make|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\s+(?:of|for)?\s*/i, '')
       .replace(/^what\s+does\s+(?:an?\s+)?/i, '')
       .replace(/\s+look\s+like\??$/i, '')
+      .replace(/\s+(?:dikhao|bhejo|send\s+karo)\??$/i, '')
+      .replace(/\s+ki\s+(?:photo|pic|picture|image)\??$/i, '')
       .replace(/^(?:a|an|the)\s+/i, '')
       .trim();
   }

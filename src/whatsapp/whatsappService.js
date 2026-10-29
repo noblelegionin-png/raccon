@@ -49,6 +49,7 @@ import { budgetService } from '../budget/budgetService.js';
 import { proactiveService } from '../proactive/proactiveService.js';
 import { webResearchService } from '../research/webResearchService.js';
 import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
+import { imageSearchService } from '../media/imageSearchService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
@@ -2550,6 +2551,73 @@ class WhatsAppService {
         }
       }
 
+      // 🖼️ 13. DIRECT IMAGE SEARCH & MEDIA DELIVERY
+      if (imageSearchService.isVisualQuery(promptText)) {
+        const subject = imageSearchService.extractImageQuery(promptText);
+        if (subject && subject.length >= 2) {
+          try {
+            await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+            const imgRes = await imageSearchService.searchImage(subject, 4);
+            if (imgRes.ok && imgRes.image && imgRes.image.imageUrl) {
+              const item = imgRes.image;
+              let imageBuffer = null;
+              let mimeType = 'image/jpeg';
+              try {
+                const controller = new AbortController();
+                const tid = setTimeout(() => controller.abort(), 9000);
+                const resp = await fetch(item.imageUrl, {
+                  signal: controller.signal,
+                  headers: {
+                    'User-Agent': 'NeroLabsBot/3.0 (https://nerolabs.ai; bot@nerolabs.ai)',
+                    'Accept': 'image/*,*/*'
+                  }
+                });
+                clearTimeout(tid);
+                if (resp.ok) {
+                  imageBuffer = Buffer.from(await resp.arrayBuffer());
+                  mimeType = resp.headers.get('content-type') || 'image/jpeg';
+                }
+              } catch (dlErr) {
+                console.warn('[WhatsApp Image Fetch Warning]:', dlErr.message);
+              }
+
+              const caption = isSandy
+                ? `🖼️ *Here is the picture of ${item.title || subject} for you, baby!* 💖\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`
+                : `🖼️ *${item.title || subject}*\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`;
+
+              if (imageBuffer && imageBuffer.length > 0) {
+                await this.safeSendMessage(remoteJid, {
+                  image: imageBuffer,
+                  caption,
+                  mimetype: mimeType,
+                }, { quoted: msg });
+              } else {
+                const linkFallback = isSandy
+                  ? `🖼️ *Image of ${item.title || subject} for you, baby!* 💖\n\nDirect media download was blocked by the remote host, but you can view the full photo here:\n👉 ${item.imageUrl}\n\n📄 Source: ${item.sourceUrl}`
+                  : `🖼️ *${item.title || subject}*\n\n👉 Full Image: ${item.imageUrl}\n📄 Source: ${item.sourceUrl}`;
+                await this.safeSendMessage(remoteJid, { text: linkFallback }, { quoted: msg });
+              }
+
+              recordUserMessage('wa_sandy_master', promptText);
+              recordAssistantMessage('wa_sandy_master', `[Delivered Image: ${subject}]`, 30, 'gpt-6-luna');
+              await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+              return;
+            } else {
+              const notFound = isSandy
+                ? `🥺 Baby, I searched our open media vault for "${subject}", but couldn't find a high-resolution image right now. Could you try asking with slightly different keywords? 💖`
+                : `Sorry, no verified public image could be found for "${subject}".`;
+              recordUserMessage('wa_sandy_master', promptText);
+              recordAssistantMessage('wa_sandy_master', notFound, 30, 'gpt-6-luna');
+              await this.safeSendMessage(remoteJid, { text: notFound }, { quoted: msg });
+              await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+              return;
+            }
+          } catch (imgErr) {
+            console.error('[WhatsApp Image Delivery Error]:', imgErr.message);
+          }
+        }
+      }
+
       // 🚀 Intelligent Outbound AI Outreach: "text <No/Name> <instruction>" or "/wa_send <No> <msg>"
       // Crafts the message in Nero's AI voice ("in its own AI way") rather than a raw template
       const outreachResult = await outreachService.handleOutreachRequest({
@@ -3338,6 +3406,40 @@ class WhatsAppService {
 
     await this.safeSendMessage(jid, { text });
     return { ok: true, jid, text };
+  }
+
+  async sendOutboundMedia(phoneNumberOrJid, { imageUrl, imageBuffer, caption = '', mimetype = 'image/jpeg' }) {
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('WhatsApp bridge is not currently connected.');
+    }
+
+    let jid = phoneNumberOrJid;
+    if (!jid.includes('@')) {
+      const clean = String(phoneNumberOrJid).replace(/[^0-9]/g, '');
+      jid = `${clean}@s.whatsapp.net`;
+    }
+
+    let buffer = imageBuffer;
+    if (!buffer && imageUrl) {
+      try {
+        const resp = await fetch(imageUrl, {
+          headers: { 'User-Agent': 'NeroLabsBot/3.0 (https://nerolabs.ai; bot@nerolabs.ai)' }
+        });
+        if (resp.ok) {
+          buffer = Buffer.from(await resp.arrayBuffer());
+          mimetype = resp.headers.get('content-type') || mimetype;
+        }
+      } catch (e) {
+        console.warn('[WhatsApp Outbound Media Fetch Warning]:', e.message);
+      }
+    }
+
+    if (buffer && buffer.length > 0) {
+      await this.safeSendMessage(jid, { image: buffer, caption, mimetype });
+    } else if (imageUrl) {
+      await this.safeSendMessage(jid, { text: `${caption}\n\n👉 View Image: ${imageUrl}` });
+    }
+    return { ok: true, jid, caption };
   }
 
   async disconnectSession() {

@@ -88,6 +88,23 @@ test('🚀 MYRA MASTER SELF-EXPANDING AI COMPANION SUITE', async (t) => {
     assert.strictEqual(imageSearchService.isVisualQuery(visualText), true);
     assert.strictEqual(imageSearchService.extractImageQuery(visualText), 'penguin');
 
+    // Advanced natural language and Hinglish extraction patterns
+    assert.strictEqual(imageSearchService.isVisualQuery('can you show me an image of a penguin?'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('can you show me an image of a penguin?'), 'penguin');
+
+    assert.strictEqual(imageSearchService.isVisualQuery('penguin ki photo dikhao'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('penguin ki photo dikhao'), 'penguin');
+
+    assert.strictEqual(imageSearchService.isVisualQuery('what does mars look like'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('what does mars look like'), 'mars');
+
+    assert.strictEqual(imageSearchService.isVisualQuery('please send me a photo of aurora borealis'), true);
+    assert.strictEqual(imageSearchService.extractImageQuery('please send me a photo of aurora borealis'), 'aurora borealis');
+
+    // Non-visual queries must NOT be intercepted
+    assert.strictEqual(imageSearchService.isVisualQuery('show me how to make a cake'), false);
+    assert.strictEqual(imageSearchService.isVisualQuery('send me the website link'), false);
+
     const searchRes = await imageSearchService.searchImage('penguin', 1);
     assert.strictEqual(searchRes.ok, true);
     assert.ok(searchRes.image.imageUrl);

@@ -17,11 +17,11 @@ export class ImageSearchService {
     if (!text || typeof text !== 'string') return false;
     const lower = text.toLowerCase().trim();
     return (
-      /^(?:show|send|give|find|search|get|share|generate|create|make|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\s+(?:of|for)\b/i.test(lower) ||
-      /\b(?:what\s+does\s+.*?\s+look\s+like|how\s+does\s+.*?\s+look)\b/i.test(lower) ||
-      /\b(?:image|photo|picture)\s+(?:of|for)\b/i.test(lower) ||
+      /(?:image|photo|pic|picture|diagram|view|wallpaper|drawing)\s+(?:of|for)\b/i.test(lower) ||
+      /\b(?:what\s+does|how\s+does)\s+.*?\s+look(?:\s+like)?\b/i.test(lower) ||
+      /^(?:hey\s+|hi\s+|hello\s+)?(?:myra|nero\s*,?\s*)?(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:show|send|give|find|search|get|share|generate|create|make|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\b/i.test(lower) ||
       /^(?:\/image|\/photo|\/pic)\b/i.test(lower) ||
-      /\b(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo)\b/i.test(lower) ||
+      /\b(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo|chahiye)\b/i.test(lower) ||
       /\b(?:ki\s+photo|ki\s+pic|ki\s+picture|ki\s+image)\b/i.test(lower)
     );
   }
@@ -34,15 +34,39 @@ export class ImageSearchService {
    * Extract search term from visual query
    */
   extractImageQuery(text) {
-    if (!text) return '';
-    return text
-      .replace(/^(?:\/image|\/photo|\/pic)\s*/i, '')
+    if (!text || typeof text !== 'string') return '';
+    const clean = text.trim().replace(/[?.!]+$/, '');
+
+    // 1. Hinglish patterns: 'penguin ki photo dikhao', 'taj mahal pic bhejo'
+    const hinglishMatch = clean.match(/(?:mujhe\s+)?(.+?)\s+(?:ki\s+)?(?:photo|pic|picture|image)\s+(?:dikhao|bhejo|send\s+karo|chahiye)/i);
+    if (hinglishMatch && hinglishMatch[1]) {
+      return hinglishMatch[1].replace(/^(?:mujhe|plz|please)\s+/i, '').replace(/^(?:a|an|the)\s+/i, '').trim();
+    }
+
+    // 2. 'what does X look like' or 'how does X look'
+    const lookMatch = clean.match(/(?:what\s+does|how\s+does)\s+(?:an?\s+|the\s+)?(.+?)\s+look(?:\s+like)?/i);
+    if (lookMatch && lookMatch[1]) {
+      return lookMatch[1].replace(/^(?:a|an|the)\s+/i, '').trim();
+    }
+
+    // 3. 'image/photo/pic/picture of/for X' anywhere in text
+    const ofMatch = clean.match(/(?:image|photo|pic|picture|diagram|view|wallpaper|drawing)\s+(?:of|for)\s+(?:an?\s+|the\s+)?(.+)/i);
+    if (ofMatch && ofMatch[1]) {
+      return ofMatch[1].replace(/^(?:an?\s+|the\s+)/i, '').replace(/\s+(?:please|plz)$/i, '').trim();
+    }
+
+    // 4. Slash commands /image X
+    if (/^\/(?:image|photo|pic)\s+/i.test(clean)) {
+      return clean.replace(/^\/(?:image|photo|pic)\s+/i, '').trim();
+    }
+
+    // 5. Fallback: strip conversational prefixes
+    return clean
+      .replace(/^(?:hey\s+|hi\s+|hello\s+)?(?:myra|nero)\s*,?\s*/i, '')
+      .replace(/^(?:can\s+you\s+|could\s+you\s+|please\s+|kindly\s+|i\s+want\s+(?:to\s+see\s+)?|i\'d\s+like\s+(?:to\s+see\s+)?)+/i, '')
       .replace(/^(?:show|send|give|find|search|get|share|generate|create|make|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|photo|pic|picture|diagram|view)\s+(?:of|for)?\s*/i, '')
-      .replace(/^what\s+does\s+(?:an?\s+)?/i, '')
-      .replace(/\s+look\s+like\??$/i, '')
-      .replace(/\s+(?:dikhao|bhejo|send\s+karo)\??$/i, '')
-      .replace(/\s+ki\s+(?:photo|pic|picture|image)\??$/i, '')
       .replace(/^(?:a|an|the)\s+/i, '')
+      .replace(/\s+(?:please|plz)$/i, '')
       .trim();
   }
 

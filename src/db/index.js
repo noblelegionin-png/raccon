@@ -299,7 +299,7 @@ export function initDatabase() {
   const defaults = {
     master_switch: 'true',
     private_chat_enabled: 'true',
-    group_participation_enabled: 'false', // Group participation disabled by default
+    group_participation_enabled: 'true', // Group participation active by default
     active_model_id: 'gemini-3.8-flash',
     group_moderation_enabled: 'false',
     future_media_enabled: 'false',

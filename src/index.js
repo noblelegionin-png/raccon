@@ -9,13 +9,11 @@ function isLibsignalOrThirdPartyNoise(args) {
   for (const arg of args) {
     if (typeof arg === 'string') {
       if (
-        arg.includes('session') ||
-        arg.includes('Session') ||
+        arg.includes('Removing old closed session:') ||
+        arg.includes('Closing open session:') ||
         arg.includes('Bad MAC') ||
         arg.includes('prekey bundle') ||
-        arg.includes('Expected pubkey') ||
-        arg.includes('Removing old closed session') ||
-        arg.includes('Closing open session') ||
+        arg.includes('Expected pubkey of type') ||
         arg.includes('Failed to decrypt message') ||
         arg.includes('Decrypted message with closed session') ||
         arg.includes('Unhandled bucket type')
@@ -24,7 +22,7 @@ function isLibsignalOrThirdPartyNoise(args) {
       }
     } else if (arg && typeof arg === 'object') {
       const name = arg?.constructor?.name || '';
-      if (name === 'SessionEntry' || name.includes('Session')) {
+      if (name === 'SessionEntry') {
         return true;
       }
     }

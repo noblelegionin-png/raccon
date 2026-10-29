@@ -51,57 +51,50 @@ export function evaluateInvocationPolicy(ctx) {
     };
   }
 
-  // 2. In groups, check if participation is enabled for this chat
-  if (!canBotRespondInGroup(ctx.chat.id)) {
-    return {
-      shouldRespond: false,
-      reason: 'group_bot_disabled',
-      isPrivate: false,
-    };
-  }
-
-  // 2.5 Text Reply Mode (/text on | /text off): If text mode is explicitly ON for this chat, Nero reads & replies to all texts!
-  const textMode = getConfig(`text_mode_${ctx.chat.id}`, null) || getConfig(`chatmode_${ctx.chat.id}`, 'off');
-  if (textMode === 'on' || textMode === 'true' || textMode === 'all') {
-    return {
-      shouldRespond: true,
-      reason: 'text_mode_on',
-      cleanText: text,
-      isPrivate: false,
-    };
-  }
-
-  // 3. Explicit Bot Mention: @N3ROL4BSBOT or @n3rol4bsbot
+  // 2. Explicit Bot Mention: @N3ROL4BSBOT or @n3rol4bsbot - ALWAYS RESPOND
   const mentionRegex = new RegExp(`@?${botUsername}\\b`, 'i');
   if (mentionRegex.test(text)) {
     return {
       shouldRespond: true,
       reason: 'explicit_mention',
       cleanText: text.replace(mentionRegex, '').trim(),
+      isPrivate: false,
     };
   }
 
-  // 4. Direct Reply to Nero's message
+  // 3. Direct Reply to Nero's message - ALWAYS RESPOND
   const isDirectReplyToBot = ctx.message.reply_to_message?.from?.id === botId;
   if (isDirectReplyToBot) {
     return {
       shouldRespond: true,
       reason: 'direct_reply_to_bot',
       cleanText: text,
+      isPrivate: false,
     };
   }
 
-  // 5. Explicit Name Invocation: contains "Nero" as a word anywhere in message, or starts with "Nero"
+  // 4. Explicit Name Invocation: contains "Nero" as a word anywhere in message, or starts with "Nero" - ALWAYS RESPOND
   const nameInvocationRegex = /\bnero\b/i;
   if (nameInvocationRegex.test(text)) {
     return {
       shouldRespond: true,
       reason: 'name_invocation',
       cleanText: text.replace(/\bnero\b/gi, '').trim() || text,
+      isPrivate: false,
     };
   }
 
-  // 6. Explicit Direct Command for Nero (e.g. "Nero save this image", "save this image to drive")
+  // 5. Bot Owner (Sandy) Direct Command in Group - ALWAYS RESPOND
+  if (userIsOwner) {
+    return {
+      shouldRespond: true,
+      reason: 'owner_direct_group_invocation',
+      cleanText: text,
+      isPrivate: false,
+    };
+  }
+
+  // 6. Explicit Direct Command for Nero (e.g. "save this image", "explain this screenshot")
   const directCommands = [
     /^save\s+(?:this\s+)?image/i,
     /^explain\s+this\s+screenshot/i,
@@ -114,21 +107,42 @@ export function evaluateInvocationPolicy(ctx) {
 
   for (const cmd of directCommands) {
     if (cmd.test(text)) {
-      // If replying to a photo or has a photo attached, this is directed to Nero
       if (ctx.message.photo || ctx.message.reply_to_message?.photo) {
         return {
           shouldRespond: true,
           reason: 'media_command',
           cleanText: text,
+          isPrivate: false,
         };
       }
     }
   }
 
-  // 7. Ambiguous or Ordinary conversation between members:
-  // PREFER SILENCE! Even if message has a question mark or casual banter.
+  // 7. General Group Participation Check (for unprovoked conversation / text mode)
+  if (!canBotRespondInGroup(ctx.chat.id)) {
+    return {
+      shouldRespond: false,
+      reason: 'group_bot_disabled',
+      isPrivate: false,
+    };
+  }
+
+  // 7.5 Text Reply Mode (/text on | /text off): If text mode is explicitly ON, Nero participates in all texts
+  const textMode = getConfig(`text_mode_${ctx.chat.id}`, null) || getConfig(`chatmode_${ctx.chat.id}`, 'off');
+  if (textMode === 'on' || textMode === 'true' || textMode === 'all') {
+    return {
+      shouldRespond: true,
+      reason: 'text_mode_on',
+      cleanText: text,
+      isPrivate: false,
+    };
+  }
+
+  // 8. Ordinary member banter without invoking Nero:
+  // PREFER SILENCE!
   return {
     shouldRespond: false,
     reason: 'ordinary_member_conversation_silent',
+    isPrivate: false,
   };
 }

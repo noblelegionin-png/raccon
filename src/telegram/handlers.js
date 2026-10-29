@@ -124,10 +124,16 @@ export function registerBotHandlers(bot) {
   // Register 50+ Advanced Ultra-Intelligence features (Moderation, AI tools, Dev tools, Memory, Minecraft)
   registerAdvancedFeatures(bot);
 
-  // Deduplication & Group activity tracking middleware
+  // Logging, Deduplication & Group activity tracking middleware
   bot.use(async (ctx, next) => {
+    const fromUser = ctx.from ? `${ctx.from.first_name || ''} (@${ctx.from.username || ctx.from.id})` : 'unknown';
+    const chatInfo = ctx.chat ? `${ctx.chat.type}:${ctx.chat.id}` : 'unknown';
+    const textPreview = ctx.message?.text ? `text: "${ctx.message.text.slice(0, 50)}"` : (ctx.updateType || 'update');
+    console.log(`[Telegram Inbound] Update ${ctx.update?.update_id} from ${fromUser} in ${chatInfo} (${textPreview})`);
+
     if (ctx.update?.update_id) {
       if (isUpdateProcessed(ctx.update.update_id)) {
+        console.log(`[Telegram Deduplication] Skipping already processed update ${ctx.update.update_id}`);
         return; // Ignore duplicate update
       }
       markUpdateProcessed(ctx.update.update_id);
@@ -2521,7 +2527,12 @@ export function registerBotHandlers(bot) {
   bot.on('message:text', async (ctx) => {
     const text = ctx.message.text.trim();
     if (text.startsWith('/')) {
-      return; // Ignore unhandled slash commands
+      if (isPrivate) {
+        return safeReply(ctx, "⚠️ Unrecognized command. Send /help to view all available commands, or just chat with me directly! ✨", {
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+      }
+      return; // Ignore unhandled slash commands in groups
     }
 
     const chatId = ctx.chat.id;
@@ -3198,11 +3209,12 @@ export function registerBotHandlers(bot) {
         completion.model || activeModel
       );
 
-      await ctx.reply(replyContent, {
+      await safeReply(ctx, replyContent, {
         reply_parameters: { message_id: ctx.message.message_id },
         ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
       });
     } catch (err) {
+      console.error('[Telegram Message Handling Error]:', err);
       let errorMsg = `⚠️ *AI Processing Failed*\n\n${err.message}`;
       if (err.message.includes('401') || err.message.includes('Authentication Failed')) {
         errorMsg = `🔴 *ScaleMax Authentication Error*\n\nThe configured ScaleMax API key is invalid or rejected by the provider. Please verify your credentials in \`.env\`.`;
@@ -3212,7 +3224,7 @@ export function registerBotHandlers(bot) {
         errorMsg = `⏳ *Response Timeout*\n\nScaleMax did not respond within the configured timeout window. Please try again.`;
       }
 
-      await ctx.reply(errorMsg, {
+      await safeReply(ctx, errorMsg, {
         parse_mode: 'Markdown',
         reply_parameters: { message_id: ctx.message.message_id },
         ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),

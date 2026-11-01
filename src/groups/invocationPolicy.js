@@ -30,7 +30,7 @@ export function evaluateInvocationPolicy(ctx) {
     if (textMode === 'off' || textMode === 'false') {
       const mentionRegex = new RegExp(`@?${botUsername}\\b`, 'i');
       const isDirectReplyToBot = ctx.message.reply_to_message?.from?.id === botId;
-      const nameInvocationRegex = /^(?:hey\s+|hi\s+|ok\s+)?nero[\s,:]+/i;
+      const nameInvocationRegex = /^(?:hey\s+|hi\s+|ok\s+)?(?:rocket|raccon|nero)[\s,:]+/i;
       if (mentionRegex.test(text) || isDirectReplyToBot || nameInvocationRegex.test(text)) {
         return {
           shouldRespond: true,
@@ -62,7 +62,7 @@ export function evaluateInvocationPolicy(ctx) {
     };
   }
 
-  // 3. Direct Reply to Nero's message - ALWAYS RESPOND
+  // 3. Direct Reply to Bot message - ALWAYS RESPOND
   const isDirectReplyToBot = ctx.message.reply_to_message?.from?.id === botId;
   if (isDirectReplyToBot) {
     return {
@@ -73,13 +73,13 @@ export function evaluateInvocationPolicy(ctx) {
     };
   }
 
-  // 4. Explicit Name Invocation: contains "Nero" as a word anywhere in message, or starts with "Nero" - ALWAYS RESPOND
-  const nameInvocationRegex = /\bnero\b/i;
+  // 4. Explicit Name Invocation: contains "Rocket" or "Nero" as a word anywhere in message - ALWAYS RESPOND
+  const nameInvocationRegex = /\b(?:rocket|raccon|nero)\b/i;
   if (nameInvocationRegex.test(text)) {
     return {
       shouldRespond: true,
       reason: 'name_invocation',
-      cleanText: text.replace(/\bnero\b/gi, '').trim() || text,
+      cleanText: text.replace(/\b(?:rocket|raccon|nero)\b/gi, '').trim() || text,
       isPrivate: false,
     };
   }

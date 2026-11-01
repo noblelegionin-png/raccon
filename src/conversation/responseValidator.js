@@ -64,14 +64,14 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   if (scaleMaxInterceptionPattern.test(text)) {
     const isAskingGreeting = /how\s+are\s+(?:u|you)/i.test(userPrompt);
     const greetingPrefix = isAskingGreeting ? "I'm doing great, thank you! 😊 " : "";
-    text = `${greetingPrefix}You're talking to MYRA AI, created by Sandy. I'm configured with GPT-6 Luna to assist you with conversations, coding, and security. How can I help you today? ✨`;
+    text = `${greetingPrefix}You're talking to Rocket AI, created by Sandy. I'm configured with GPT-6 Luna to assist you with conversations, tools, coding, and media. How can I help you today? 🦝⚡`;
     modified = true;
   }
 
   // Check for any remaining stray ScaleMax model identity claims
   if (/\b(?:There are no other advertised ScaleMax|official ScaleMax model)\b/i.test(text)) {
     text = text.replace(/There are no other advertised ScaleMax[^\.\n]*[\.\n]?/gi, '');
-    text = text.replace(/an official ScaleMax model[^\.\n]*[\.\n]?/gi, 'MYRA AI.');
+    text = text.replace(/an official ScaleMax model[^\.\n]*[\.\n]?/gi, 'Rocket AI.');
     modified = true;
   }
 
@@ -80,19 +80,19 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   const confusionPatterns = [
     {
       regex: /\b(?:I am|I'm)\s+(?:a large language model|an AI assistant)\s+(?:trained|developed|created)\s+by\s+OpenAI\b/gi,
-      replacement: "You're talking to MYRA AI, developed by Sandy",
+      replacement: "You're talking to Rocket AI, developed by Sandy",
     },
     {
       regex: /\b(?:I am|I'm)\s+ChatGPT\b/gi,
-      replacement: "I am MYRA (Nero), from MYRA AI",
+      replacement: "I am Rocket, from Rocket AI",
     },
     {
       regex: /\b(?:I am|I'm)\s+(?:an official\s+)?ScaleMax model\b/gi,
-      replacement: "I am MYRA (Nero), powered by MYRA AI",
+      replacement: "I am Rocket, powered by Rocket AI",
     },
     {
       regex: /\b(?:I am|I'm)\s+GPT-6 Luna\b/gi,
-      replacement: "I am MYRA (Nero), from MYRA AI",
+      replacement: "I am Rocket, from Rocket AI",
     },
     {
       regex: /\bScaleMax\s+(?:created|built|developed|owns)\s+me\b/gi,
@@ -100,11 +100,11 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     },
     {
       regex: /\bAs an AI developed by OpenAI\b/gi,
-      replacement: "As MYRA AI",
+      replacement: "As Rocket AI",
     },
     {
       regex: /\bAs an AI trained by OpenAI\b/gi,
-      replacement: "As MYRA AI",
+      replacement: "As Rocket AI",
     },
   ];
 
@@ -127,7 +127,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     },
     {
       regex: /\bAs an AI(?:\s+language)?\s+model,?\s*(?:I cannot|I can't|I am not able to|I do not have|I lack)\b/gi,
-      replacement: "As MYRA AI",
+      replacement: "As Rocket AI",
     },
     {
       regex: /\bI apologize,?\s*(?:but)?\s*(?:I cannot|I can't|I don't have access|I am unable)\b/gi,
@@ -157,7 +157,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     }
     text = text.replace(/\s+/g, ' ').trim();
     if (!text) {
-      text = "All systems cleared and instructions completed directly for you, Sandy! ✨";
+      text = "All systems cleared and instructions completed directly for you, Boss Sandy! 🦝🚀";
       modified = true;
     }
   }
@@ -169,13 +169,13 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   const isAskingCreator = /\b(who\s+(?:made|created|built|developed)\s+(?:u|you)|who\s+is\s+your\s+creator|kisne\s+banaya)\b/i.test(lowerPrompt);
 
   if (!options.isOwner) {
-    if (isAskingIdentity && !text.includes("Nero Labs AI")) {
-      text = `You're talking to Nero Labs AI. ${text}`;
+    if (isAskingIdentity && !text.includes("Rocket AI")) {
+      text = `You're talking to Rocket AI. ${text}`;
       modified = true;
     }
 
     if (isAskingCreator && !text.toLowerCase().includes("sandy")) {
-      text = `${text} I was created by Sandy at Nero Labs!`;
+      text = `${text} I was created by Sandy as your Rocket AI assistant!`;
       modified = true;
     }
   }

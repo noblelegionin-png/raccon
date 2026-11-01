@@ -89,14 +89,14 @@ export function renderGroupControlMessage(chatId, chatTitle = 'This Group') {
   const textMode = getConfig(`text_mode_${chatId}`, 'off');
   const isChatActive = (textMode === 'on' || textMode === 'true') && masterSwitch;
 
-  let msg = `⚡ *NERO LABS — GROUP CHAT CONTROL*\n\n`;
+  let msg = `⚡ *ROCKET AI — GROUP CHAT CONTROL*\n\n`;
   msg += `• *Group*: *${chatTitle || 'This Community'}*\n`;
   msg += `• *Chat Mode*: ${isChatActive ? '🟢 *START CHAT (ACTIVE)*' : '⚪ *STOP CHAT (QUIET)*'}\n`;
-  msg += `• *Status*: ${isChatActive ? 'Nero reads and replies to all messages in this group.' : 'Nero only speaks when called by name ("Nero..."), @mentioned, or replied to.'}\n`;
-  msg += `• *Always Active*: Call *"Nero"* anywhere in your message to get an answer!\n\n`;
+  msg += `• *Status*: ${isChatActive ? 'Rocket reads and replies to all messages in this group.' : 'Rocket only speaks when called by name ("Rocket..."), @mentioned, or replied to.'}\n`;
+  msg += `• *Always Active*: Call *"Rocket"* anywhere in your message to get an answer!\n\n`;
   msg += `*Group Controls:*\n`;
-  msg += `👉 Tap *[ 🟢 Start Chat ]* to make Nero talk and participate in all group banter.\n`;
-  msg += `👉 Tap *[ 🔴 Stop Chat ]* to put Nero in quiet mode (answers only when asked).\n`;
+  msg += `👉 Tap *[ 🟢 Start Chat ]* to make Rocket talk and participate in all group banter.\n`;
+  msg += `👉 Tap *[ 🔴 Stop Chat ]* to put Rocket in quiet mode (answers only when asked).\n`;
   msg += `👉 Tap *[ 📌 Pin in Group ]* to pin these buttons to the top of the chat!`;
   return msg;
 }
@@ -254,7 +254,7 @@ export function registerBotHandlers(bot) {
         chat_id: ctx.chat.id,
         menu_button: {
           type: 'web_app',
-          text: '⚡ Nero App',
+          text: '⚡ Rocket App',
           web_app: { url: `${publicUrl}/` },
         },
       });
@@ -275,11 +275,11 @@ export function registerBotHandlers(bot) {
     if (isOwnerUser) {
       kb.webApp('👑 Owner Deck', `${publicUrl}/owner.html`).row();
     }
-    kb.webApp('⚡ Nero Labs Mini App', `${publicUrl}/`).row()
+    kb.webApp('⚡ Rocket AI Mini App', `${publicUrl}/`).row()
       .text('📥 Downloader Info', 'help_downloader')
       .text('🛠️ Available Tools', 'cmd_tools');
 
-    const panelMsg = `🎛️ *NERO LABS — CONTROL PANEL*\n\n` +
+    const panelMsg = `🎛️ *ROCKET AI — CONTROL PANEL*\n\n` +
       `• *User:* ${ctx.from?.first_name || 'User'} (${isOwnerUser ? '👑 Owner' : '👤 User'})\n` +
       `• *Active Model:* \`gpt-6-luna\`\n` +
       `• *Tools Available:* 22 Multi-Modal Tools Active\n` +
@@ -297,7 +297,7 @@ export function registerBotHandlers(bot) {
     const isPrivate = ctx.chat.type === 'private';
     const userIsOwner = isOwner(ctx.from?.id);
 
-    let text = `⚡ *NERO LABS BOT COMMANDS*\n\n`;
+    let text = `⚡ *ROCKET AI BOT COMMANDS*\n\n`;
     text += `*General Diagnostics & Controls:*\n`;
     text += `• /app — Open 24/7 Mobile Mini App Dashboard\n`;
     text += `• /chat — Open group [Start Chat] and [Stop Chat] buttons\n`;
@@ -308,10 +308,10 @@ export function registerBotHandlers(bot) {
     text += `• /clear — Clear chat memory for this conversation\n\n`;
 
     text += `*🎭 Roleplay & Custom Identity (For Everyone):*\n`;
-    text += `• /role — Interactive menu to pick your relationship with Nero (10+ roles!)\n`;
+    text += `• /role — Interactive menu to pick your relationship with Rocket (10+ roles!)\n`;
     text += `• /setrole <role> — e.g. /setrole brother, /setrole mother, /setrole friend\n`;
     text += `• /setrolebrother, /setrolesister, /setrolemother, /setrolebestie, etc.\n`;
-    text += `• /setname <name> — Customize the name/nickname Nero calls you\n`;
+    text += `• /setname <name> — Customize the name/nickname Rocket calls you\n`;
     text += `• /myrole — View your active role, calling name, and roleplay dynamic\n`;
     text += `• /resetrole / /resetname — Reset role or custom name to default\n`;
     text += `• /tusage [on|off|status] — Toggle real-time token metrics (output tokens from key, latency)\n\n`;
@@ -389,7 +389,7 @@ export function registerBotHandlers(bot) {
       recordModelLatency(activeModel, health.latencyMs);
     }
 
-    let text = `📊 *NERO LABS SYSTEM DIAGNOSTICS*\n\n`;
+    let text = `📊 *ROCKET AI SYSTEM DIAGNOSTICS*\n\n`;
     text += `*Core Switches:*\n`;
     text += `• Master AI Switch: ${masterSwitch ? '🟢 ACTIVE' : '🔴 HALTED'}\n`;
     text += `• Group Participation: ${globalGroup ? '🟢 ENABLED' : '⚪ DISABLED (Silent)'}\n`;
@@ -430,7 +430,7 @@ export function registerBotHandlers(bot) {
       recordModelLatency(activeModel, health.latencyMs);
     }
 
-    let text = `⚡ *NERO LABS — LATENCY TELEMETRY*\n\n`;
+    let text = `⚡ *ROCKET AI — LATENCY TELEMETRY*\n\n`;
     text += `• *Selected Model*: \`${activeModel}\`\n`;
     if (health.ok) {
       const isFast = health.latencyMs < 1000;
@@ -491,7 +491,7 @@ export function registerBotHandlers(bot) {
       setConfig('tusage_global', enableGlobal ? 'true' : 'false');
       logAudit(ctx.from.id, 'TUSAGE_GLOBAL_TOGGLE', `Owner set global tusage to ${enableGlobal}`);
       return ctx.reply(
-        `📊 *Global Token Usage Mode:* ${enableGlobal ? '🟢 ENABLED' : '⚪ DISABLED'}\n\n${enableGlobal ? 'Nero will append token usage stats (output tokens from key, input, total, latency) to all model replies across all chats.' : 'Global token usage display disabled.'}`,
+        `📊 *Global Token Usage Mode:* ${enableGlobal ? '🟢 ENABLED' : '⚪ DISABLED'}\n\n${enableGlobal ? 'Rocket will append token usage stats (output tokens from key, input, total, latency) to all model replies across all chats.' : 'Global token usage display disabled.'}`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -499,7 +499,7 @@ export function registerBotHandlers(bot) {
     if (raw === 'on' || raw === 'enable') {
       setConfig(`tusage_chat_${chatId}`, 'true');
       return ctx.reply(
-        `📊 *Token Usage Mode: 🟢 ENABLED*\n\nNero will now report output tokens used from your key, input tokens, total tokens, model, and latency on every reply in this chat for model testing.`,
+        `📊 *Token Usage Mode: 🟢 ENABLED*\n\nRocket will now report output tokens used from your key, input tokens, total tokens, model, and latency on every reply in this chat for model testing.`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -526,7 +526,7 @@ export function registerBotHandlers(bot) {
     const nextState = !current;
     setConfig(`tusage_chat_${chatId}`, nextState ? 'true' : 'false');
     return ctx.reply(
-      `📊 *Token Usage Mode: ${nextState ? '🟢 ENABLED' : '⚪ DISABLED'}*\n\n${nextState ? 'Nero will now append output tokens used from your key and execution latency to each reply.' : 'Token telemetry footer hidden.'}`,
+      `📊 *Token Usage Mode: ${nextState ? '🟢 ENABLED' : '⚪ DISABLED'}*\n\n${nextState ? 'Rocket will now append output tokens used from your key and execution latency to each reply.' : 'Token telemetry footer hidden.'}`,
       { parse_mode: 'Markdown' }
     );
   });
@@ -753,7 +753,7 @@ export function registerBotHandlers(bot) {
 
   // /app, /webapp, /dashboard, /owner, /console: Launch 24/7 Mobile Mini App & Owner Console
   bot.command(['app', 'webapp', 'dashboard', 'owner', 'console', 'admin'], async (ctx) => {
-    const webAppUrl = (config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app').replace(/\/+$/, '');
+    const webAppUrl = (config.webAppPublicUrl || 'https://raccon-v3q5.onrender.com').replace(/\/+$/, '');
     const userIsOwner = isOwner(ctx.from?.id);
     const keyboard = new InlineKeyboard();
 
@@ -761,13 +761,13 @@ export function registerBotHandlers(bot) {
       keyboard.webApp('👑 Open Owner Console (Direct Access)', `${webAppUrl}/owner.html`).row();
       keyboard.webApp('⚡ Open User Mini App', `${webAppUrl}/`);
     } else {
-      keyboard.webApp('⚡ Open Nero Labs Mini App', `${webAppUrl}/`);
+      keyboard.webApp('⚡ Open Rocket Mini App', `${webAppUrl}/`);
     }
 
     return ctx.reply(
       userIsOwner
-        ? `👑 *NERO LABS — CONTROL DECK*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Owner Console*: Direct passwordless root access active\n• *Theme*: Modern Nero Labs design system\n\nChoose viewport below:`
-        : `⚡ *NERO LABS — 24/7 CLOUD MINI APP*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Status*: 🟢 *Online 24/7*\n• *Dashboard*: Real-time model switcher, telemetry latency monitor, and group controls.\n\nTap the button below to launch:`,
+        ? `👑 *ROCKET AI — CONTROL DECK*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Owner Console*: Direct passwordless root access active\n• *Theme*: Modern Rocket AI design system\n\nChoose viewport below:`
+        : `⚡ *ROCKET AI — 24/7 CLOUD MINI APP*\n\n• *Live URL*: \`${webAppUrl}\`\n• *Status*: 🟢 *Online 24/7*\n• *Dashboard*: Real-time model switcher, telemetry latency monitor, and group controls.\n\nTap the button below to launch:`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
@@ -818,7 +818,7 @@ export function registerBotHandlers(bot) {
       logAudit(userId || 'unknown', 'TEXT_MODE_ON', `Enabled text reply mode in chat ${ctx.chat.id}`);
       const keyboard = buildGroupControlKeyboard(ctx.chat.id);
       return ctx.reply(
-        '🟢 *Text Reply Mode: ON*\n\nNero will now read and reply to all text messages in this chat automatically!\n\n_Tap [ 🔴 Stop Chat ] below anytime to go back to quiet mode._',
+        '🟢 *Text Reply Mode: ON*\n\nRocket will now read and reply to all text messages in this chat automatically!\n\n_Tap [ 🔴 Stop Chat ] below anytime to go back to quiet mode._',
         { parse_mode: 'Markdown', reply_markup: keyboard }
       );
     } else if (arg === 'off' || arg === 'disable' || arg === 'false') {
@@ -827,7 +827,7 @@ export function registerBotHandlers(bot) {
       logAudit(userId || 'unknown', 'TEXT_MODE_OFF', `Disabled text reply mode in chat ${ctx.chat.id}`);
       const keyboard = buildGroupControlKeyboard(ctx.chat.id);
       return ctx.reply(
-        '⚪ *Text Reply Mode: OFF*\n\nNero is now in quiet mode. Nero will continuously archive messages for memory, but will only reply when called by name ("Nero..."), @mentioned, or directly replied to.\n\n_Tap [ 🟢 Start Chat ] below anytime to turn auto-replies back on._',
+        '⚪ *Text Reply Mode: OFF*\n\nRocket is now in quiet mode. Rocket will continuously archive messages for memory, but will only reply when called by name ("Rocket..."), @mentioned, or directly replied to.\n\n_Tap [ 🟢 Start Chat ] below anytime to turn auto-replies back on._',
         { parse_mode: 'Markdown', reply_markup: keyboard }
       );
     }
@@ -2945,7 +2945,7 @@ export function registerBotHandlers(bot) {
         setGlobalGroupParticipation(true);
       }
       const keyboard = buildGroupControlKeyboard(chatId);
-      return ctx.reply('🟢 *Start Chat Activated!*\n\nNero is now actively reading and replying to all text messages in this chat!', {
+      return ctx.reply('🟢 *Start Chat Activated!*\n\nRocket is now actively reading and replying to all text messages in this chat!', {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
         reply_parameters: { message_id: ctx.message.message_id },
@@ -2956,7 +2956,7 @@ export function registerBotHandlers(bot) {
       setConfig(`text_mode_${chatId}`, 'off');
       setConfig(`chatmode_${chatId}`, 'mention');
       const keyboard = buildGroupControlKeyboard(chatId);
-      return ctx.reply('⚪ *Stop Chat Activated!*\n\nNero is in quiet mode. Call *"Nero"* or reply to me anytime to get an answer!', {
+      return ctx.reply('⚪ *Stop Chat Activated!*\n\nRocket is in quiet mode. Call *"Rocket"* or reply to me anytime to get an answer!', {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
         reply_parameters: { message_id: ctx.message.message_id },
@@ -3196,7 +3196,7 @@ export function registerBotHandlers(bot) {
     if (ctx.me?.username) {
       promptText = promptText.replace(new RegExp(`@?${ctx.me.username}\\b`, 'gi'), '').trim();
     }
-    const strippedName = promptText.replace(/^nero[\s,:]+/i, '').trim();
+    const strippedName = promptText.replace(/^(?:rocket|raccon|nero)[\s,:]+/i, '').trim();
     if (strippedName.length > 0) {
       promptText = strippedName;
     }

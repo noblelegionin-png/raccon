@@ -2623,8 +2623,11 @@ class WhatsAppService {
         }
       }
 
-      // 🖼️ 13. DIRECT IMAGE SEARCH & MEDIA DELIVERY
-      if (imageSearchService.isVisualQuery(promptText)) {
+      // 🖼️ 13. DIRECT IMAGE SEARCH & FAST MEDIA DELIVERY
+      const isVisualReq = imageSearchService.isVisualQuery(promptText);
+      const hasExplanationRequest = /\b(?:aur\s+(?:bata|batao|samjha|explain)|and\s+explain|tell\s+me|kya\s+hai|details?|history|analysis|summary|write|guide)\b/i.test(promptText);
+
+      if (isVisualReq && !hasExplanationRequest) {
         const subject = imageSearchService.extractImageQuery(promptText);
         if (subject && subject.length >= 2) {
           try {
@@ -2635,27 +2638,18 @@ class WhatsAppService {
               let imageBuffer = null;
               let mimeType = 'image/jpeg';
               try {
-                const controller = new AbortController();
-                const tid = setTimeout(() => controller.abort(), 9000);
-                const resp = await fetch(item.imageUrl, {
-                  signal: controller.signal,
-                  headers: {
-                    'User-Agent': 'NeroLabsBot/3.0 (https://nerolabs.ai; bot@nerolabs.ai)',
-                    'Accept': 'image/*,*/*'
-                  }
-                });
-                clearTimeout(tid);
-                if (resp.ok) {
-                  imageBuffer = Buffer.from(await resp.arrayBuffer());
-                  mimeType = resp.headers.get('content-type') || 'image/jpeg';
+                const dl = await imageSearchService.downloadImageBuffer(item.imageUrl, 8000);
+                if (dl && dl.buffer) {
+                  imageBuffer = dl.buffer;
+                  mimeType = dl.mimetype || 'image/jpeg';
                 }
               } catch (dlErr) {
                 console.warn('[WhatsApp Image Fetch Warning]:', dlErr.message);
               }
 
               const caption = isSandy
-                ? `🖼️ *Here is the picture of ${item.title || subject} for you, baby!* 💖\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`
-                : `🖼️ *${item.title || subject}*\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`;
+                ? `🖼️ *Ye lo Boss! ${item.title || subject} ki photo web se mil gayi:* \n\n${item.description ? `_${item.description.slice(0, 160)}..._\n\n` : ''}🔗 *Source:* ${item.sourceUrl || item.imageUrl}\n\n_Rocket on duty, Boss! Kuch aur dhundhu ya explain karu?_ 🚀`
+                : `🖼️ *${item.title || subject}*\n\n${item.description ? `_${item.description.slice(0, 160)}..._\n\n` : ''}🔗 *Source:* ${item.sourceUrl || item.imageUrl}`;
 
               if (imageBuffer && imageBuffer.length > 0) {
                 await this.safeSendMessage(remoteJid, {
@@ -2665,21 +2659,30 @@ class WhatsAppService {
                 }, { quoted: msg });
               } else {
                 const linkFallback = isSandy
-                  ? `🖼️ *Image of ${item.title || subject} for you, baby!* 💖\n\nDirect media download was blocked by the remote host, but you can view the full photo here:\n👉 ${item.imageUrl}\n\n📄 Source: ${item.sourceUrl}`
+                  ? `🖼️ *Boss, ${item.title || subject} ki image web par mil gayi:* \n\nDirect media download remote server ne block kiya, par yaha se full resolution dekh lo:\n👉 ${item.imageUrl}\n\n📄 *Source:* ${item.sourceUrl}`
                   : `🖼️ *${item.title || subject}*\n\n👉 Full Image: ${item.imageUrl}\n📄 Source: ${item.sourceUrl}`;
                 await this.safeSendMessage(remoteJid, { text: linkFallback }, { quoted: msg });
               }
 
-              recordUserMessage('wa_sandy_master', promptText);
-              recordAssistantMessage('wa_sandy_master', `[Delivered Image: ${subject}]`, 30, 'gpt-6-luna');
+              recordUserMessage(chatId, promptText);
+              recordAssistantMessage(chatId, `[Delivered Image: ${subject}]`, 30, 'gpt-6-luna');
+              await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+              return;
+            } else if (imgRes.error && imgRes.error.includes('18+')) {
+              const safeMsg = isSandy
+                ? `Boss, adult/18+ explicit pornography strictly off hai. Anatomy diagrams, study visuals, science, gaming, tech ya web photos me jo bologe wo la dunga! 🚀`
+                : `Sorry, explicit 18+ adult content is not supported.`;
+              recordUserMessage(chatId, promptText);
+              recordAssistantMessage(chatId, safeMsg, 30, 'gpt-6-luna');
+              await this.safeSendMessage(remoteJid, { text: safeMsg }, { quoted: msg });
               await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
               return;
             } else {
               const notFound = isSandy
-                ? `🥺 Baby, I searched our open media vault for "${subject}", but couldn't find a high-resolution image right now. Could you try asking with slightly different keywords? 💖`
+                ? `Boss, "${subject}" ke liye exact web image nahi mili. Thode alag keywords try karein? 🚀`
                 : `Sorry, no verified public image could be found for "${subject}".`;
-              recordUserMessage('wa_sandy_master', promptText);
-              recordAssistantMessage('wa_sandy_master', notFound, 30, 'gpt-6-luna');
+              recordUserMessage(chatId, promptText);
+              recordAssistantMessage(chatId, notFound, 30, 'gpt-6-luna');
               await this.safeSendMessage(remoteJid, { text: notFound }, { quoted: msg });
               await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
               return;
@@ -3366,6 +3369,15 @@ class WhatsAppService {
       // Instant typing indicator so user sees immediate WhatsApp feedback in <50ms
       await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
+      const toolContext = {
+        chatId,
+        senderNumber,
+        isSandy,
+        isGroup,
+        remoteJid,
+        pendingImages: [],
+      };
+
       // 🦝 ROCKET TOOL CALLING COMPLETION ENGINE
       const completion = await scaleMaxAdapter.executeChatWithTools({
         model: activeModel,
@@ -3375,7 +3387,7 @@ class WhatsAppService {
         maxTokens,
         tools: ROCKET_TOOL_DEFINITIONS,
         toolExecutor: executeRocketTool,
-        context: { chatId, senderNumber, isSandy, isGroup, remoteJid },
+        context: toolContext,
       });
 
       let replyText = completion.text || 'I processed your request but have no response to return.';
@@ -3392,27 +3404,18 @@ class WhatsAppService {
               let imageBuffer = null;
               let mimeType = 'image/jpeg';
               try {
-                const controller = new AbortController();
-                const tid = setTimeout(() => controller.abort(), 9000);
-                const resp = await fetch(item.imageUrl, {
-                  signal: controller.signal,
-                  headers: {
-                    'User-Agent': 'NeroLabsBot/3.0 (https://nerolabs.ai; bot@nerolabs.ai)',
-                    'Accept': 'image/*,*/*'
-                  }
-                });
-                clearTimeout(tid);
-                if (resp.ok) {
-                  imageBuffer = Buffer.from(await resp.arrayBuffer());
-                  mimeType = resp.headers.get('content-type') || 'image/jpeg';
+                const dl = await imageSearchService.downloadImageBuffer(item.imageUrl, 8000);
+                if (dl && dl.buffer) {
+                  imageBuffer = dl.buffer;
+                  mimeType = dl.mimetype || 'image/jpeg';
                 }
               } catch (dlErr) {
                 console.warn('[WhatsApp Fallback Image Fetch Warning]:', dlErr.message);
               }
 
               const caption = isSandy
-                ? `🖼️ *Here is the picture of ${item.title || fallbackSubject} for you, baby!* 💖\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`
-                : `🖼️ *${item.title || fallbackSubject}*\n\n${item.description ? `_${item.description.slice(0, 150)}..._\n` : ''}🔗 Source: ${item.sourceUrl || item.imageUrl}`;
+                ? `🖼️ *Ye lo Boss! ${item.title || fallbackSubject} ki photo:* \n\n${item.description ? `_${item.description.slice(0, 160)}..._\n\n` : ''}🔗 *Source:* ${item.sourceUrl || item.imageUrl}\n\n_Rocket on duty, Boss! Kuch aur dhundhu?_ 🚀`
+                : `🖼️ *${item.title || fallbackSubject}*\n\n${item.description ? `_${item.description.slice(0, 160)}..._\n` : ''}🔗 *Source:* ${item.sourceUrl || item.imageUrl}`;
 
               if (imageBuffer && imageBuffer.length > 0) {
                 await this.safeSendMessage(remoteJid, { image: imageBuffer, caption, mimetype: mimeType }, quotedMsg ? { quoted: quotedMsg } : {});
@@ -3463,7 +3466,24 @@ class WhatsAppService {
       recordAssistantMessage(chatId, replyText, completion.tokensUsed || 0, activeModel);
 
       // Send response to WhatsApp via safeSendMessage
-      await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
+      let deliveredAsImage = false;
+      if (toolContext.pendingImages && toolContext.pendingImages.length > 0) {
+        const primaryImg = toolContext.pendingImages[0];
+        try {
+          await this.safeSendMessage(remoteJid, {
+            image: primaryImg.buffer,
+            caption: replyText,
+            mimetype: primaryImg.mimetype || 'image/jpeg',
+          }, { quoted: msg });
+          deliveredAsImage = true;
+        } catch (imgSendErr) {
+          console.warn('[WhatsApp Tool Image Delivery Failed, falling back to text]:', imgSendErr.message);
+        }
+      }
+
+      if (!deliveredAsImage) {
+        await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
+      }
 
       // Real Interactive Contact Classification & Action Buttons:
       if (!isSandy && !isGroup) {

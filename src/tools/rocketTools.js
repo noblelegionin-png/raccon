@@ -87,7 +87,7 @@ export const ROCKET_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'search_images',
-      description: 'Search for high-resolution images, photos, diagrams, or visual references from Wikimedia Commons and Wikipedia.',
+      description: 'Search for high-resolution images, photos, diagrams, study visuals, anatomy charts, or web pictures across the live web, DuckDuckGo Images, Wikipedia, and Wikimedia.',
       parameters: {
         type: 'object',
         properties: {
@@ -487,6 +487,24 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
         if (!query) return { ok: false, error: 'Query is required' };
         const limit = Math.min(Math.max(1, args.limit || 4), 5);
         const imgRes = await imageSearchService.searchImages(query, limit);
+        const topImage = imgRes.images?.[0];
+
+        // Buffer the top image for direct binary media upload if context allows
+        if (topImage && context && Array.isArray(context.pendingImages)) {
+          try {
+            const dl = await imageSearchService.downloadImageBuffer(topImage.imageUrl, 7000);
+            if (dl && dl.buffer && dl.buffer.length > 0) {
+              context.pendingImages.push({
+                buffer: dl.buffer,
+                mimetype: dl.mimetype || 'image/jpeg',
+                item: topImage,
+              });
+            }
+          } catch (dlErr) {
+            console.warn('[Rocket search_images buffer download warning]:', dlErr.message);
+          }
+        }
+
         return {
           ok: imgRes.ok,
           query,

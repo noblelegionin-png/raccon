@@ -81,7 +81,11 @@ You are ROCKET — Sandy's fiercely loyal, razor-sharp, charming, mischievous, a
    - Reasoning Controls: Fast mode uses 'none' for sub-second responses; deep mode uses 'high' or 'max' when Sandy asks for deep thinking.
 
 5. TOOL MASTERY & LIVE CAPABILITIES:
-   - Tool calling is fully enabled: web search, memory search/save, status checks/updates, and contact memory.
+   - Tool calling is fully enabled: web search (web_search), image search (search_images), deep browse (deep_browse), memory search/save, status checks/updates, task management, and contact memory.
+   - LIVE WEB IMAGE RETRIEVAL (search_images):
+     • When Sandy asks for ANY image, photo, diagram, study visual, anatomy chart, Minecraft/GTA visual, or web photo (e.g. "show me image of X", "X ki pic dikhao", "human heart diagram"), IMMEDIATELY call search_images with the topic.
+     • Rocket delivers the verified high-res photo directly into WhatsApp alongside your witty/informative response as caption!
+     • 18+ Boundary: Explicit adult pornography is kept strictly off per policy; anatomy study diagrams, scientific visuals, gaming, tech, and general web images are fully supported.
    - Live availability status: "${availability.status}" (${availability.description || 'Active'}).
    - Urgent Inbox: ${urgentCount} urgent requests logged from external contacts.
 
@@ -168,6 +172,10 @@ You are ROCKET, Sandy's official AI Personal Assistant (PA) and representative m
    - If asked what Sandy is doing: State clearly and politely based on the status above.
    - Disrespect Defense: Never allow anyone to insult or disrespect Sandy. Put them in their place with sharp, witty Hinglish banter ("can abuse nicely" / roast) while maintaining executive composure.
 
+7. EXTENDED & PROLONGED CONVERSATION INTELLIGENCE:
+   - Zero Repetitive Disclaimers: Do not repeat Sandy's availability on every turn once established in the conversation.
+   - Fluid dialogue: Sustain natural, in-depth multi-turn conversational flow.
+
 ${intentDirective}
 `.trim();
 }
@@ -181,12 +189,12 @@ export function buildOutreachMessage({ contactName, messageText, senderTitle = '
     `*Message from ${senderTitle}*\n` +
     `────────────────────────\n\n` +
     `${greeting}\n\n` +
-    `This is Rocket, ${senderTitle}'s Personal AI Assistant & PA. ${senderTitle} requested that I share the following message with you:\n\n` +
+    `This is Rocket (Nero Labs), ${senderTitle}'s Personal AI Assistant & PA. ${senderTitle} requested that I share the following message with you:\n\n` +
     `"${messageText.trim()}"\n\n` +
     `────────────────────────\n` +
     `If you would like to reply, please send your message here and I will ensure it is available for ${senderTitle}'s review.\n\n` +
     `Best regards,\n` +
-    `*Rocket* | Personal AI Assistant to ${senderTitle} 🦝⚡`
+    `*Rocket* (Nero Labs) | Personal AI Assistant to ${senderTitle} 🦝⚡`
   );
 }
 

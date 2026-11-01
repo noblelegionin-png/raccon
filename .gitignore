@@ -3,6 +3,7 @@ node_modules/
 **/node_modules
 **/node_modules/**
 .env
+.env*
 data
 data/
 **/data/**

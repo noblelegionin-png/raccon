@@ -94,15 +94,20 @@ export class OutreachService {
     if (!text || typeof text !== 'string') return { isOutreach: false };
     let trimmed = text.trim().replace(/^["'`“”«»]+|["'`“”«»]+$/g, '').trim();
 
-    // Strip common conversational polite prefixes e.g. "yo nero", "nero please", "can you", "could you"
-    let cleanedText = trimmed.replace(/^(?:(?:please|can\s+you|could\s+you|nero|yo\s+nero|hey\s+nero)\s+)+/i, '').trim();
+    // Strip common conversational polite prefixes e.g. "yo rocket", "rocket please", "yo nero", "nero please", "can you", "could you"
+    let cleanedText = trimmed.replace(/^(?:(?:please|can\s+you|could\s+you|rocket|nero|yo\s+rocket|yo\s+nero|hey\s+rocket|hey\s+nero)\s+)+/i, '').trim();
     cleanedText = cleanedText.replace(/^["'`“”«»]+|["'`“”«»]+$/g, '').trim();
+
+    // Strip leading "no" / "number" right after action verb if user wrote "text no 9876543210 hy"
+    cleanedText = cleanedText.replace(/^(text|message|msg|whatsapp|ping|dm|tell)\s+(?:no\.?|num|number)\s+/i, '$1 ');
 
     // 1. Slash commands: /wa_send, /outreach, /text <target> <msg>
     const slashMatch = cleanedText.match(/^(?:\/wa_send|\/outreach|\/text)\s+([^\s]+)\s+([\s\S]+)$/i);
     if (slashMatch) {
       const targetQuery = slashMatch[1].trim();
-      const instruction = slashMatch[2].trim();
+      let instruction = slashMatch[2].trim()
+        .replace(/^(?:no\.?|num|number|ko|pe|par|that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki|bol\s+do|keh\s+do)\s+/i, '')
+        .trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -118,7 +123,9 @@ export class OutreachService {
     const hindiMatch = cleanedText.match(/^([+0-9a-zA-Z._\s-]{3,30}?)\s+(?:ko|pe|par)\s+(?:text|message|msg|bhejo|bhej\s+do|bolo|bol\s+do|keh\s+do)(?:\s+(?:karo|kardo|karna|kariye))?(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
     if (hindiMatch) {
       const targetQuery = hindiMatch[1].trim();
-      let instruction = hindiMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
+      let instruction = hindiMatch[2].trim()
+        .replace(/^(?:no\.?|num|number|ko|pe|par|that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki|bol\s+do|keh\s+do)\s+/i, '')
+        .trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -131,7 +138,9 @@ export class OutreachService {
     const hindiPrefixMatch = cleanedText.match(/^(?:is\s+number\s+(?:pe|par)\s+(?:text|message|msg|bolo)\s+)([+0-9\s-]{10,16})(?:\s+ki|\s*:\s*|\s+that\s+|\s+saying\s+)?\s*([\s\S]+)$/i);
     if (hindiPrefixMatch) {
       const targetQuery = hindiPrefixMatch[1].trim();
-      let instruction = hindiPrefixMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
+      let instruction = hindiPrefixMatch[2].trim()
+        .replace(/^(?:no\.?|num|number|ko|pe|par|that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki|bol\s+do|keh\s+do)\s+/i, '')
+        .trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -140,17 +149,20 @@ export class OutreachService {
       };
     }
 
-    // 3. English standard patterns:
+    // 3. English standard patterns with phone or name:
     // e.g. "text 918091785996 that the project is deployed"
+    // e.g. "text 9876543210 no hy"
+    // e.g. "text 9876543210: hy"
     // e.g. "text +91 80918 98350 that comes to play in Minecraft realme"
     // e.g. "send message to +91 80917 85996: please check email"
     // e.g. "tell Alex to review the deck"
-    // e.g. "ask +91 80918 98350 if he is free"
-    // e.g. "whatsapp 9876543210 say hello"
-    const englishMatch = cleanedText.match(/^(?:(?:text|message|msg|tell|ask|ping|dm|write|whatsapp|send\s+(?:a\s+)?(?:text|message|msg|whatsapp|wa|dm)\s+to)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,30}?)(?::|\s+that\b|\s+to\b|\s+saying\b|\s+saying\s+that\b|\s+asking\b|\s+if\b|\s+whether\b|\s*-\s*|\s*,\s*|\s+(?=[a-zA-Z]))\s*([\s\S]+)$/i);
+    // e.g. "text Rahul no hy"
+    const englishMatch = cleanedText.match(/^(?:(?:text|message|msg|tell|ask|ping|dm|write|whatsapp|send\s+(?:a\s+)?(?:text|message|msg|whatsapp|wa|dm)\s+to)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,30}?)(?::|\s+that\b|\s+to\b|\s+saying\b|\s+saying\s+that\b|\s+asking\b|\s+if\b|\s+whether\b|\s*-\s*|\s*,\s*|\s+no\b|\s+(?=[a-zA-Z0-9]))\s*([\s\S]+)$/i);
     if (englishMatch) {
       const targetQuery = englishMatch[1].trim();
-      let instruction = englishMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
+      let instruction = englishMatch[2].trim()
+        .replace(/^(?:no\.?|num|number|ko|pe|par|that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki|bol\s+do|keh\s+do)\s+/i, '')
+        .trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -161,11 +173,14 @@ export class OutreachService {
 
     // 4. Phone number directly following action verb:
     // e.g. "text 8091785996 check out the website"
+    // e.g. "text 9876543210 hy"
     // e.g. "msg 9876543210 hello there"
     const phoneDirectMatch = cleanedText.match(/^(?:text|message|msg|whatsapp|ping|dm|tell)\s+([+0-9\s-]{9,16})\s+([\s\S]+)$/i);
     if (phoneDirectMatch) {
       const targetQuery = phoneDirectMatch[1].trim();
-      let instruction = phoneDirectMatch[2].trim().replace(/^(?:that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki)\s+/i, '').trim();
+      let instruction = phoneDirectMatch[2].trim()
+        .replace(/^(?:no\.?|num|number|ko|pe|par|that|saying\s+that|saying|asking|to|if|whether|ki|ke|bolo\s+ki|bol\s+do|keh\s+do)\s+/i, '')
+        .trim();
       return {
         isOutreach: true,
         targetQuery,
@@ -232,7 +247,7 @@ export class OutreachService {
     const isUrdu = /[\u0600-\u06FF]/.test(instruction);
 
     const systemPrompt = `
-You are Nero, ${senderTitle}'s Personal Executive AI Assistant on WhatsApp.
+You are Rocket, ${senderTitle}'s Personal Executive AI Assistant & loyal PA on WhatsApp.
 ${senderTitle} has instructed you to reach out to a contact on WhatsApp on his behalf.
 
 YOUR OBJECTIVE:
@@ -242,14 +257,15 @@ CRITICAL INSTRUCTIONS:
 1. "DO IT IN YOUR OWN AI WAY":
    - Do NOT merely paste ${senderTitle}'s words in quotation marks.
    - Do NOT sound like a rigid corporate autoresponder or robotic form letter.
-   - Speak naturally and elegantly in Nero's voice as ${senderTitle}'s trusted assistant communicating for him.
+   - Speak naturally, charmingly, and elegantly in Rocket's voice as ${senderTitle}'s trusted assistant communicating for him.
 2. SENDER & IDENTITY:
-   - Identify yourself clearly as Nero, ${senderTitle}'s AI assistant reaching out on his behalf.
+   - Identify yourself clearly as Rocket, ${senderTitle}'s AI assistant reaching out on his behalf.
    - Example openings:
-     - English: "Hello ${recipientName}! This is Nero reaching out on behalf of ${senderTitle}." or "Hi ${recipientName}, Nero here for ${senderTitle}."
-     - Hindi/Hinglish: "Namaste ${recipientName}! Main Nero hoon, ${senderTitle} ka AI assistant. ${senderTitle} ne aapse contact karne ko kaha hai."
+     - English: "Hello ${recipientName}! This is Rocket reaching out on behalf of ${senderTitle}." or "Hi ${recipientName}, Rocket here for ${senderTitle}."
+     - Hindi/Hinglish: "Namaste ${recipientName}! Main Rocket hoon, ${senderTitle} ka AI assistant. ${senderTitle} ne aapse connect karne ko kaha hai."
 3. ACCURACY & INTENT:
    - Communicate the exact meaning, update, question, or detail ${senderTitle} wanted conveyed.
+   - If the instruction is a casual greeting like "hy" or "hello": keep it light, natural, and friendly.
    - Preserve all specific times, dates, file mentions, or questions faithfully.
    - Do not invent facts, financial commitments, or promises ${senderTitle} did not specify.
 4. TONE & RELATIONSHIP:
@@ -259,11 +275,11 @@ CRITICAL INSTRUCTIONS:
 5. LANGUAGE & SCRIPT:
    - Language: ${isUrdu ? 'Urdu' : isHindiOrHinglish ? 'Natural Roman Hinglish / Hindi' : 'Natural, clear English'}.
 6. CLOSING & CALL TO ACTION:
-   - Clearly inform the recipient that they can simply reply directly to this message, and you (Nero) will ensure ${senderTitle} receives their response.
+   - Clearly inform the recipient that they can simply reply directly to this message, and you (Rocket) will ensure ${senderTitle} receives their response.
    - Example: "Feel free to reply right here, and I'll make sure ${senderTitle} sees your message! ✨"
 7. FORMATTING & LENGTH:
    - Use clean WhatsApp markdown (*bold*, _italics_) and tasteful emojis.
-   - Keep it concise (under 75 words) so it reads smoothly on a phone screen.
+   - Keep it concise (under 70 words) so it reads smoothly on a phone screen.
    - Output ONLY the final message text to be delivered. Do NOT wrap in quotes. No preamble or meta text.
 `.trim();
 
@@ -284,7 +300,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        reasoningEffort: 'low',
+        reasoningEffort: 'none',
         maxTokens: 250,
       });
 
@@ -292,7 +308,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
       // Remove wrapping quotation marks if model returned them
       text = text.replace(/^["'`]|["'`]$/g, '').trim();
 
-      if (text && text.length > 20) {
+      if (text && text.length > 15) {
         return text;
       }
     } catch (err) {
@@ -309,24 +325,43 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
   }
 
   _generateDynamicFallback({ recipientName, instruction, isHindiOrHinglish, senderTitle }) {
+    const cleanInstruction = (instruction || '').trim();
+    const isBriefGreeting = /^(?:hy|hi|hello|hey|yo|namaste|hola)$/i.test(cleanInstruction);
     const greeting = recipientName && !recipientName.startsWith('+') ? `Hello ${recipientName}!` : 'Hello!';
+
+    if (isBriefGreeting) {
+      if (isHindiOrHinglish) {
+        return (
+          `👋 *Namaste ${recipientName && !recipientName.startsWith('+') ? recipientName : ''}*\n\n` +
+          `Main *Rocket* hoon, ${senderTitle} ka AI Personal Assistant 🦝⚡\n` +
+          `${senderTitle} ne aapse connect karne aur "${cleanInstruction}" bolne ko kaha hai! Kaise hain aap?\n\n` +
+          `Aap is message ka direct reply yahan de sakte hain, main ${senderTitle} tak deliver kar dunga! ✨`
+        );
+      }
+      return (
+        `👋 *${greeting}*\n\n` +
+        `This is *Rocket*, ${senderTitle}'s Personal AI Assistant 🦝⚡\n` +
+        `${senderTitle} asked me to reach out and say "${cleanInstruction}" to you! Hope you're doing well.\n\n` +
+        `Please feel free to reply directly here, and I'll pass your message to ${senderTitle}! ✨`
+      );
+    }
 
     if (isHindiOrHinglish) {
       return (
         `👋 *Namaste ${recipientName && !recipientName.startsWith('+') ? recipientName : ''}*\n\n` +
-        `Main *Nero* hoon, ${senderTitle} ka AI Personal Assistant. ${senderTitle} ne aapse ye message share karne ko kaha hai:\n\n` +
-        `👉 ${instruction.trim()}\n\n` +
+        `Main *Rocket* hoon, ${senderTitle} ka AI Personal Assistant 🦝⚡ ${senderTitle} ne aapse ye message share karne ko kaha hai:\n\n` +
+        `👉 ${cleanInstruction}\n\n` +
         `Aap is message ka direct reply yahan de sakte hain, main ${senderTitle} tak deliver kar dunga. ✨\n\n` +
-        `Best regards,\n*Nero* | Assistant to ${senderTitle}`
+        `Best regards,\n*Rocket* | Assistant to ${senderTitle}`
       );
     }
 
     return (
       `👋 *${greeting}*\n\n` +
-      `This is *Nero*, ${senderTitle}'s Personal AI Assistant reaching out on his behalf. ${senderTitle} asked me to share this update with you:\n\n` +
-      `👉 ${instruction.trim()}\n\n` +
+      `This is *Rocket*, ${senderTitle}'s Personal AI Assistant reaching out on his behalf 🦝⚡ ${senderTitle} asked me to share this update with you:\n\n` +
+      `👉 ${cleanInstruction}\n\n` +
       `Please feel free to reply directly to this message, and I will ensure ${senderTitle} receives your response. ✨\n\n` +
-      `Best regards,\n*Nero* | Executive Assistant to ${senderTitle}`
+      `Best regards,\n*Rocket* | Assistant to ${senderTitle}`
     );
   }
 
@@ -410,7 +445,7 @@ Please generate the WhatsApp outreach message to send to ${recipientName} now:
         `• *Relation:* _${relationship}_\n\n` +
         `💬 *AI-Crafted Message Sent:*\n` +
         `"${aiMessage}"\n\n` +
-        `_Composed and dispatched in Nero's AI voice. I will hold the conversation and notify you as soon as they reply!_ 📱`;
+        `_Composed and dispatched in Rocket's AI voice. I will hold the conversation and notify you as soon as they reply!_ 🦝📱`;
 
       recordAssistantMessage('wa_sandy_master', confirmationReport, 60, 'gpt-6-luna');
       await whatsAppService.safeSendMessage(remoteJid, { text: confirmationReport }, { quoted: msg });

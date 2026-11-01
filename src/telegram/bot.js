@@ -50,9 +50,17 @@ async function runPollingSupervisor() {
     }
 
     try {
-      console.log('[TelegramBot] Starting Telegram bot long-polling...');
+      console.log('[TelegramBot] Refreshing Telegram bot & flushing stale updates...');
+      try {
+        await botInstance.api.deleteWebhook({ drop_pending_updates: true });
+        console.log('[TelegramBot] Cleaned pending webhook & dropped old stale updates successfully.');
+      } catch (whErr) {
+        console.warn('[TelegramBot Webhook Flush Note]:', whErr.message);
+      }
+
+      console.log('[TelegramBot] Starting Telegram bot long-polling with live updates...');
       await botInstance.start({
-        drop_pending_updates: false,
+        drop_pending_updates: true,
         allowed_updates: [
           'message',
           'edited_message',

@@ -10,7 +10,7 @@ import {
   getGroupParticipants,
   getActiveUserIdentity,
 } from '../db/index.js';
-import { NERO_SYSTEM_DIRECTIVE, OWNER_ROOT_DIRECTIVE } from './identityRulebook.js';
+import { ROCKET_SYSTEM_DIRECTIVE, OWNER_ROOT_DIRECTIVE } from './identityRulebook.js';
 import { formatRoleplayDirective } from './roleplayManager.js';
 import {
   detectUserIntent,
@@ -159,7 +159,7 @@ export function buildChatContext(chatId, latestUserPrompt, options = {}) {
 
   const groupMemoryContext = buildGroupMemoryContext(chatId, processedPrompt, options);
 
-  let fullSystemDirective = NERO_SYSTEM_DIRECTIVE;
+  let fullSystemDirective = ROCKET_SYSTEM_DIRECTIVE;
   if (options.userIsOwner || (config.telegramOwnerId && String(options.senderId) === String(config.telegramOwnerId))) {
     fullSystemDirective += `\n\n${OWNER_ROOT_DIRECTIVE}`;
   }

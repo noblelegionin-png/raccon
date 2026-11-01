@@ -35,6 +35,9 @@ import { lookupBiome, lookupMob } from '../minecraft/gameKnowledge.js';
 import { minecraftCommandExecutor } from '../minecraft/commandExecutor.js';
 import { pdfService } from '../pdf/pdfService.js';
 import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
+import { outreachService } from '../whatsapp/outreachService.js';
+import { delegationService } from '../whatsapp/delegationService.js';
+import { muteChat, unmuteChat } from '../maintenance/maintenanceService.js';
 import {
   addDurableMemory,
   searchDurableMemory,
@@ -486,6 +489,75 @@ export const ROCKET_TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'send_whatsapp_message',
+      description: "Send an AI-crafted or direct WhatsApp message to any contact or phone number on Sandy's command (e.g. 'text 9876543210 hy').",
+      parameters: {
+        type: 'object',
+        properties: {
+          recipient: {
+            type: 'string',
+            description: 'Recipient phone number (e.g. 9876543210) or contact name.',
+          },
+          message: {
+            type: 'string',
+            description: 'The message text or instruction to deliver.',
+          },
+        },
+        required: ['recipient', 'message'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'manage_chat_privacy',
+      description: "Block, unblock, mute, or unmute WhatsApp chats for specific phone numbers or contacts on Sandy's command.",
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['block', 'unblock', 'mute', 'unmute'],
+            description: "Action to perform: 'block'/'mute' pauses all replies to them, 'unblock'/'unmute' resumes normal replies.",
+          },
+          target: {
+            type: 'string',
+            description: 'Target phone number or contact name to block/unblock.',
+          },
+        },
+        required: ['action', 'target'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delegate_chat_behalf',
+      description: "Activate or manage 'Behalf-Of' mode where Rocket autonomously attends to and converses with a contact because Sandy is busy.",
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['start', 'stop', 'status'],
+            description: "Action: 'start' activates behalf-of conversation, 'stop' concludes delegation and summarizes, 'status' lists active delegations.",
+          },
+          target: {
+            type: 'string',
+            description: "Target phone number or contact name to talk with on Sandy's behalf.",
+          },
+          instructions: {
+            type: 'string',
+            description: 'Optional custom context or notes from Sandy for the conversation.',
+          },
+        },
+        required: ['action'],
+      },
+    },
+  },
 ];
 
 /**
@@ -927,6 +999,144 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
         return {
           ok: true,
           message: `Chat controls applied: language=${args.language || 'unchanged'}, reasoning=${args.reasoningEffort || 'unchanged'}, wordLimit=${args.wordLimit || 'unchanged'}`,
+        };
+      }
+
+      case 'send_whatsapp_message': {
+        if (!isSandy) return { ok: false, error: 'Only Sandy can dispatch outbound WhatsApp messages.' };
+        const recipientQuery = (args.recipient || '').trim();
+        const msgText = (args.message || '').trim();
+        if (!recipientQuery || !msgText) return { ok: false, error: 'Recipient and message are required' };
+
+        const rec = outreachService.resolveRecipient(recipientQuery);
+        if (!rec || !rec.sender_number) {
+          return { ok: false, error: `Recipient not found: ${recipientQuery}` };
+        }
+
+        const targetJid = `${rec.sender_number}@s.whatsapp.net`;
+        const aiMessage = await outreachService.composeAiOutreach({
+          recipientName: rec.sender_name,
+          recipientNumber: rec.sender_number,
+          instruction: msgText,
+          relationship: rec.relationship,
+          senderTitle: 'Sandy',
+        });
+
+        if (context.whatsAppService?.safeSendMessage) {
+          await context.whatsAppService.safeSendMessage(targetJid, { text: aiMessage });
+        }
+        outreachService.registerDispatchedOutreach({
+          targetNumber: rec.sender_number,
+          targetJid,
+          instruction: msgText,
+          sentMessage: aiMessage,
+          targetName: rec.sender_name,
+        });
+
+        return {
+          ok: true,
+          recipient: rec.sender_number,
+          recipientName: rec.sender_name,
+          sentMessage: aiMessage,
+        };
+      }
+
+      case 'manage_chat_privacy': {
+        if (!isSandy) return { ok: false, error: 'Only Sandy can manage chat privacy.' };
+        const action = (args.action || 'block').toLowerCase();
+        const target = (args.target || '').trim();
+        if (!target) return { ok: false, error: 'Target number or contact name is required' };
+
+        const rec = outreachService.resolveRecipient(target);
+        const normNum = rec?.sender_number || outreachService.normalizePhoneNumber(target);
+        if (!normNum) return { ok: false, error: `Could not resolve target number: ${target}` };
+
+        const targetJid = `${normNum}@s.whatsapp.net`;
+        if (action === 'block' || action === 'mute') {
+          muteChat(targetJid, 'sandy_block_command', 'sandy');
+          sandyStatusService.updateContactSmartMemory(normNum, { notes: 'BLOCKED_BY_SANDY' });
+          return {
+            ok: true,
+            action,
+            targetNumber: normNum,
+            targetName: rec?.sender_name || `+${normNum}`,
+            status: 'blocked_and_muted',
+            message: `Chat for +${normNum} (${rec?.sender_name || 'Contact'}) has been blocked and muted.`,
+          };
+        } else {
+          unmuteChat(targetJid);
+          sandyStatusService.updateContactSmartMemory(normNum, { notes: 'ACTIVE' });
+          return {
+            ok: true,
+            action,
+            targetNumber: normNum,
+            targetName: rec?.sender_name || `+${normNum}`,
+            status: 'unmuted_and_active',
+            message: `Chat for +${normNum} (${rec?.sender_name || 'Contact'}) has been unblocked and unmuted.`,
+          };
+        }
+      }
+
+      case 'delegate_chat_behalf': {
+        if (!isSandy) return { ok: false, error: 'Only Sandy can delegate chats on his behalf.' };
+        const action = (args.action || 'start').toLowerCase();
+        const targetQuery = (args.target || '').trim();
+
+        if (action === 'status') {
+          const list = delegationService.listActiveDelegations();
+          return {
+            ok: true,
+            action: 'status',
+            count: list.length,
+            delegations: list.map((d) => ({
+              targetNumber: d.target_number,
+              targetName: d.target_name,
+              notes: d.custom_notes,
+              delegatedAt: d.delegated_at,
+            })),
+          };
+        }
+
+        if (action === 'stop') {
+          const res = delegationService.stopDelegation(targetQuery);
+          return {
+            ok: true,
+            action: 'stop',
+            target: targetQuery || 'all',
+            stopped: res.stopped || res.allStopped,
+            summary: res.summary,
+          };
+        }
+
+        if (!targetQuery) return { ok: false, error: 'Target contact or number is required to start Behalf-Of delegation' };
+        const rec = delegationService.resolveTarget(targetQuery);
+        if (!rec) return { ok: false, error: `Could not resolve target contact: ${targetQuery}` };
+
+        delegationService.startDelegation({
+          targetNumber: rec.targetNumber,
+          targetName: rec.targetName,
+          customNotes: args.instructions || '',
+          delegatedBy: 'sandy',
+        });
+
+        const greeting = delegationService.buildInitialGreeting({
+          contactName: rec.targetName,
+          isHindi: true,
+          customNotes: args.instructions || '',
+        });
+
+        if (context.whatsAppService?.safeSendMessage) {
+          await context.whatsAppService.safeSendMessage(rec.targetJid, { text: greeting });
+          delegationService.logMessage(rec.targetJid, 'rocket', 'Rocket', 'assistant', greeting);
+        }
+
+        return {
+          ok: true,
+          action: 'start',
+          targetNumber: rec.targetNumber,
+          targetName: rec.targetName,
+          targetJid: rec.targetJid,
+          initialGreeting: greeting,
         };
       }
 

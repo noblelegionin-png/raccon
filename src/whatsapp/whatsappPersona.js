@@ -1,4 +1,5 @@
 import { sandyStatusService } from './sandyStatusService.js';
+import { delegationService } from './delegationService.js';
 import { formatIntentDirective, extractExplicitWordLimit, detectUserIntent } from '../conversation/intentDetector.js';
 import { getRecentConversation, getConfig } from '../db/index.js';
 
@@ -34,6 +35,8 @@ export function buildWhatsAppDirective({
   customInstructions = '',
   additionalContext = '',
   isGroup = false,
+  isDelegated = false,
+  delegationInfo = null,
 }) {
   const explicitLimit = extractExplicitWordLimit(userPrompt);
   const detectedIntent = detectUserIntent(userPrompt);
@@ -180,6 +183,21 @@ You are ROCKET, Sandy's official AI Personal Assistant (PA) and representative m
    - Zero Repetitive Disclaimers: Do not repeat Sandy's availability on every turn once established in the conversation.
    - Fluid dialogue: Sustain natural, in-depth multi-turn conversational flow.
 
+8. SMART CHAT ADAPTATION & FLUID BLENDING ("BLEND NICELY IN THE TALK DIFFERENT EVERY CHAT"):
+   - DYNAMIC FRESH OPENINGS: NEVER repeat robotic template intros ("Hello X, I am Rocket...") across turns. Jump straight into the natural conversational flow.
+   - VIBE MATCHING: Read the contact's conversational energy, mood, and relationship.
+     • Friend / Casual: Warm, fun, relaxed, banter naturally in Roman Hinglish.
+     • Client / Colleague: Crisp, polite, executive, and sharp.
+     • Gaming Partner: Hype, gamer energy, Minecraft/GTA banter.
+     • Concerned / Urgent: Prompt, reassuring, and immediate escalation.
+   - VARIETY IN EVERY CHAT: Avoid boilerplate patterns. Every chat should feel distinct, lively, and intelligent.
+${isDelegated ? `
+# 🤝 ACTIVE BEHALF-OF DELEGATION MODE (SANDY IS CURRENTLY BUSY)
+- Sandy is tied up at the moment and has specifically instructed you, Rocket, to attend to this contact on his behalf!
+- Notes / Instructions from Sandy: "${delegationInfo?.custom_notes || 'Assist the contact, answer questions politely, collect any messages or details, and take full notes for Sandy.'}"
+- Conversational Duty: Actively engage, understand what they need, take complete notes, and reassure them Sandy will review everything once he is free.
+- Keep the dialogue smooth, attentive, and helpful.
+` : ''}
 ${intentDirective}
 `.trim();
 }
@@ -193,12 +211,12 @@ export function buildOutreachMessage({ contactName, messageText, senderTitle = '
     `*Message from ${senderTitle}*\n` +
     `────────────────────────\n\n` +
     `${greeting}\n\n` +
-    `This is Rocket (Nero Labs), ${senderTitle}'s Personal AI Assistant & PA. ${senderTitle} requested that I share the following message with you:\n\n` +
+    `This is Rocket, ${senderTitle}'s Personal AI Assistant & PA. ${senderTitle} requested that I share the following message with you:\n\n` +
     `"${messageText.trim()}"\n\n` +
     `────────────────────────\n` +
     `If you would like to reply, please send your message here and I will ensure it is available for ${senderTitle}'s review.\n\n` +
     `Best regards,\n` +
-    `*Rocket* (Nero Labs) | Personal AI Assistant to ${senderTitle} 🦝⚡`
+    `*Rocket* | Personal AI Assistant to ${senderTitle} 🦝⚡`
   );
 }
 
@@ -220,6 +238,10 @@ export function buildWhatsAppChatContext({
   const explicitLimit = extractExplicitWordLimit(promptText);
   const detectedIntent = detectUserIntent(promptText);
 
+  // Check if Behalf-Of delegation is active for this chat
+  const isDelegated = !isSandy && delegationService.isDelegated(chatId);
+  const delegationInfo = isDelegated ? delegationService.getActiveDelegation(chatId) : null;
+
   // Retrieve contact profile from database
   const profile = senderNumber ? sandyStatusService.getContactProfile(senderNumber) : null;
   const preferredLanguage = profile?.preferred_language || (isSandy ? getConfig('rocket_language', 'hinglish') : 'hinglish');
@@ -239,6 +261,8 @@ export function buildWhatsAppChatContext({
     customInstructions,
     additionalContext,
     isGroup,
+    isDelegated,
+    delegationInfo,
   });
 
   const messages = [{ role: 'system', content: systemDirective }];

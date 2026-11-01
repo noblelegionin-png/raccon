@@ -63,30 +63,77 @@ import {
   isWhatsAppSilentModeActive,
   setWhatsAppSilentMode,
   isChatMuted,
+  getMuteDetails,
   muteChat,
   unmuteChat,
   listMutedChats,
 } from '../maintenance/maintenanceService.js';
+import { delegationService } from './delegationService.js';
 
 /**
- * Detects if a message is telling Nero to shut up / be quiet in this chat
+ * Parses targeted block/unblock commands from Sandy for specific numbers or contacts:
+ * e.g. "block chat for 9876543210", "mute 9876543210", "unblock chat for Rahul"
+ */
+export function parseTargetedBlockCommand(text) {
+  if (!text || typeof text !== 'string') return { isBlockCommand: false };
+  const raw = text.trim();
+  const clean = raw
+    .replace(/^(?:(?:yo\s+|hey\s+)?(?:rocket|nero)\s*[,:]?\s*)+/i, '')
+    .replace(/^["'`“”«»]+|["'`“”«»]+$/g, '')
+    .trim();
+
+  // 1. Unblock / Unmute:
+  const unblockMatch = clean.match(/^(?:unblock|unmute)\s+(?:chat\s+for|chat\s+with|chat)?\s*(?:no\.?|num|number)?\s*([+0-9a-zA-Z._\s-]{3,30})$/i) ||
+                       clean.match(/^([+0-9a-zA-Z._\s-]{3,30})\s+(?:ko|ki\s+chat)?\s+(?:unblock|unmute)\s*(?:karo|kar\s+do|kardo)?$/i);
+  if (unblockMatch) {
+    const targetQuery = unblockMatch[1].trim().replace(/^(?:no\.?|num|number)\s+/i, '').trim();
+    return {
+      isBlockCommand: true,
+      action: 'unblock',
+      targetQuery,
+      directNumber: outreachService.normalizePhoneNumber(targetQuery),
+    };
+  }
+
+  // 2. Block / Mute:
+  const blockMatch = clean.match(/^(?:block|mute)\s+(?:chat\s+for|chat\s+with|chat)?\s*(?:no\.?|num|number)?\s*([+0-9a-zA-Z._\s-]{3,30})$/i) ||
+                     clean.match(/^([+0-9a-zA-Z._\s-]{3,30})\s+(?:ko|ki\s+chat)?\s+(?:block|mute)\s*(?:karo|kar\s+do|kardo)?$/i);
+  if (blockMatch) {
+    const targetQuery = blockMatch[1].trim().replace(/^(?:no\.?|num|number)\s+/i, '').trim();
+    return {
+      isBlockCommand: true,
+      action: 'block',
+      targetQuery,
+      directNumber: outreachService.normalizePhoneNumber(targetQuery),
+    };
+  }
+
+  return { isBlockCommand: false };
+}
+
+/**
+ * Detects if a message is telling Rocket to shut up / be quiet in this chat
  */
 export function isMuteTrigger(text) {
   if (!text) return false;
   const raw = text.trim().toLowerCase();
+
+  // If this mentions a specific target contact or phone number, it's a targeted block command, NOT an in-chat shut-up trigger!
+  if (/\b(?:for|number|no\.?|[0-9]{5,})\b/i.test(raw)) return false;
+
   // Fast path for direct slash commands or standalone keywords (/mute, !mute, .mute, mute)
   if (/^[/!.]?mute(?:\b|$)/i.test(raw)) return true;
 
   const clean = raw
     .replace(/^[/!.]/, '')
-    .replace(/^[!/.]nero\s+/i, '')
-    .replace(/^nero\s*[,:]?\s*/i, '')
+    .replace(/^[!/.]?(?:rocket|nero)\s+/i, '')
+    .replace(/^(?:rocket|nero)\s*[,:]?\s*/i, '')
     .replace(/^(?:bhai|bro|yaar|abe|oye|please|pls)\s+/i, '')
     .replace(/[!.,?]+$/, '')
     .trim();
 
   // Exact phrase match
-  if (/^(?:chup\s*(?:ho\s*ja|hoja|kar|raho|reh|re|chap)?|chuo\s*(?:ho\s*ja|hoja)|shut\s*up|shutup|be\s+quiet|stop\s+talking|stay\s+quiet|don'?t\s+(?:talk|speak)|mute(?:\s+this\s+chat|\s+chat|\s+yourself)?|khamosh(?:\s+ho\s*ja|\s+raho)?|shant\s+(?:ho\s*ja|raho)|bakwaas\s+band\s+kar|quiet)$/i.test(clean)) {
+  if (/^(?:chup\s*(?:ho\s*ja|hoja|kar|raho|reh|re|chap)?|chuo\s*(?:ho\s*ja|hoja)|shut\s*up|shutup|be\s+quiet|stop\s+talking|stay\s+quiet|don'?t\s+(?:talk|speak)|mute(?:\s+this\s+chat|\s+chat|\s+yourself)?|khamosh(?:\s+ho\s*ja|\s+raho)?|shant\s*(?:ho\s*ja|raho)?|bakwaas\s+band\s+kar|quiet|silent|awaz\s+mat\s+karo)$/i.test(clean)) {
     return true;
   }
   // Embedded commands in short messages (<40 chars)
@@ -97,18 +144,22 @@ export function isMuteTrigger(text) {
 }
 
 /**
- * Detects if a message is telling Nero to speak / unmute in this chat
+ * Detects if a message is telling Rocket to speak / unmute in this chat
  */
 export function isUnmuteTrigger(text) {
   if (!text) return false;
   const raw = text.trim().toLowerCase();
+
+  // If this mentions a specific target contact or phone number, it's a targeted command, NOT an in-chat unmute trigger!
+  if (/\b(?:for|number|no\.?|[0-9]{5,})\b/i.test(raw)) return false;
+
   // Fast path for direct slash commands or standalone keywords (/unmute, !unmute, unmute, bol)
   if (/^[/!.]?unmute(?:\b|$)/i.test(raw)) return true;
 
   const clean = raw
     .replace(/^[/!.]/, '')
-    .replace(/^[!/.]nero\s+/i, '')
-    .replace(/^nero\s*[,:]?\s*/i, '')
+    .replace(/^[!/.]?(?:rocket|nero)\s+/i, '')
+    .replace(/^(?:rocket|nero)\s*[,:]?\s*/i, '')
     .replace(/^(?:bhai|bro|yaar|abe|oye|please|pls)\s+/i, '')
     .replace(/[!.,?]+$/, '')
     .trim();
@@ -1572,22 +1623,125 @@ class WhatsAppService {
     // 🌹 Record Sandy interaction for Rebecca Wife & Care System
     if (isSandy) {
       rebeccaCareService.recordSandyMessage(trimmed, remoteJid);
+
+      // 🛡️ 1. Targeted Chat Block / Mute / Unblock / Unmute for specific numbers
+      const blockCmd = parseTargetedBlockCommand(trimmed);
+      if (blockCmd.isBlockCommand) {
+        const { action, targetQuery } = blockCmd;
+        const rec = outreachService.resolveRecipient(targetQuery);
+        const normNum = rec?.sender_number || outreachService.normalizePhoneNumber(targetQuery);
+        if (!normNum) {
+          const askMsg = `⚠️ *Boss Sandy!* Mujhe "${targetQuery}" naam ya number ka contact nahi mila. Please unka exact phone number provide karo (e.g. \`block chat for 9876543210\`)! 🔍`;
+          await this.safeSendMessage(remoteJid, { text: askMsg }, { quoted: msg });
+          return;
+        }
+
+        const targetJid = `${normNum}@s.whatsapp.net`;
+        const contactName = rec?.sender_name || `+${normNum}`;
+
+        if (action === 'block') {
+          muteChat(targetJid, 'sandy_block_command', 'sandy');
+          sandyStatusService.updateContactSmartMemory(normNum, { notes: 'BLOCKED_BY_SANDY' });
+          const confText = `🛑 *CHAT BLOCKED & MUTED!* 🔒\n\nDone Boss! \`+${normNum}\` (*${contactName}*) ke liye chat block aur mute kardi hai. Uske kisi bhi message pe koi response ya reply nahi jayega! 🤐`;
+          recordAssistantMessage('wa_sandy_master', confText, 30, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: confText }, { quoted: msg });
+          return;
+        } else {
+          unmuteChat(targetJid);
+          sandyStatusService.updateContactSmartMemory(normNum, { notes: 'ACTIVE' });
+          const confText = `🟢 *CHAT UNBLOCKED & RESUMED!* 🚀\n\nDone Boss! \`+${normNum}\` (*${contactName}*) ke liye chat unblock kardi hai. Normal communication resume ho gayi hai! ✨`;
+          recordAssistantMessage('wa_sandy_master', confText, 30, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: confText }, { quoted: msg });
+          return;
+        }
+      }
+
+      // 🤝 2. Autonomous Behalf-Of Delegation ("I am busy, talk with X behalf of me")
+      const behalfCmd = delegationService.parseBehalfOfCommand(trimmed);
+      if (behalfCmd.isBehalf) {
+        if (behalfCmd.action === 'status') {
+          const activeList = delegationService.listActiveDelegations();
+          if (activeList.length === 0) {
+            const noActive = "Boss Sandy! Abhi kisi contact ke sath Behalf-Of delegation active nahi hai. All clear! 🦝✨";
+            await this.safeSendMessage(remoteJid, { text: noActive }, { quoted: msg });
+            return;
+          }
+          let statMsg = `🤝 *ACTIVE BEHALF-OF DELEGATED CHATS (${activeList.length}):*\n\n`;
+          activeList.forEach((d, idx) => {
+            statMsg += `${idx + 1}. *+${d.target_number}* (${d.target_name || 'Contact'})\n   • Notes: ${d.custom_notes || 'Handling inquiries'}\n   • Since: ${new Date(d.delegated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\n`;
+          });
+          statMsg += `_To stop: say "stop behalf for <number>" or "i am free now"!_`;
+          await this.safeSendMessage(remoteJid, { text: statMsg }, { quoted: msg });
+          return;
+        }
+
+        if (behalfCmd.action === 'stop') {
+          const stopRes = delegationService.stopDelegation(behalfCmd.targetQuery);
+          const debrief = stopRes.summary || "Delegation stopped cleanly. Standing by, Boss! 🦝🚀";
+          const confText = `🤝 *BEHALF-OF DELEGATION CONCLUDED!* ✨\n\n${stopRes.targetName ? `Stopped handling for *${stopRes.targetName}* (\`+${stopRes.targetNumber}\`).` : 'All delegated chats have been returned to normal mode.'}\n\n${debrief}`;
+          recordAssistantMessage('wa_sandy_master', confText, 60, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: confText }, { quoted: msg });
+          return;
+        }
+
+        if (behalfCmd.action === 'start') {
+          const target = delegationService.resolveTarget(behalfCmd.targetQuery);
+          if (!target || !target.targetNumber) {
+            const notFound = `⚠️ *Boss Sandy!* Mujhe "${behalfCmd.targetQuery}" naam ya number ka contact nahi mila. Please exact phone number specify karo (e.g. \`talk with 9876543210 behalf of me\`)! 🔍`;
+            await this.safeSendMessage(remoteJid, { text: notFound }, { quoted: msg });
+            return;
+          }
+
+          delegationService.startDelegation({
+            targetNumber: target.targetNumber,
+            targetName: target.targetName,
+            customNotes: behalfCmd.customNotes || '',
+            delegatedBy: 'sandy',
+          });
+
+          // Dispatch opening greeting message to the contact
+          const initialGreeting = delegationService.buildInitialGreeting({
+            contactName: target.targetName,
+            isHindi: true,
+            customNotes: behalfCmd.customNotes || '',
+          });
+
+          await this.safeSendMessage(target.targetJid, { text: initialGreeting });
+          recordAssistantMessage(`wa_${target.targetJid}`, initialGreeting, 60, 'gpt-6-luna');
+          delegationService.logMessage(target.targetJid, 'rocket', 'Rocket', 'assistant', initialGreeting);
+
+          const ackReport =
+            `🤝 *BEHALF-OF MODE ACTIVATED!* 🦝⚡\n\n` +
+            `• *Contact:* ${target.targetName} (\`+${target.targetNumber}\`)\n` +
+            `• *Notes for Chat:* _${behalfCmd.customNotes || 'Attend and assist'}_\n\n` +
+            `💬 *Dispatched Opening to Contact:*\n"${initialGreeting}"\n\n` +
+            `_Aap aaram se apna kaam karo Boss! Main unse smartly baat handle karunga aur saara context aapke liye log karta rahunga. Free ho kar bas bol dena "I am free now"!_ 🚀`;
+
+          recordAssistantMessage('wa_sandy_master', ackReport, 80, 'gpt-6-luna');
+          await this.safeSendMessage(remoteJid, { text: ackReport }, { quoted: msg });
+          return;
+        }
+      }
     }
 
     // =========================================================================
     // 🤫 PER-CHAT MUTE / UNMUTE LOGIC ("Chup Hoja" / "Bol")
-    // If told to shut up in any chat, Nero goes 100% silent in that specific conversation
+    // If told to shut up in any chat, Rocket goes 100% silent in that specific conversation
     // so it won't disturb between chats. Resumes when someone says "bol" or "unmute".
     // =========================================================================
     // True self-chat (Message Yourself) or Sandy master console should NEVER be silenced by casual mute triggers
     const chatIsMuted = !isSelfChat && !isOwnerConsoleChat && !isSandy && isChatMuted(remoteJid);
 
     if (chatIsMuted) {
+      const muteDetails = getMuteDetails(remoteJid);
+      const isBlockedBySandy = muteDetails?.muted_by === 'sandy';
+
       if (
-        isUnmuteTrigger(trimmed) ||
+        !isBlockedBySandy &&
+        (isUnmuteTrigger(trimmed) ||
         isUnmuteTrigger(promptText) ||
         /\b(?:unmute|bol|active|resume)\b/i.test(trimmed) ||
-        (isSandy && /unmute/i.test(trimmed))
+        (isSandy && /unmute/i.test(trimmed)))
       ) {
         unmuteChat(remoteJid);
         const unmuteReply = "🟢 Got it! Main wapas active hoon. Aap continue kar sakte hain! 🤝";
@@ -1595,7 +1749,7 @@ class WhatsAppService {
         await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
         return;
       }
-      // If currently muted and NOT an unmute trigger, drop message silently!
+      // If currently muted and NOT an unmute trigger (or blocked by Sandy), drop message silently!
       console.log(`[WhatsApp Chat Muted] Dropping message in muted chat ${remoteJid}: "${trimmed.slice(0, 40)}"`);
       recordUserMessage(isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`, promptText || trimmed);
       await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -3216,6 +3370,11 @@ class WhatsAppService {
       // Record contact interaction & build smart profile memory:
       sandyStatusService.recordContactInteraction(senderNumber, senderName, promptText);
 
+      // Log delegated message turn if this chat is under active Behalf-Of delegation
+      if (delegationService.isDelegated(remoteJid)) {
+        delegationService.logMessage(remoteJid, senderNumber, senderName, 'user', promptText);
+      }
+
       // Automatically detect and persistently update preferred language (Urdu, Hindi, Hinglish, English, or explicit request)
       sandyStatusService.detectAndUpdateLanguagePreference(senderNumber, promptText);
 
@@ -3610,6 +3769,9 @@ class WhatsAppService {
       }
 
       recordAssistantMessage(chatId, replyText, completion.tokensUsed || 0, activeModel);
+      if (!isSandy && delegationService.isDelegated(remoteJid)) {
+        delegationService.logMessage(remoteJid, 'rocket', 'Rocket', 'assistant', replyText);
+      }
 
       // Send response to WhatsApp via safeSendMessage
       let deliveredAsImage = false;
@@ -3846,7 +4008,9 @@ class WhatsAppService {
   }
 
   async notifyTelegramOwner(message) {
-    if (!config.telegramOwnerId) return;
+    // Isolated Platform Guard: WhatsApp and Telegram operate completely independently.
+    // Zero cross-platform notifications sent to Telegram if disabled or separated.
+    if (!config.whatsAppNotifyTelegram || !config.telegramOwnerId) return;
     try {
       const api = getBotApi();
       if (api) {

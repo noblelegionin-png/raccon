@@ -77,6 +77,12 @@ import { productSearchService } from '../shopping/productSearchService.js';
 import { websiteSafetyService } from '../security/websiteSafetyService.js';
 import { documentService } from '../documents/documentService.js';
 import { pdfService } from '../pdf/pdfService.js';
+import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
+import { socialInspectorService } from '../media/socialInspectorService.js';
+import { ROCKET_TOOL_DEFINITIONS, executeRocketTool } from '../tools/rocketTools.js';
+
+// Pending download sessions for Telegram users ("Ask link and done" flow)
+const pendingDownloadSessionsTelegram = new Map();
 
 export function renderGroupControlMessage(chatId, chatTitle = 'This Group') {
   const masterSwitch = getConfig('master_switch', 'true') === 'true';
@@ -174,7 +180,7 @@ export function registerBotHandlers(bot) {
     const isPrivate = ctx.chat.type === 'private';
     const userId = ctx.from?.id;
     const userIsOwner = isOwner(userId);
-    const activeModel = getActiveModelId();
+    const activeModel = getActiveModelId() || 'gpt-6-luna';
     const masterSwitch = getConfig('master_switch', 'true') === 'true';
 
     // If started inside a group, register and send interactive Start/Stop Chat controls
@@ -188,35 +194,27 @@ export function registerBotHandlers(bot) {
       });
     }
 
-    // In private chat: administrative greeting + web app launch button
-    let greeting = `⚡ *NERO LABS AI PLATFORM*\n\n`;
-    greeting += `Welcome to the official Nero Labs control channel.\n\n`;
-    greeting += `• *Status*: ${masterSwitch ? '🟢 Operational' : '🔴 Suspended'}\n`;
-    greeting += `• *Active Model*: \`${activeModel}\`\n`;
-    greeting += `• *Role*: ${userIsOwner ? '👑 Verified Owner' : '👤 Guest'}\n\n`;
+    const publicUrl = (config.webAppPublicUrl || 'https://raccon-v3q5.onrender.com').replace(/\/+$/, '');
 
     if (userIsOwner) {
-      greeting += `*Private Channel Notice:*\n`;
-      greeting += `This private chat functions strictly as your administrative control panel for system configuration, diagnostics, and moderation.\n\n`;
-      greeting += `Nero's automated conversational abilities operate within authorized Telegram groups and communities.\n\n`;
-      greeting += `Open the mobile dashboard below or type /help for commands.`;
-    } else {
-      greeting += `Nero Labs AI operates in authorized community groups. Use this bot in a group or contact the administrator for group activation.`;
-    }
+      const bossGreeting =
+        `⚡ *ROCKET AI — TELEGRAM MASTER CONSOLE*\n\n` +
+        `Yo Boss Sandy! Rocket is online, fully refreshed, and live on Telegram! 🦝⚡\n\n` +
+        `*Live Status & Engine:*\n` +
+        `• 👑 *Owner:* Sandy (\`${userId}\`)\n` +
+        `• ⚡ *Model:* \`${activeModel}\` (ScaleMax Luna Gateway)\n` +
+        `• 🛠️ *All 22 Tools Active:* Live Web Search, Highest-Quality MP3/MP4 Downloader, Social Inspector, Memory, Tasks, Sandbox Eval\n` +
+        `• 🔒 *Platform Isolation:* Telegram and WhatsApp work 100% independently (zero cross-notifications)\n\n` +
+        `*Direct Actions:* Talk to me in Roman Hinglish or English, or send any Reel/Short/Music link to download! 🚀`;
 
-    // Web App buttons in private chats
-    const keyboard = new InlineKeyboard();
-    const publicUrl = (config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app').replace(/\/+$/, '');
-    if (userIsOwner) {
-      keyboard.webApp('👑 Open Owner Console (Direct Access)', `${publicUrl}/owner.html`).row();
-      keyboard.webApp('⚡ Open User Mini App', `${publicUrl}/`);
-    } else {
-      keyboard.webApp('🚀 Open Nero Labs Mini App', `${publicUrl}/`);
-    }
+      const ownerKeyboard = new InlineKeyboard()
+        .webApp('👑 Owner Deck', `${publicUrl}/owner.html`)
+        .webApp('⚡ User App', `${publicUrl}/`)
+        .row()
+        .text('📊 Status', 'cmd_status')
+        .text('🛠️ Tools', 'cmd_tools');
 
-    // Set menu button for private chat
-    try {
-      if (userIsOwner) {
+      try {
         await ctx.api.setChatMenuButton({
           chat_id: ctx.chat.id,
           menu_button: {
@@ -225,21 +223,72 @@ export function registerBotHandlers(bot) {
             web_app: { url: `${publicUrl}/owner.html` },
           },
         });
-      } else {
-        await ctx.api.setChatMenuButton({
-          chat_id: ctx.chat.id,
-          menu_button: {
-            type: 'web_app',
-            text: '⚡ Nero App',
-            web_app: { url: `${publicUrl}/` },
-          },
-        });
-      }
+      } catch {}
+
+      return await ctx.reply(bossGreeting, {
+        parse_mode: 'Markdown',
+        reply_markup: ownerKeyboard,
+      });
+    }
+
+    // Normal User Greeting & User Panel
+    const userGreeting =
+      `👋 *Hello ${ctx.from?.first_name || 'Friend'}!*\n\n` +
+      `I am *Rocket*, your high-intelligence AI assistant powered by Nero Labs 🦝⚡\n\n` +
+      `*What I Can Do For You:*\n` +
+      `• 📥 *Media Downloader:* Send any YouTube, Instagram, Facebook, or Vero link to download highest-quality MP3 audio or MP4 video\n` +
+      `• 🔍 *Real-Time Search:* Ask any technical, educational, or gaming question\n` +
+      `• 🖼️ *Visual Search:* Find verified web images and diagrams\n` +
+      `• 📄 *PDF Engine:* Summarize or generate multi-page PDF documents\n` +
+      `• 💡 *Math & Coding:* Fast algorithmic problem solving and coding help\n\n` +
+      `_Feel free to chat with me directly right here, or tap below to open the Mini App!_ ✨`;
+
+    const userKeyboard = new InlineKeyboard()
+      .webApp('🚀 Open Mini App', `${publicUrl}/`)
+      .row()
+      .text('📋 Help & Commands', 'cmd_help')
+      .text('ℹ️ Privacy & Guide', 'cmd_privacy');
+
+    try {
+      await ctx.api.setChatMenuButton({
+        chat_id: ctx.chat.id,
+        menu_button: {
+          type: 'web_app',
+          text: '⚡ Nero App',
+          web_app: { url: `${publicUrl}/` },
+        },
+      });
     } catch {}
 
-    await ctx.reply(greeting, {
+    return await ctx.reply(userGreeting, {
       parse_mode: 'Markdown',
-      reply_markup: keyboard,
+      reply_markup: userKeyboard,
+    });
+  });
+
+  // /panel command (Universal User & Owner Control Panel)
+  bot.command(['panel', 'userpanel'], async (ctx) => {
+    const isOwnerUser = isOwner(ctx.from?.id);
+    const publicUrl = (config.webAppPublicUrl || 'https://raccon-v3q5.onrender.com').replace(/\/+$/, '');
+
+    const kb = new InlineKeyboard();
+    if (isOwnerUser) {
+      kb.webApp('👑 Owner Deck', `${publicUrl}/owner.html`).row();
+    }
+    kb.webApp('⚡ Nero Labs Mini App', `${publicUrl}/`).row()
+      .text('📥 Downloader Info', 'help_downloader')
+      .text('🛠️ Available Tools', 'cmd_tools');
+
+    const panelMsg = `🎛️ *NERO LABS — CONTROL PANEL*\n\n` +
+      `• *User:* ${ctx.from?.first_name || 'User'} (${isOwnerUser ? '👑 Owner' : '👤 User'})\n` +
+      `• *Active Model:* \`gpt-6-luna\`\n` +
+      `• *Tools Available:* 22 Multi-Modal Tools Active\n` +
+      `• *Downloader:* Active (YouTube, Instagram, Facebook, Vero)\n\n` +
+      `Select a menu option below to explore features:`;
+
+    await ctx.reply(panelMsg, {
+      parse_mode: 'Markdown',
+      reply_markup: kb,
     });
   });
 
@@ -2574,6 +2623,85 @@ export function registerBotHandlers(bot) {
       }
     }
 
+    // 📥 FAST-PATH 1: Universal Highest Quality Media Downloader (MP3 / MP4)
+    const mediaUrl = mediaDownloaderService.extractMediaUrl(text);
+    const downloadIntent = mediaDownloaderService.hasDownloadIntent(text);
+    const pendingSession = pendingDownloadSessionsTelegram.get(userId);
+
+    // If download intent or ongoing download session
+    if (mediaUrl && (downloadIntent.hasIntent || pendingSession)) {
+      pendingDownloadSessionsTelegram.delete(userId);
+      const targetFormat = downloadIntent.preferredFormat || pendingSession?.format || 'mp4';
+      await ctx.replyWithChatAction(targetFormat === 'mp3' ? 'upload_voice' : 'upload_video').catch(() => {});
+
+      const dlResult = await mediaDownloaderService.downloadMedia(mediaUrl, {
+        format: targetFormat,
+        quality: 'highest',
+      });
+
+      if (dlResult.ok && dlResult.buffer) {
+        try {
+          if (dlResult.format === 'mp3') {
+            return await ctx.replyWithAudio(new InputFile(dlResult.buffer, dlResult.filename || 'audio.mp3'), {
+              caption: `🎵 *${dlResult.title}* (${dlResult.platform.toUpperCase()})\n\n_Delivered in highest available quality MP3 by Rocket!_ 🚀`,
+              parse_mode: 'Markdown',
+              reply_parameters: { message_id: ctx.message.message_id },
+            });
+          } else {
+            return await ctx.replyWithVideo(new InputFile(dlResult.buffer, dlResult.filename || 'video.mp4'), {
+              caption: `🎬 *${dlResult.title}* (${dlResult.platform.toUpperCase()})\n\n_Delivered in highest available quality MP4 by Rocket!_ 🚀`,
+              parse_mode: 'Markdown',
+              reply_parameters: { message_id: ctx.message.message_id },
+            });
+          }
+        } catch (mediaSendErr) {
+          console.warn('[Telegram Fast-Path Media Send Failed]:', mediaSendErr.message);
+        }
+      } else if (dlResult.downloadUrl) {
+        return await safeReply(ctx, `📥 *Download Ready:*\n\nFile exceeds direct Telegram upload limit. Download directly here:\n👉 ${dlResult.downloadUrl}`, {
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+      }
+    }
+
+    // Fast-Path "Ask Link and Done" Flow
+    if (!mediaUrl && downloadIntent.hasIntent) {
+      pendingDownloadSessionsTelegram.set(userId, {
+        format: downloadIntent.preferredFormat || 'mp4',
+        timestamp: Date.now(),
+      });
+      const askMsg = userIsOwner
+        ? "Haan Boss! Bas link phenko (YouTube, Instagram, Facebook, ya Vero) aur batao MP3 chahiye ya MP4 — baaki Rocket turant download karke de dega! 🦝🚀"
+        : "Sure! Please share the link to the Reel, Short, or Video (YouTube, Instagram, Facebook, Vero) and whether you want MP3 audio or MP4 video, and I'll download it for you! ✨";
+      return await safeReply(ctx, askMsg, {
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    }
+
+    // 🎬 FAST-PATH 2: Universal Social Media Reel & Shorts Inspection
+    if (mediaUrl && (socialInspectorService.isSocialInspectionQuery(text) || !downloadIntent.hasIntent)) {
+      const inspectRes = await socialInspectorService.inspectMedia(mediaUrl);
+      if (inspectRes.ok) {
+        const card = socialInspectorService.formatInspectionCard(inspectRes, userIsOwner);
+        if (inspectRes.thumbnailUrl) {
+          try {
+            const dl = await imageSearchService.downloadImageBuffer(inspectRes.thumbnailUrl, 8000);
+            if (dl && dl.buffer) {
+              return await ctx.replyWithPhoto(new InputFile(dl.buffer, 'thumbnail.jpg'), {
+                caption: card.slice(0, 1024),
+                parse_mode: 'Markdown',
+                reply_parameters: { message_id: ctx.message.message_id },
+              });
+            }
+          } catch {}
+        }
+        return await safeReply(ctx, card, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+      }
+    }
+
     // 0d. Image Context Follow-Up (Visual Q&A, OCR, Image-to-Prompt, Future Editing Disclaimers)
     const recentImage = visionService.getRecentImage(chatId);
     if (recentImage && !text.startsWith('/')) {
@@ -3155,12 +3283,26 @@ export function registerBotHandlers(bot) {
       ctx.replyWithChatAction('typing').catch(() => {});
     }, 3500);
 
+    const toolContext = {
+      chatId: String(chatId),
+      userId,
+      isSandy: userIsOwner,
+      isGroup: !isPrivate,
+      userIsOwner,
+      pendingImages: [],
+      pendingMedia: [],
+    };
+
     try {
-      const completion = await scaleMaxAdapter.createChatCompletion({
+      const completion = await scaleMaxAdapter.executeChatWithTools({
         model: activeModel,
         messages,
         chatId: String(chatId),
         reasoningEffort,
+        maxTokens: userIsOwner ? 1000 : 500,
+        tools: ROCKET_TOOL_DEFINITIONS,
+        toolExecutor: executeRocketTool,
+        context: toolContext,
       });
 
       recordModelLatency(activeModel, completion.latencyMs);
@@ -3173,7 +3315,7 @@ export function registerBotHandlers(bot) {
       // 1. "Hy to Hy" rule -> casual greetings capped to 35 words (1-2 punchy sentences)
       // 2. Standard questions -> 10 to 500 words limit
       // 3. Explicit limits (e.g. "write a 500 word explanation") -> exact requested limit
-      let maxWords = 500;
+      let maxWords = userIsOwner ? 800 : 500;
       if (explicitLimit) {
         maxWords = explicitLimit;
       } else if (detectedIntent === 'greeting') {
@@ -3182,13 +3324,41 @@ export function registerBotHandlers(bot) {
 
       const minWords = detectedIntent === 'greeting' ? 1 : 10;
 
-      const validation = validateAndSanitizeResponse(completion.text, promptText, {
+      let rawResponse = completion.text || '';
+
+      // Safeguard: If the LLM inadvertently outputs that it cannot render/display/generate an image,
+      // search and deliver via image search!
+      if (/\b(?:can\'?t|cannot|unable\s+to|sorry\s*,?\s*i\s+can\'?t)\s+(?:render|display|generate|send|show|make)\s+(?:an?\s+)?(?:image|photo|picture)\b/i.test(rawResponse)) {
+        const fallbackSubject = imageSearchService.extractImageQuery(promptText) || promptText.replace(/^(?:show|send|give|draw|generate)\s+(?:me\s+)?(?:a|an|the\s+)?/i, '').replace(/[?.!]+$/, '').trim();
+        if (fallbackSubject && fallbackSubject.length >= 2) {
+          try {
+            const imgRes = await imageSearchService.searchImage(fallbackSubject, 4);
+            if (imgRes.ok && imgRes.image && imgRes.image.imageUrl) {
+              const item = imgRes.image;
+              const dl = await imageSearchService.downloadImageBuffer(item.imageUrl, 8000).catch(() => null);
+              if (dl && dl.buffer) {
+                toolContext.pendingImages.push({
+                  buffer: dl.buffer,
+                  caption: userIsOwner ? `🖼️ Ye lo Boss! ${item.title || fallbackSubject} ki photo! 🚀` : `🖼️ ${item.title || fallbackSubject}`,
+                  sourceUrl: item.sourceUrl,
+                });
+                rawResponse = userIsOwner
+                  ? `🖼️ *Ye lo Boss! ${item.title || fallbackSubject} ki photo:* \n\n${item.description ? `_${item.description.slice(0, 160)}..._\n\n` : ''}🔗 *Source:* ${item.sourceUrl || item.imageUrl}\n\n_Rocket on duty, Boss! Kuch aur dhundhu?_ 🚀`
+                  : `🖼️ *${item.title || fallbackSubject}*\n\n${item.description ? `_${item.description.slice(0, 160)}..._\n` : ''}🔗 *Source:* ${item.sourceUrl || item.imageUrl}`;
+              }
+            }
+          } catch (fbErr) {
+            console.warn('[Telegram Fallback Image Search Warn]:', fbErr.message);
+          }
+        }
+      }
+
+      const validation = validateAndSanitizeResponse(rawResponse, promptText, {
         minWords,
         maxWords,
         explicitLimit: Boolean(explicitLimit),
         isDev,
         isOwner: userIsOwner,
-        explicitLimit: Boolean(explicitLimit),
       });
       let replyContent = validation.sanitizedText;
 
@@ -3209,10 +3379,61 @@ export function registerBotHandlers(bot) {
         completion.model || activeModel
       );
 
-      await safeReply(ctx, replyContent, {
-        reply_parameters: { message_id: ctx.message.message_id },
-        ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
-      });
+      // Deliver buffered photos from tool calls or visual fallback
+      let deliveredAsPhoto = false;
+      if (toolContext.pendingImages && toolContext.pendingImages.length > 0) {
+        const primaryImg = toolContext.pendingImages[0];
+        try {
+          const photoCaption = replyContent.length <= 1024 ? replyContent : replyContent.slice(0, 1020) + '...';
+          await ctx.replyWithPhoto(new InputFile(primaryImg.buffer, 'image.jpg'), {
+            caption: photoCaption,
+            parse_mode: 'Markdown',
+            reply_parameters: { message_id: ctx.message.message_id },
+            ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+          });
+          deliveredAsPhoto = true;
+          if (replyContent.length > 1024) {
+            await safeReply(ctx, replyContent, {
+              reply_parameters: { message_id: ctx.message.message_id },
+              ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+            });
+          }
+        } catch (photoErr) {
+          console.warn('[Telegram Photo Delivery Failed, falling back to text]:', photoErr.message);
+        }
+      }
+
+      if (!deliveredAsPhoto) {
+        await safeReply(ctx, replyContent, {
+          reply_parameters: { message_id: ctx.message.message_id },
+          ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+        });
+      }
+
+      // Deliver buffered media files (MP3 audio / MP4 video) from tool calls
+      if (toolContext.pendingMedia && toolContext.pendingMedia.length > 0) {
+        for (const mediaItem of toolContext.pendingMedia) {
+          try {
+            if (mediaItem.format === 'mp3') {
+              await ctx.replyWithAudio(new InputFile(mediaItem.buffer, mediaItem.fileName || 'audio.mp3'), {
+                caption: mediaItem.caption,
+                parse_mode: 'Markdown',
+                reply_parameters: { message_id: ctx.message.message_id },
+                ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+              });
+            } else {
+              await ctx.replyWithVideo(new InputFile(mediaItem.buffer, mediaItem.fileName || 'video.mp4'), {
+                caption: mediaItem.caption,
+                parse_mode: 'Markdown',
+                reply_parameters: { message_id: ctx.message.message_id },
+                ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+              });
+            }
+          } catch (mErr) {
+            console.warn('[Telegram Media Delivery Failed]:', mErr.message);
+          }
+        }
+      }
     } catch (err) {
       console.error('[Telegram Message Handling Error]:', err);
       let errorMsg = `⚠️ *AI Processing Failed*\n\n${err.message}`;

@@ -5,7 +5,7 @@ import path from 'node:path';
 import 'dotenv/config';
 import { executeRocketTool, ROCKET_TOOL_DEFINITIONS } from '../src/tools/rocketTools.js';
 
-test('🛡️ Rocket Tool Registry — All 19 Tools Formally Declared', () => {
+test('🛡️ Rocket Tool Registry — All 22 Tools Formally Declared', () => {
   const expectedTools = [
     'web_search',
     'deep_browse',
@@ -26,9 +26,12 @@ test('🛡️ Rocket Tool Registry — All 19 Tools Formally Declared', () => {
     'minecraft_command',
     'generate_pdf_document',
     'set_chat_controls',
+    'send_whatsapp_message',
+    'manage_chat_privacy',
+    'delegate_chat_behalf',
   ];
 
-  assert.equal(ROCKET_TOOL_DEFINITIONS.length, 19, 'Should have exactly 19 tools defined');
+  assert.equal(ROCKET_TOOL_DEFINITIONS.length, 22, 'Should have exactly 22 tools defined');
 
   for (const name of expectedTools) {
     const found = ROCKET_TOOL_DEFINITIONS.find((t) => t.function.name === name);
@@ -425,4 +428,103 @@ test('⚙️ Tool 19: set_chat_controls — Dynamic Runtime Configuration Tuning
   assert.ok(res.message.includes('language=hinglish'));
   assert.ok(res.message.includes('reasoning=none'));
   assert.ok(res.message.includes('wordLimit=450'));
+});
+
+// Tool 20: send_whatsapp_message
+test('💬 Tool 20: send_whatsapp_message — Direct WhatsApp Outreach Dispatch', async () => {
+  const context = { chatId: 'wa_sandy_rocket', isSandy: true };
+  const res = await executeRocketTool(
+    'send_whatsapp_message',
+    {
+      recipient: '9876543210',
+      message: 'hy bro meeting at 4 PM',
+    },
+    context
+  );
+
+  assert.equal(res.ok, true);
+  assert.equal(res.recipient, '919876543210');
+  assert.ok(res.sentMessage && res.sentMessage.length > 10);
+  assert.ok(res.sentMessage.includes('Rocket'));
+
+  // Edge case: Non-Sandy unauthorized call
+  const unauthRes = await executeRocketTool(
+    'send_whatsapp_message',
+    { recipient: '9876543210', message: 'hello' },
+    { chatId: 'wa_contact', isSandy: false }
+  );
+  assert.equal(unauthRes.ok, false);
+  assert.ok(unauthRes.error.includes('Only Sandy'));
+});
+
+// Tool 21: manage_chat_privacy
+test('🔒 Tool 21: manage_chat_privacy — Block / Mute & Unblock Specific Contacts', async () => {
+  const context = { chatId: 'wa_sandy_rocket', isSandy: true };
+
+  // Block contact
+  const blockRes = await executeRocketTool(
+    'manage_chat_privacy',
+    {
+      action: 'block',
+      target: '9876543210',
+    },
+    context
+  );
+  assert.equal(blockRes.ok, true);
+  assert.equal(blockRes.action, 'block');
+  assert.equal(blockRes.status, 'blocked_and_muted');
+
+  // Unblock contact
+  const unblockRes = await executeRocketTool(
+    'manage_chat_privacy',
+    {
+      action: 'unblock',
+      target: '9876543210',
+    },
+    context
+  );
+  assert.equal(unblockRes.ok, true);
+  assert.equal(unblockRes.action, 'unblock');
+  assert.equal(unblockRes.status, 'unmuted_and_active');
+});
+
+// Tool 22: delegate_chat_behalf
+test('🤝 Tool 22: delegate_chat_behalf — Autonomous Behalf-Of Mode Management', async () => {
+  const context = { chatId: 'wa_sandy_rocket', isSandy: true };
+
+  // Start delegation
+  const startRes = await executeRocketTool(
+    'delegate_chat_behalf',
+    {
+      action: 'start',
+      target: '9876543210',
+      instructions: 'Sandy is in an investor meeting, take down all client notes.',
+    },
+    context
+  );
+  assert.equal(startRes.ok, true);
+  assert.equal(startRes.action, 'start');
+  assert.equal(startRes.targetNumber, '919876543210');
+  assert.ok(startRes.initialGreeting.includes('Rocket'));
+
+  // Status check
+  const statusRes = await executeRocketTool(
+    'delegate_chat_behalf',
+    { action: 'status' },
+    context
+  );
+  assert.equal(statusRes.ok, true);
+  assert.ok(statusRes.count >= 1);
+
+  // Stop delegation
+  const stopRes = await executeRocketTool(
+    'delegate_chat_behalf',
+    {
+      action: 'stop',
+      target: '9876543210',
+    },
+    context
+  );
+  assert.equal(stopRes.ok, true);
+  assert.equal(stopRes.action, 'stop');
 });

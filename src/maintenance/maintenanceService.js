@@ -77,6 +77,17 @@ export function isChatMuted(chatId) {
   }
 }
 
+export function getMuteDetails(chatId) {
+  if (!chatId) return null;
+  ensureMutedChatsTable();
+  try {
+    const db = getDb();
+    return db.prepare('SELECT chat_id, muted_by, reason, created_at FROM whatsapp_muted_chats WHERE chat_id = ?').get(String(chatId)) || null;
+  } catch {
+    return null;
+  }
+}
+
 export function muteChat(chatId, reason = 'chup', mutedBy = 'user') {
   if (!chatId) return false;
   ensureMutedChatsTable();

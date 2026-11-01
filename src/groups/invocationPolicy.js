@@ -127,19 +127,30 @@ export function evaluateInvocationPolicy(ctx) {
     };
   }
 
-  // 7.5 Text Reply Mode (/text on | /text off): If text mode is explicitly ON, Nero participates in all texts
-  const textMode = getConfig(`text_mode_${ctx.chat.id}`, null) || getConfig(`chatmode_${ctx.chat.id}`, 'off');
-  if (textMode === 'on' || textMode === 'true' || textMode === 'all') {
+  // 7.5 Text Reply Mode & Chat Manager Mode
+  const textMode = getConfig(`text_mode_${ctx.chat.id}`, null) || getConfig(`chatmode_${ctx.chat.id}`, null);
+  const chatManagerMode = getConfig('chat_manager_mode', 'true') === 'true';
+
+  // If text mode was explicitly turned off by owner or group admin (/text off or /chat stop or chup), honor stop!
+  if (textMode === 'off' || textMode === 'false' || textMode === 'mention') {
+    return {
+      shouldRespond: false,
+      reason: 'text_mode_off_stop_feature',
+      isPrivate: false,
+    };
+  }
+
+  // If Chat Manager mode is active (or /text on is active): participate and blend into conversation!
+  if (chatManagerMode || textMode === 'on' || textMode === 'true' || textMode === 'all') {
     return {
       shouldRespond: true,
-      reason: 'text_mode_on',
+      reason: 'chat_manager_active',
       cleanText: text,
       isPrivate: false,
     };
   }
 
-  // 8. Ordinary member banter without invoking Nero:
-  // PREFER SILENCE!
+  // 8. Ordinary member banter without invoking Rocket:
   return {
     shouldRespond: false,
     reason: 'ordinary_member_conversation_silent',

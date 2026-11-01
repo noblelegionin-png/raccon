@@ -2937,7 +2937,7 @@ export function registerBotHandlers(bot) {
     }
 
     // C. Natural Language Start/Stop Chat
-    if (/^(start\s+chat|turn\s+on\s+chat|enable\s+chat)$/i.test(text)) {
+    if (/^(?:start\s+chat|turn\s+on\s+chat|enable\s+chat|bol|unmute)$/i.test(text.trim())) {
       setConfig(`text_mode_${chatId}`, 'on');
       setConfig(`chatmode_${chatId}`, 'all');
       if (!isPrivate) {
@@ -2952,7 +2952,7 @@ export function registerBotHandlers(bot) {
       });
     }
 
-    if (/^(stop\s+chat|turn\s+off\s+chat|quiet\s+mode)$/i.test(text)) {
+    if (/^(?:stop\s+chat|turn\s+off\s+chat|quiet\s+mode|chup|chup\s+hoja|shut\s+up|mute)$/i.test(text.trim())) {
       setConfig(`text_mode_${chatId}`, 'off');
       setConfig(`chatmode_${chatId}`, 'mention');
       const keyboard = buildGroupControlKeyboard(chatId);
@@ -3267,10 +3267,12 @@ export function registerBotHandlers(bot) {
     }
 
     const senderName = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(' ') || 'Member';
-    recordUserMessage(chatId, promptText);
-    const messages = buildChatContext(chatId, promptText, {
+    const speakerLabel = userIsOwner ? 'Sandy (Boss)' : senderName;
+    const contextualPrompt = isPrivate ? promptText : `[${speakerLabel}]: ${promptText}`;
+    recordUserMessage(chatId, contextualPrompt);
+    const messages = buildChatContext(chatId, contextualPrompt, {
       senderId: userId,
-      senderName,
+      senderName: speakerLabel,
       replyContext,
       userIsOwner,
     });

@@ -1536,19 +1536,15 @@ class WhatsAppService {
     );
 
     const isMuteOrUnmute = isMuteTrigger(trimmed) || isUnmuteTrigger(trimmed);
+    const isSenderSandy = isFromMe || isSandy || (senderNumber && sandyStatusService.isOwnerNumber(senderNumber));
+    const isChatManagerActive = getConfig('chat_manager_mode', 'true') === 'true';
 
-    // 🛡️ OWNER / SELF-MESSAGE GUARD IN EXTERNAL CHATS (DMs with contacts & groups):
-    // When Sandy (or the linked device) sends a message/voice note in a chat with an external contact:
-    // Only respond if Sandy explicitly:
-    // 1) Replied to the bot (isReplyToNero)
-    // 2) Tagged/mentioned the bot (@bot, @nero, /nero, nero)
-    // 3) Commanded /mute or /unmute
-    // NONE OTHER!
+    // 🛡️ OWNER / SELF-MESSAGE IN EXTERNAL CHATS (DMs with contacts & groups):
+    // In Chat Manager Mode, Rocket actively reads, relates, and blends into conversations
+    // replying to both Sandy and the person he is talking to!
     if (isFromMe && isExternalChat) {
       // 🎙️ Voice Notes from Sandy in DMs or groups:
       if (isAudio && audioMessage) {
-        // Silently save in voiceNoteService so reaction-to-transcription works if someone reacts,
-        // but NEVER post follow-ups or reply conversationally into DMs!
         await voiceNoteService.saveVoiceNote({
           messageId: msgId,
           remoteJid,
@@ -1563,10 +1559,24 @@ class WhatsAppService {
         return; // Silent return!
       }
 
-      const shouldReplyToSandy = isReplyToNero || isBotMention || isMuteOrUnmute;
-      if (!shouldReplyToSandy) {
-        // Silently ignore normal human conversations between Sandy and others in DMs/groups
-        return;
+      // Check if this chat is muted by Sandy or participant
+      if (isChatMuted(remoteJid)) {
+        const isUnmute = isUnmuteTrigger(trimmed) || /\b(?:unmute|bol|resume)\b/i.test(trimmed);
+        if (isUnmute) {
+          unmuteChat(remoteJid);
+          const unmuteReply = "🟢 Got it Boss! Main wapas active hoon. Let's chat! 🤝";
+          await this.safeSendMessage(remoteJid, { text: unmuteReply }, { quoted: msg });
+          return;
+        }
+        return; // Silent in muted chat
+      }
+
+      // If Chat Manager mode is explicitly turned off, require explicit mention/reply
+      if (!isChatManagerActive) {
+        const shouldReplyToSandy = isReplyToNero || isBotMention || isMuteOrUnmute;
+        if (!shouldReplyToSandy) {
+          return;
+        }
       }
     }
 
@@ -1575,7 +1585,7 @@ class WhatsAppService {
       return;
     }
 
-    // Group message check: only respond if mentioned, commanded, sent media, replying to Nero, or defending Sandy
+    // Group message check:
     if (isGroup) {
       const isMentioned =
         isBotMention ||
@@ -1588,7 +1598,9 @@ class WhatsAppService {
         isImage ||
         isVideo ||
         isPdfDoc;
-      if (!isMentioned) return;
+
+      // In Chat Manager mode, Rocket participates actively in group chat if not muted!
+      if (!isMentioned && !isChatManagerActive) return;
     }
 
     // 🛡️ OWNER IDENTITY & RESPECT PROTECTION INTERCEPT:
@@ -1620,9 +1632,25 @@ class WhatsAppService {
       .replace(/^@(?:rocket|raccon|nero|bot)\s+/i, '')
       .trim();
 
-    // 🌹 Record Sandy interaction for Rebecca Wife & Care System
-    if (isSandy) {
-      rebeccaCareService.recordSandyMessage(trimmed, remoteJid);
+    // 🌹 Record Sandy interaction for Rebecca Wife & Care System & Owner Commands
+    if (isSandy || isSenderSandy) {
+      if (isSandy) {
+        rebeccaCareService.recordSandyMessage(trimmed, remoteJid);
+      }
+
+      // 🎛️ Chat Manager Mode Toggle
+      if (/\b(?:enable|turn\s+on|activate)\s+chat\s+manager\b/i.test(trimmed) || trimmed.toLowerCase() === 'chat manager on') {
+        setConfig('chat_manager_mode', 'true');
+        const ack = "🟢 *Chat Manager Mode: ACTIVATED!* 🦝⚡\n\nRocket is now active as your Chat Manager across WhatsApp and Telegram. I will read ongoing chats, relate to the context, and reply/blend into conversations with you and the people you talk to! 🤝🚀";
+        await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
+        return;
+      }
+      if (/\b(?:disable|turn\s+off|deactivate)\s+chat\s+manager\b/i.test(trimmed) || trimmed.toLowerCase() === 'chat manager off') {
+        setConfig('chat_manager_mode', 'false');
+        const ack = "⚪ *Chat Manager Mode: DEACTIVATED.*\n\nRocket will now only speak when directly addressed, mentioned, or in Behalf-Of mode.";
+        await this.safeSendMessage(remoteJid, { text: ack }, { quoted: msg });
+        return;
+      }
 
       // 🛡️ 1. Targeted Chat Block / Mute / Unblock / Unmute for specific numbers
       const blockCmd = parseTargetedBlockCommand(trimmed);
@@ -3498,9 +3526,11 @@ class WhatsAppService {
         }
       }
 
-      // 2. Logical Conversation Context (Unified wa_sandy_rocket for Sandy, wa_remoteJid for contacts)
-      const chatId = isSandy ? 'wa_sandy_rocket' : `wa_${remoteJid}`;
-      recordUserMessage(chatId, promptText);
+      // 2. Logical Conversation Context (Unified wa_sandy_rocket for Sandy self-chat, wa_remoteJid for external chats)
+      const chatId = isSelfChat ? 'wa_sandy_rocket' : `wa_${remoteJid}`;
+      const speakerLabel = isOwnerSender ? 'Sandy (Boss)' : (senderName || 'Contact');
+      const contextualPrompt = isSelfChat ? promptText : `[${speakerLabel}]: ${promptText}`;
+      recordUserMessage(chatId, contextualPrompt);
 
       // 🏡 Natural Language Virtual Life Simulation & Autonomous Commands (Sandy speaking to Myra)
       if (isSandy && (selectedPersona === 'MYRA' || selectedPersona === 'BOTH')) {
@@ -3617,10 +3647,10 @@ class WhatsAppService {
 
       const { messages, explicitLimit, detectedIntent } = buildWhatsAppChatContext({
         chatId,
-        promptText,
+        promptText: contextualPrompt,
         senderNumber,
-        senderName,
-        isSandy,
+        senderName: speakerLabel,
+        isSandy: isOwnerSender,
         persona: selectedPersona,
         additionalContext: triLayerContext,
         isGroup,

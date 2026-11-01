@@ -14,6 +14,10 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { config } from '../config.js';
+import { applyLogNoiseFilter } from '../utils/noiseFilter.js';
+
+// Guarantee libsignal and session noise suppression
+applyLogNoiseFilter();
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import {
   recordUserMessage,
@@ -1051,6 +1055,15 @@ class WhatsAppService {
 
     this.isInitializing = true;
     this.status = 'connecting';
+
+    // Clean up any previous socket to prevent dangling listeners or duplicate event loops
+    if (this.sock) {
+      try {
+        this.sock.ev?.removeAllListeners?.();
+        this.sock.end?.();
+      } catch (e) {}
+      this.sock = null;
+    }
 
     try {
       const authDir = this.getAuthDir();

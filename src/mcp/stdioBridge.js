@@ -12,8 +12,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
+import { applyLogNoiseFilter } from '../utils/noiseFilter.js';
 import { initDatabase } from '../db/index.js';
 import { handleMcpJsonRpc, initMcpDatabase } from './mcpServer.js';
+
+// Suppress library noise
+applyLogNoiseFilter();
+
+// In stdio MCP mode, process.stdout is strictly reserved for JSON-RPC messages.
+// Route all console.log/info/warn to process.stderr so tools do not break the client stream.
+const stderrWrite = (args) => {
+  const line = args
+    .map((a) => (typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a)))
+    .join(' ');
+  process.stderr.write(line + '\n');
+};
+console.log = (...args) => stderrWrite(args);
+console.info = (...args) => stderrWrite(args);
+console.warn = (...args) => stderrWrite(args);
 
 // Resolve project root and load environment
 const __filename = fileURLToPath(import.meta.url);
@@ -41,7 +57,6 @@ const auth = {
 // Read JSON-RPC lines from stdin
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout,
   terminal: false,
 });
 

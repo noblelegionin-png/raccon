@@ -227,6 +227,7 @@ export class ScaleMaxAdapter {
     temperature = 0.5,
     tools = null,
     tool_choice = null,
+    timeoutMs = null,
   }) {
     if (!this.isConfigured()) {
       throw new Error(
@@ -244,11 +245,12 @@ export class ScaleMaxAdapter {
     const useDirectDeepSeek = config.deepSeekApiKey && targetModel.toLowerCase().includes('deepseek');
     const endpointBase = useDirectDeepSeek ? 'https://api.deepseek.com/v1' : this.baseUrl;
     const authHeader = useDirectDeepSeek ? `Bearer ${config.deepSeekApiKey}` : `Bearer ${this.apiKey}`;
+    const effectiveTimeout = timeoutMs || this.timeoutMs;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const startTime = Date.now();
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+      const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
       try {
         const payload = {

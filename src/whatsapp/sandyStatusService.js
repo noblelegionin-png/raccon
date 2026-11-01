@@ -765,6 +765,34 @@ class SandyStatusService {
     return true;
   }
 
+  setContactNotes(senderNumber, notes) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO contact_smart_memory (
+        sender_number, sender_name, relationship, notes, preferred_language, preferred_tone,
+        custom_instructions, review_status, message_count, last_seen, updated_at
+      ) VALUES (?, 'Contact', 'Unknown / classify later', ?, 'en', 'professional', '', 'pending', 1, ?, ?)
+      ON CONFLICT(sender_number) DO UPDATE SET
+        notes = excluded.notes,
+        updated_at = excluded.updated_at
+    `).run(clean, String(notes || '').trim(), now, now);
+    logAudit('contact', 'NOTES_UPDATED', `+${clean} -> ${notes}`);
+    return true;
+  }
+
+  updateContactSmartMemory(senderNumber, { notes, relationship } = {}) {
+    this.init();
+    const clean = String(senderNumber || '').replace(/[^0-9]/g, '');
+    if (!clean) return false;
+    if (relationship) this.setContactRelationship(clean, relationship);
+    if (notes) this.setContactNotes(clean, notes);
+    return true;
+  }
+
   setContactCustomInstructions(senderNumber, instructions) {
     this.init();
     const clean = String(senderNumber || '').replace(/[^0-9]/g, '');

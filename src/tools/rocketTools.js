@@ -526,7 +526,7 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
           url: pageData.url,
           metaDescription: pageData.metaDescription,
           headings: (pageData.headings || []).slice(0, 10),
-          contentSummary: (pageData.paragraphs || []).slice(0, 6).join('\n\n').slice(0, 1500),
+          contentSummary: (pageData.bodyText || (pageData.paragraphs || []).join('\n\n') || pageData.metaDescription || pageData.title || '').slice(0, 1500),
           tables: (pageData.tables || []).slice(0, 2),
           documentLinks: (pageData.documentLinks || []).slice(0, 5),
         };
@@ -820,14 +820,15 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
         const url = (args.url || '').trim();
         if (!url) return { ok: false, error: 'URL is required' };
         const analysis = await websiteSafetyService.analyzeWebsite(url);
+        const isSafe = analysis.riskLevel === 'Low observed risk' || analysis.riskLevel === 'Low risk';
         return {
           ok: true,
           url: analysis.url,
-          safetyStatus: analysis.safetyStatus,
+          safetyStatus: isSafe ? 'safe' : (analysis.riskLevel === 'High risk' ? 'dangerous' : 'suspicious'),
           riskLevel: analysis.riskLevel,
-          brandSpoofingRisk: analysis.brandSpoofingRisk,
-          suspiciousIndicators: analysis.suspiciousIndicators || [],
-          certificate: analysis.certificate || 'N/A',
+          brandSpoofingRisk: analysis.riskLevel === 'High risk',
+          suspiciousIndicators: analysis.findings || analysis.suspiciousIndicators || [],
+          certificate: analysis.certificate?.subject || analysis.certificate || 'N/A',
         };
       }
 
@@ -835,9 +836,15 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
         const code = (args.code || '').trim();
         if (!code) return { ok: false, error: 'Code string is required' };
         const sandboxRes = await safeSandboxRunner.runSandboxed(code, args.inputArgs || {});
+        let sanitizedResult = sandboxRes.result;
+        if (sanitizedResult !== undefined) {
+          try {
+            sanitizedResult = JSON.parse(JSON.stringify(sanitizedResult));
+          } catch {}
+        }
         return {
           ok: sandboxRes.success,
-          result: sandboxRes.result,
+          result: sanitizedResult,
           logs: sandboxRes.logs,
           executionTimeMs: Math.round(sandboxRes.executionTimeMs),
           error: sandboxRes.error,

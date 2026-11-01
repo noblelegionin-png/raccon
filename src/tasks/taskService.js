@@ -154,6 +154,13 @@ export class TaskService {
   }
 
   /**
+   * Delete a task (alias for cancelTask)
+   */
+  deleteTask(idOrUuid) {
+    return this.cancelTask(idOrUuid);
+  }
+
+  /**
    * Calculate next recurrence timestamp
    */
   _calculateNextRecurrence(currentDateStr, rule) {

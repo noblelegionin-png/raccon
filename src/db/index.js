@@ -778,13 +778,25 @@ export function addConversationMessage(chatId, role, content, tokensUsed = 0, mo
 }
 
 export function getRecentConversation(chatId, limit = 10) {
-  const rows = getDb().prepare(`
-    SELECT role, content, model_used, created_at
-    FROM conversations
-    WHERE chat_id = ?
-    ORDER BY id DESC
-    LIMIT ?
-  `).all(String(chatId), limit);
+  const strId = String(chatId);
+  let rows;
+  if (strId === 'wa_sandy_rocket' || strId === 'wa_sandy_myra' || strId === 'wa_sandy_nero' || strId === 'wa_sandy_master') {
+    rows = getDb().prepare(`
+      SELECT role, content, model_used, created_at
+      FROM conversations
+      WHERE chat_id IN ('wa_sandy_rocket', 'wa_sandy_myra', 'wa_sandy_nero', 'wa_sandy_master')
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(limit);
+  } else {
+    rows = getDb().prepare(`
+      SELECT role, content, model_used, created_at
+      FROM conversations
+      WHERE chat_id = ?
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(strId, limit);
+  }
 
   // Return in chronological order
   return rows.reverse();

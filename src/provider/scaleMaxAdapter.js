@@ -225,6 +225,8 @@ export class ScaleMaxAdapter {
     maxTokens = null,
     max_tokens = null,
     temperature = 0.5,
+    tools = null,
+    tool_choice = null,
   }) {
     if (!this.isConfigured()) {
       throw new Error(
@@ -253,8 +255,15 @@ export class ScaleMaxAdapter {
           model: targetModel,
           messages,
           temperature: typeof temperature === 'number' ? temperature : 0.5,
-          max_tokens: maxTokens || max_tokens || 450,
+          max_tokens: maxTokens || max_tokens || 500,
         };
+
+        if (Array.isArray(tools) && tools.length > 0) {
+          payload.tools = tools;
+          if (tool_choice) {
+            payload.tool_choice = tool_choice;
+          }
+        }
 
         const effort = reasoningEffort || 'none';
         if (effort && effort.toLowerCase() !== 'none') {
@@ -279,6 +288,7 @@ export class ScaleMaxAdapter {
           const data = await response.json();
           const choice = data.choices?.[0];
           const text = choice?.message?.content || choice?.text || '';
+          const toolCalls = choice?.message?.tool_calls || null;
           const usage = data.usage || {
             prompt_tokens: 0,
             completion_tokens: 0,
@@ -296,6 +306,8 @@ export class ScaleMaxAdapter {
 
           return {
             text,
+            toolCalls,
+            message: choice?.message,
             usage,
             latencyMs,
             model: data.model || targetModel,
@@ -373,6 +385,124 @@ export class ScaleMaxAdapter {
     }
 
     throw lastError || new Error('ScaleMax completion request failed after retries.');
+  }
+
+  /**
+   * Complete multi-turn chat completion with automatic tool calling execution
+   * @param {Object} params
+   * @param {string} [params.model='gpt-6-luna']
+   * @param {Array<Object>} params.messages
+   * @param {string} [params.chatId='unknown']
+   * @param {string} [params.reasoningEffort='none']
+   * @param {number} [params.maxTokens=500]
+   * @param {number} [params.temperature=0.5]
+   * @param {Array<Object>} [params.tools=[]]
+   * @param {Function} [params.toolExecutor=null]
+   * @param {Object} [params.context={}]
+   * @param {number} [params.maxToolTurns=3]
+   */
+  async executeChatWithTools({
+    model = 'gpt-6-luna',
+    messages,
+    chatId = 'unknown',
+    reasoningEffort = 'none',
+    maxTokens = 500,
+    temperature = 0.5,
+    tools = [],
+    toolExecutor = null,
+    context = {},
+    maxToolTurns = 3,
+  }) {
+    const conversationMessages = [...messages];
+    let turns = 0;
+    let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    let finalModel = model;
+    let finalLatency = 0;
+    const executedTools = [];
+
+    while (turns < maxToolTurns) {
+      turns++;
+      const res = await this.createChatCompletion({
+        model,
+        messages: conversationMessages,
+        chatId,
+        reasoningEffort,
+        maxTokens,
+        temperature,
+        tools: tools && tools.length > 0 ? tools : null,
+      });
+
+      if (res.usage) {
+        totalUsage.prompt_tokens += res.usage.prompt_tokens || 0;
+        totalUsage.completion_tokens += res.usage.completion_tokens || 0;
+        totalUsage.total_tokens += res.usage.total_tokens || 0;
+      }
+      finalLatency += res.latencyMs || 0;
+      finalModel = res.model || finalModel;
+
+      // Check if tool calling was triggered
+      if (res.toolCalls && res.toolCalls.length > 0 && typeof toolExecutor === 'function') {
+        conversationMessages.push({
+          role: 'assistant',
+          content: res.text || null,
+          tool_calls: res.toolCalls,
+        });
+
+        for (const toolCall of res.toolCalls) {
+          const fnName = toolCall.function?.name;
+          let fnArgs = {};
+          try {
+            fnArgs = JSON.parse(toolCall.function?.arguments || '{}');
+          } catch {
+            fnArgs = {};
+          }
+
+          executedTools.push({ name: fnName, args: fnArgs });
+
+          let toolOutput;
+          try {
+            toolOutput = await toolExecutor(fnName, fnArgs, context);
+          } catch (tErr) {
+            toolOutput = { error: tErr.message };
+          }
+
+          conversationMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: fnName,
+            content: typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput),
+          });
+        }
+        continue;
+      }
+
+      // No tool calls, return text
+      return {
+        text: res.text,
+        usage: totalUsage,
+        latencyMs: finalLatency,
+        model: finalModel,
+        executedTools,
+      };
+    }
+
+    // If max turns reached, make one final call without tools to force final response
+    const finalRes = await this.createChatCompletion({
+      model,
+      messages: conversationMessages,
+      chatId,
+      reasoningEffort,
+      maxTokens,
+      temperature,
+    });
+
+    return {
+      text: finalRes.text,
+      usage: totalUsage,
+      latencyMs: finalLatency + (finalRes.latencyMs || 0),
+      model: finalRes.model || finalModel,
+      executedTools,
+    };
   }
 
   /**

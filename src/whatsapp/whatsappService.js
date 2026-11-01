@@ -33,6 +33,7 @@ import { extractExplicitWordLimit, detectUserIntent } from '../conversation/inte
 import { sandyStatusService } from './sandyStatusService.js';
 import { mediaManager } from './mediaManager.js';
 import { buildWhatsAppChatContext, buildWhatsAppDirective, buildOutreachMessage } from './whatsappPersona.js';
+import { ROCKET_TOOL_DEFINITIONS, executeRocketTool } from '../tools/rocketTools.js';
 import { outreachService } from './outreachService.js';
 import { voiceNoteService } from './voiceNoteService.js';
 import { stickerService } from './stickerService.js';
@@ -1462,8 +1463,15 @@ class WhatsAppService {
 
     const lower = trimmed.toLowerCase();
     const isBotMention = Boolean(
+      lower.includes('@rocket') ||
+      lower.includes('@raccon') ||
       lower.includes('@nero') ||
       lower.includes('@bot') ||
+      lower.startsWith('!rocket') ||
+      lower.startsWith('/rocket') ||
+      lower.startsWith('.rocket') ||
+      lower.startsWith('rocket') ||
+      lower.startsWith('raccon') ||
       lower.startsWith('!nero') ||
       lower.startsWith('/nero') ||
       lower.startsWith('.nero') ||
@@ -1471,7 +1479,7 @@ class WhatsAppService {
       lower.startsWith('!ai') ||
       lower.startsWith('nero') ||
       lower.startsWith('bot') ||
-      /\b(?:@nero|@bot)\b/i.test(trimmed)
+      /\b(?:@rocket|@raccon|@nero|@bot|rocket|raccon|nero)\b/i.test(trimmed)
     );
 
     const isMuteOrUnmute = isMuteTrigger(trimmed) || isUnmuteTrigger(trimmed);
@@ -1555,8 +1563,8 @@ class WhatsAppService {
 
     // Strip bot command prefix if used
     let promptText = trimmed
-      .replace(/^[!/.]nero\s+/i, '')
-      .replace(/^\/ai\s+/i, '')
+      .replace(/^[!/.]?(?:rocket|raccon|nero|ai)\s+/i, '')
+      .replace(/^@(?:rocket|raccon|nero|bot)\s+/i, '')
       .trim();
 
     // 🌹 Record Sandy interaction for Rebecca Wife & Care System
@@ -1612,32 +1620,29 @@ class WhatsAppService {
     // Built-in commands (Strictly WhatsApp AI persona — zero Telegram references)
     if (promptText === '/start' || promptText === '/help') {
       const helpText = isSandy
-        ? `⚡ *NERO LABS — WHATSAPP MASTER CONSOLE*\n\n` +
-          `Hello Sandy! Connected to your private MasterBot console with dual-engine intelligence:\n\n` +
-          `*Engines & Architecture:*\n` +
-          `• 👑 *Master Console Engine:* \`gpt-6-luna\` (Extra High Reasoning manager & senior coder)\n` +
-          `• ⚡ *Fast Talk Engine (Contacts):* \`gpt-6-luna\` (Low Reasoning, blazing fast)\n\n` +
-          `*Capabilities:*\n` +
-          `• 💬 Research & Conversation: In-depth research, reasoning, problem solving, and discussions\n` +
-          `• 📸 Vision Vault: Send any image, diagram, or screenshot — inspected, explained, and stored\n` +
-          `• 📹 Video Vault: Send any video — securely saved to Sandy's archive vault\n` +
-          `• 👑 MasterBot Console: When Sandy texts himself, manage live routine, code fixes, gaming status, and priority inbox\n` +
-          `• 📏 Dynamic Sizing: "Hy to Hy" brevity, 10–500 words for inquiries, or exact words requested\n` +
-          `• \`/status\` — Live telemetry & active model\n` +
-          `• \`/ping\` — Real-time response ping\n` +
-          `• \`/clear\` — Wipe conversation context memory\n` +
-          `• \`/muted\` — View all muted conversations\n` +
-          `• \`/unmute <chat>\` — Unmute a silenced chat\n\n` +
-          `_Nero Labs Executive AI Assistant_`
-        : `⚡ *NERO LABS — EXECUTIVE AI ASSISTANT*\n\n` +
-          `Hello ${senderName}! I am Nero, Sandy's official personal executive AI assistant.\n\n` +
-          `*Capabilities:*\n` +
-          `• 💬 Intelligent Discussions, Information & Inquiries\n` +
-          `• 📸 Image, Screenshot & Document Review\n` +
+        ? `⚡ *ROCKET AI — WHATSAPP MASTER CONSOLE*\n\n` +
+          `Yo Boss! Rocket is online, fully armed, and ready. What are we building or blowing up today? 🦝⚡\n\n` +
+          `*Engine & Setup:*\n` +
+          `• 👑 *Model:* \`gpt-6-luna\` (ScaleMax Blazing Fast Gateway)\n` +
+          `• 🎯 *Token Budget:* ~500 tokens (Rich, punchy, under 1k max)\n` +
+          `• 🛠️ *Tools Active:* Live Web Search, Long-term Memory Vault, Contact Profiles, Sandy Status Tracker\n` +
+          `• 💬 *Style:* "Sidhi baat no bakwas", charming mischief, gaming lover, 100% loyal to you\n\n` +
+          `*Dynamic In-Chat Controls (Bas bol do):*\n` +
+          `• \`switch to english\` / \`hinglish me bol\` — Instant language switch\n` +
+          `• \`fast mode\` / \`deep reasoning\` — Instant speed & reasoning toggle\n` +
+          `• \`in 50 words\` / \`in 300 words\` — Word limit constraint\n` +
+          `• \`search <query>\` — Real-time web research\n` +
+          `• \`/status\` — Live availability & urgent inbox\n\n` +
+          `_Rocket | Sandy's PA & Partner in Crime_ 🦝🚀`
+        : `⚡ *ROCKET — EXECUTIVE AI PA*\n\n` +
+          `Hello ${senderName}! I am Rocket, Sandy's official AI Personal Assistant (PA) 🦝⚡\n\n` +
+          `*How I can assist:*\n` +
+          `• 💬 Information, Tech & Inquiries\n` +
           `• 📝 \`note <message>\` — Deliver a priority note to Sandy\n` +
-          `• 🔔 \`notify\` — Get alerted when Sandy is back online\n` +
-          `• 🤫 \`/mute\` & \`/unmute\` — Silence or resume assistant in this chat\n\n` +
-          `_Nero Labs Executive Assistant_`;
+          `• 🚨 \`urgent: <message>\` — Route to Sandy's VIP inbox\n` +
+          `• 🔔 \`notify\` — Alert you when Sandy is online\n` +
+          `• 🤫 \`/mute\` & \`/unmute\` — Silence or resume me in this chat\n\n` +
+          `_Rocket | PA to Sandy_`;
 
       await this.safeSendMessage(remoteJid, { text: helpText }, { quoted: msg });
       await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
@@ -3152,41 +3157,42 @@ class WhatsAppService {
     }
 
     // AI Generation Pipeline:
-    // Dual Architecture:
-    // • MasterBot (Sandy): 'gpt-6-luna' (High Reasoning / Manager & Senior Coder)
-    // • Public Chat (Contacts): 'gpt-6-luna' (Low Reasoning / Fastest Speed / Lowest Latency)
+    // Unified Architecture: ROCKET AI
+    // • Single unified persona: ROCKET (Sandy is the boss, PA & research agent)
+    // • Engine: 'gpt-6-luna' (Fastest ScaleMax gateway, full tool calling active)
     try {
-      // 1. Resolve Persona & Classification (Jev-1.13 + Deterministic Fallback)
-      let selectedPersona = 'NERO';
-      let isComplexTask = false;
+      // 1. Unified Persona: ROCKET
+      const selectedPersona = 'ROCKET';
+      const isComplexTask = /(?:complex|architecture|debug|refactor|design pattern|audit|investigate|deep research|why does|write a (?:full|complete|detailed)|multi-step|security vulnerability|memory leak|heap dump)/i.test(promptText);
 
-      if (isSandy) {
-        const lower = promptText.toLowerCase();
-        isComplexTask = /(?:complex|architecture|debug|refactor|design pattern|audit|investigate|deep research|why does|write a (?:full|complete|detailed)|multi-step|security vulnerability|memory leak|heap dump)/i.test(lower);
-        if (/\b(?:myra\s*(?:and|&)\s*nero|nero\s*(?:and|&)\s*myra)\b/i.test(lower)) {
-          selectedPersona = 'BOTH';
-        } else if (/^(?:nero\b|hey\s+nero\b|hi\s+nero\b|nero[,:])/i.test(lower)) {
-          selectedPersona = 'NERO';
-        } else {
-          // Default primary persona for Sandy is his beloved AI wife MYRA
-          selectedPersona = 'MYRA';
+      // Dynamic in-chat language switching
+      if (/\b(?:switch to english|english me bol|english me bolo|speak in english|in english|reply in english|talk in english)\b/i.test(promptText)) {
+        if (isSandy) {
+          setConfig('rocket_language', 'en');
+        } else if (senderNumber) {
+          sandyStatusService.setContactLanguagePreference(senderNumber, 'en');
         }
-        if (selectedPersona !== 'BOTH') {
-          setConfig('owner_active_persona', selectedPersona);
+      } else if (/\b(?:switch to hinglish|hinglish me bol|hinglish me bolo|hinglish mein baat kar|reply in hinglish)\b/i.test(promptText)) {
+        if (isSandy) {
+          setConfig('rocket_language', 'hinglish');
+        } else if (senderNumber) {
+          sandyStatusService.setContactLanguagePreference(senderNumber, 'hinglish');
         }
-      } else {
-        selectedPersona = 'NERO';
       }
 
-      // 2. Separate Logical Conversation Context
-      // - Owner MYRA: 'wa_sandy_myra'
-      // - Owner NERO: 'wa_sandy_nero'
-      // - Contacts: 'wa_' + remoteJid
-      let chatId = `wa_${remoteJid}`;
+      // Dynamic reasoning switching for Sandy
       if (isSandy) {
-        chatId = selectedPersona === 'NERO' ? 'wa_sandy_nero' : 'wa_sandy_myra';
+        if (/\b(?:deep reasoning|high reasoning|think deep|deep mode|maximum reasoning)\b/i.test(promptText)) {
+          setConfig('sandy_speed_mode', 'deep');
+          setConfig('reasoning_effort', 'high');
+        } else if (/\b(?:fast mode|fastest|speed up|speed increase|no reasoning|turbo mode|super fast)\b/i.test(promptText)) {
+          setConfig('sandy_speed_mode', 'fast');
+          setConfig('reasoning_effort', 'none');
+        }
       }
 
+      // 2. Logical Conversation Context (Unified wa_sandy_rocket for Sandy, wa_remoteJid for contacts)
+      const chatId = isSandy ? 'wa_sandy_rocket' : `wa_${remoteJid}`;
       recordUserMessage(chatId, promptText);
 
       // 🏡 Natural Language Virtual Life Simulation & Autonomous Commands (Sandy speaking to Myra)
@@ -3310,14 +3316,15 @@ class WhatsAppService {
         isSandy,
         persona: selectedPersona,
         additionalContext: triLayerContext,
+        isGroup,
       });
 
       const activeModel = 'gpt-6-luna';
 
       // ⚡ ULTRA-FAST LATENCY & SPEED ENGINE (Target: 100-1000ms):
-      // • Sandy rule: 500 tokens baseline, max 800-1000 tokens ceiling
+      // • Target: ~500 tokens baseline, max 800-1000 tokens ceiling
       // • Mode 'fast': Uses reasoningEffort = 'none' (zero hidden thinking tokens) for sub-second responses.
-      // • Mode 'deep' (/speed max): Uses reasoningEffort = 'max'.
+      // • Mode 'deep' (/speed max): Uses reasoningEffort = 'high' or 'max'.
       const configuredSpeedMode = getConfig('sandy_speed_mode', 'fast');
       const globalReasoning = getConfig('reasoning_effort', 'none');
       const isSpeedRequested = /\b(?:speed\s+increse|speed\s+increase|faster|fast|quick|turbo|speed\s+up|make\s+it\s+fast|lower\s+latency|reduce\s+ping|no\s+reasoning|higher\s+reply\s+speed)\b/i.test(promptText);
@@ -3329,45 +3336,46 @@ class WhatsAppService {
       let reasoningEffort = 'none';
       if (isSandy) {
         if ((configuredSpeedMode === 'deep' || configuredSpeedMode === 'max') && !isSpeedRequested && globalReasoning !== 'none') {
-          reasoningEffort = 'max';
-        } else if (selectedPersona === 'NERO' && isComplexTask && !isSpeedRequested) {
-          reasoningEffort = 'high';
+          reasoningEffort = globalReasoning === 'none' ? 'high' : globalReasoning;
+        } else if (isComplexTask && !isSpeedRequested) {
+          reasoningEffort = 'low';
         } else {
           // Ultra-Fast Mode: 'none' emits 0 hidden reasoning tokens, responding in < 1,000ms
           reasoningEffort = 'none';
         }
       } else {
-        reasoningEffort = 'low';
+        reasoningEffort = 'none';
       }
 
-      // 🎯 STRICT TOKEN BUDGET: 500 baseline, max 800-1000 tokens
-      const baselineBudget = parseInt(getConfig('myra_token_budget_baseline', '500'), 10) || 500;
-      const maxBudgetCap = parseInt(getConfig('myra_max_tokens_per_request', '800'), 10) || 800;
-
-      let maxTokens = baselineBudget;
+      // 🎯 STRICT TOKEN BUDGET: 500 target baseline, max 800-1000 tokens ceiling
+      let maxTokens = 500;
       if (explicitLimit) {
-        maxTokens = Math.min(Math.max(baselineBudget, explicitLimit), 1000);
+        maxTokens = Math.min(Math.max(500, explicitLimit), 1000);
       } else if (isSandy) {
-        if (reasoningEffort === 'max') {
-          maxTokens = 1000;
+        if (reasoningEffort === 'max' || reasoningEffort === 'high') {
+          maxTokens = 850;
         } else if (isComplexTask || /(?:deep research|audit architecture|complex algorithm|detailed breakdown|generate pdf)/i.test(promptText)) {
-          maxTokens = Math.min(800, maxBudgetCap);
+          maxTokens = 800;
         } else {
-          maxTokens = baselineBudget; // 500 tokens standard
+          maxTokens = 500; // 500 tokens target standard
         }
       } else {
-        maxTokens = Math.min(baselineBudget, 500);
+        maxTokens = 500;
       }
 
       // Instant typing indicator so user sees immediate WhatsApp feedback in <50ms
       await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
-      const completion = await scaleMaxAdapter.createChatCompletion({
+      // 🦝 ROCKET TOOL CALLING COMPLETION ENGINE
+      const completion = await scaleMaxAdapter.executeChatWithTools({
         model: activeModel,
         messages,
         chatId,
         reasoningEffort,
         maxTokens,
+        tools: ROCKET_TOOL_DEFINITIONS,
+        toolExecutor: executeRocketTool,
+        context: { chatId, senderNumber, isSandy, isGroup, remoteJid },
       });
 
       let replyText = completion.text || 'I processed your request but have no response to return.';

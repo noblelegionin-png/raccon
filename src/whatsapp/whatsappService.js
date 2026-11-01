@@ -143,6 +143,7 @@ class WhatsAppService {
     this.activePolls = new Map();
     this.recentReactions = new Map();
     this.messageHistoryCache = new Map();
+    this.pendingDownloadSessions = new Map();
   }
 
   async sendMasterBotMenu(remoteJid, quotedMsg = null) {
@@ -2592,17 +2593,112 @@ class WhatsAppService {
         return;
       }
 
-      // 📥 11. UNIVERSAL MEDIA DOWNLOADER WIZARD TRIGGER
-      if (mediaDownloaderService.isMediaUrl(promptText)) {
+      // 📥 11. UNIVERSAL MEDIA DOWNLOADER ("ASK LINK AND DONE")
+      const hasMediaUrl = mediaDownloaderService.isMediaUrl(promptText);
+      const isDownloadReq = mediaDownloaderService.isDownloadIntent(promptText);
+      const pendingSession = this.pendingDownloadSessions?.get(chatId);
+
+      // Case 1: User asks to download but didn't provide a URL: "Nero download reel", "Rocket mp3 download karo", "video download kar do"
+      if (!hasMediaUrl && isDownloadReq) {
+        const detectedFormat = mediaDownloaderService.detectFormat(promptText);
+        if (!this.pendingDownloadSessions) this.pendingDownloadSessions = new Map();
+        this.pendingDownloadSessions.set(chatId, {
+          format: detectedFormat,
+          timestamp: Date.now(),
+        });
+
+        const askMsg = isSandy
+          ? `Boss, kis reel, video ya music ka link download karna hai? Link bhejo, main highest quality ${detectedFormat.toUpperCase()} nikaal ke deta hu! 🚀📥`
+          : `Please send the link of the reel, video, or music you want to download (${detectedFormat.toUpperCase()})! 📥`;
+
+        recordUserMessage(chatId, promptText);
+        recordAssistantMessage(chatId, askMsg, 25, 'gpt-6-luna');
+        await this.safeSendMessage(remoteJid, { text: askMsg }, { quoted: msg });
+        await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        return;
+      }
+
+      // Case 2: URL is present AND (user has download intent OR has a pending download session for this chat)
+      if (hasMediaUrl && (isDownloadReq || pendingSession)) {
+        const requestedFormat = isDownloadReq
+          ? mediaDownloaderService.detectFormat(promptText)
+          : (pendingSession?.format || 'mp4');
+
+        if (this.pendingDownloadSessions) {
+          this.pendingDownloadSessions.delete(chatId);
+        }
+
         try {
-          const wizard = await mediaDownloaderService.startDownloadWizard(promptText);
-          recordUserMessage('wa_sandy_master', promptText);
-          recordAssistantMessage('wa_sandy_master', wizard.promptMessage, 40, 'gpt-6-luna');
-          await this.safeSendMessage(remoteJid, { text: wizard.promptMessage }, { quoted: msg });
+          await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+          const extracted = mediaDownloaderService.extractMediaUrl(promptText);
+          const targetUrl = extracted ? extracted.url : promptText.trim();
+
+          const dlResult = await mediaDownloaderService.downloadMedia({
+            url: targetUrl,
+            format: requestedFormat,
+            quality: 'highest',
+          });
+
+          if (dlResult.ok && dlResult.whatsappDirect && dlResult.buffer) {
+            if (dlResult.format === 'mp3') {
+              // Direct Audio MP3 message in WhatsApp
+              await this.safeSendMessage(remoteJid, {
+                audio: dlResult.buffer,
+                mimetype: dlResult.mimetype || 'audio/mp4',
+                fileName: dlResult.fileName,
+                ptt: false,
+              }, { quoted: msg });
+
+              const ackText = isSandy
+                ? `Boss, ye lo! 🎵 *${dlResult.title}* highest quality MP3 download complete! Enjoy karo! 🚀🔥`
+                : `Here is your high quality MP3 audio! 🎵`;
+              await this.safeSendMessage(remoteJid, { text: ackText });
+            } else {
+              // Direct Video MP4 message in WhatsApp
+              const caption = isSandy
+                ? `🎬 *${dlResult.title}*\n⭐ Quality: Highest Available MP4\n📦 Size: ${dlResult.fileSizeMb} MB\n\nBoss, sidhi baat no bakwas, video ready! 🚀🔥`
+                : `🎬 *${dlResult.title}* (${dlResult.fileSizeMb} MB)`;
+
+              await this.safeSendMessage(remoteJid, {
+                video: dlResult.buffer,
+                caption,
+                mimetype: dlResult.mimetype || 'video/mp4',
+              }, { quoted: msg });
+            }
+
+            recordUserMessage(chatId, promptText);
+            recordAssistantMessage(chatId, `[Delivered ${dlResult.format.toUpperCase()}: ${dlResult.title} (${dlResult.fileSizeMb} MB)]`, 30, 'gpt-6-luna');
+            await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+            return;
+          } else if (dlResult.ok && dlResult.deliveryMode === 'web_download_link') {
+            const bigMsg = isSandy
+              ? `Boss, media high-definition me hai (*${dlResult.fileSizeMb} MB* > 16MB WhatsApp limit)! Direct high-speed download link nikaal diya hai:\n\n📥 *Direct Download Link:* ${dlResult.directLink}\n\n(Link 24 hours ke liye valid hai) 🚀🎬`
+              : `Download ready (${dlResult.fileSizeMb} MB):\n📥 ${dlResult.directLink}`;
+
+            await this.safeSendMessage(remoteJid, { text: bigMsg }, { quoted: msg });
+            recordUserMessage(chatId, promptText);
+            recordAssistantMessage(chatId, bigMsg, 35, 'gpt-6-luna');
+            await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+            return;
+          } else {
+            const errMsg = isSandy
+              ? `Boss, download karne me issue aaya: ${dlResult.error || 'Server error'}. Ek baar link check kar lo! 🚀`
+              : `Could not download: ${dlResult.error || 'Error'}`;
+
+            await this.safeSendMessage(remoteJid, { text: errMsg }, { quoted: msg });
+            recordUserMessage(chatId, promptText);
+            recordAssistantMessage(chatId, errMsg, 20, 'gpt-6-luna');
+            await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+            return;
+          }
+        } catch (dlErr) {
+          console.error('[WhatsApp Downloader Error]:', dlErr.message);
+          const failMsg = isSandy
+            ? `Boss, download process me error aa gaya: ${dlErr.message}. Link valid hai na? 🚀`
+            : `Failed to download media: ${dlErr.message}`;
+          await this.safeSendMessage(remoteJid, { text: failMsg }, { quoted: msg });
           await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
           return;
-        } catch (err) {
-          console.error('[WhatsApp Downloader Wizard Error]:', err.message);
         }
       }
 
@@ -3425,6 +3521,7 @@ class WhatsAppService {
         isGroup,
         remoteJid,
         pendingImages: [],
+        pendingMedia: [],
       };
 
       // 🦝 ROCKET TOOL CALLING COMPLETION ENGINE
@@ -3532,6 +3629,30 @@ class WhatsAppService {
 
       if (!deliveredAsImage) {
         await this.safeSendMessage(remoteJid, { text: replyText }, { quoted: msg });
+      }
+
+      // Send any buffered media files (MP3 audio / MP4 video) from tool calls
+      if (toolContext.pendingMedia && toolContext.pendingMedia.length > 0) {
+        for (const mediaItem of toolContext.pendingMedia) {
+          try {
+            if (mediaItem.format === 'mp3') {
+              await this.safeSendMessage(remoteJid, {
+                audio: mediaItem.buffer,
+                mimetype: mediaItem.mimetype || 'audio/mp4',
+                fileName: mediaItem.fileName || 'audio.mp3',
+                ptt: false,
+              }, { quoted: msg });
+            } else {
+              await this.safeSendMessage(remoteJid, {
+                video: mediaItem.buffer,
+                caption: mediaItem.caption,
+                mimetype: mediaItem.mimetype || 'video/mp4',
+              }, { quoted: msg });
+            }
+          } catch (mediaSendErr) {
+            console.warn('[WhatsApp Tool Media Delivery Warning]:', mediaSendErr.message);
+          }
+        }
       }
 
       // Real Interactive Contact Classification & Action Buttons:

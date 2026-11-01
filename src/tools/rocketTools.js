@@ -25,6 +25,7 @@ import { WebSearchService } from '../search/webSearchService.js';
 import { deepBrowserService } from '../browser/deepBrowserService.js';
 import { imageSearchService } from '../media/imageSearchService.js';
 import { socialInspectorService } from '../media/socialInspectorService.js';
+import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
 import { taskService } from '../tasks/taskService.js';
 import { persistentSchedulerService } from '../scheduler/persistentSchedulerService.js';
 import { websiteSafetyService } from '../security/websiteSafetyService.js';
@@ -120,6 +121,33 @@ export const ROCKET_TOOL_DEFINITIONS = [
           instruction: {
             type: 'string',
             description: 'Optional question or focus for the inspection (e.g. "what is this recipe?", "summarize what happens").',
+          },
+        },
+        required: ['url'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'download_media',
+      description: 'Download reels, videos, shorts, music, and audio in the highest available quality from YouTube, Instagram Reels, Facebook Reels, TikTok, or direct URLs as MP3 or MP4.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'The URL of the video, reel, short, or music track to download.',
+          },
+          format: {
+            type: 'string',
+            enum: ['mp3', 'mp4'],
+            description: "Target format: 'mp3' for highest quality audio music, or 'mp4' for highest quality video.",
+          },
+          quality: {
+            type: 'string',
+            enum: ['highest', '720p', '1080p', 'data_saver'],
+            description: "Requested video/audio stream quality (defaults to 'highest').",
           },
         },
         required: ['url'],
@@ -565,6 +593,39 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
         }
 
         return result;
+      }
+
+      case 'download_media': {
+        const url = (args.url || '').trim();
+        if (!url) return { ok: false, error: 'URL is required' };
+        const format = (args.format || 'mp4').toLowerCase() === 'mp3' ? 'mp3' : 'mp4';
+        const quality = args.quality || 'highest';
+
+        const result = await mediaDownloaderService.downloadMedia({ url, format, quality });
+
+        // Buffer media for direct WhatsApp delivery if context allows
+        if (result.ok && result.whatsappDirect && result.buffer && context && Array.isArray(context.pendingMedia)) {
+          context.pendingMedia.push({
+            buffer: result.buffer,
+            mimetype: result.mimetype || (format === 'mp3' ? 'audio/mp4' : 'video/mp4'),
+            format,
+            fileName: result.fileName,
+            title: result.title,
+            caption: `🎬 *${result.title}*\n⭐ Quality: Highest Available (${format.toUpperCase()})\n📦 Size: ${result.fileSizeMb} MB\n\nBoss, sidhi baat no bakwas, media ready! 🚀🔥`,
+          });
+        }
+
+        return {
+          ok: result.ok,
+          success: result.success,
+          title: result.title,
+          format: result.format,
+          fileName: result.fileName,
+          fileSizeMb: result.fileSizeMb,
+          deliveryMode: result.deliveryMode,
+          whatsappDirect: result.whatsappDirect,
+          directLink: result.directLink || null,
+        };
       }
 
       case 'manage_tasks': {

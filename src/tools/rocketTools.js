@@ -24,6 +24,7 @@
 import { WebSearchService } from '../search/webSearchService.js';
 import { deepBrowserService } from '../browser/deepBrowserService.js';
 import { imageSearchService } from '../media/imageSearchService.js';
+import { socialInspectorService } from '../media/socialInspectorService.js';
 import { taskService } from '../tasks/taskService.js';
 import { persistentSchedulerService } from '../scheduler/persistentSchedulerService.js';
 import { websiteSafetyService } from '../security/websiteSafetyService.js';
@@ -101,6 +102,27 @@ export const ROCKET_TOOL_DEFINITIONS = [
           },
         },
         required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'inspect_social_media',
+      description: 'Inspect, summarize, and extract metadata, creator info, title, and preview thumbnail from YouTube (videos/Shorts), Instagram (Reels/posts), Facebook (Reels/videos), or Vero social links.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'The social media video, reel, short, or post URL to inspect.',
+          },
+          instruction: {
+            type: 'string',
+            description: 'Optional question or focus for the inspection (e.g. "what is this recipe?", "summarize what happens").',
+          },
+        },
+        required: ['url'],
       },
     },
   },
@@ -516,6 +538,33 @@ export async function executeRocketTool(toolName, args = {}, context = {}) {
             description: (img.description || '').slice(0, 150),
           })),
         };
+      }
+
+      case 'inspect_social_media': {
+        const url = (args.url || '').trim();
+        if (!url) return { ok: false, error: 'URL is required' };
+        const result = await socialInspectorService.inspect(url);
+
+        // If thumbnail exists, download and buffer for WhatsApp media sending
+        if (result.ok && result.thumbnailUrl && context && Array.isArray(context.pendingImages)) {
+          try {
+            const dl = await socialInspectorService.downloadThumbnailBuffer(result.thumbnailUrl, 7000);
+            if (dl && dl.buffer && dl.buffer.length > 0) {
+              context.pendingImages.push({
+                buffer: dl.buffer,
+                mimetype: dl.mimetype || 'image/jpeg',
+                item: {
+                  title: result.title,
+                  sourceUrl: result.cleanUrl || url,
+                },
+              });
+            }
+          } catch (dlErr) {
+            console.warn('[Rocket inspect_social_media buffer download warning]:', dlErr.message);
+          }
+        }
+
+        return result;
       }
 
       case 'manage_tasks': {

@@ -55,6 +55,7 @@ import { proactiveService } from '../proactive/proactiveService.js';
 import { webResearchService } from '../research/webResearchService.js';
 import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
 import { imageSearchService } from '../media/imageSearchService.js';
+import { socialInspectorService } from '../media/socialInspectorService.js';
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,
@@ -2690,6 +2691,54 @@ class WhatsAppService {
           } catch (imgErr) {
             console.error('[WhatsApp Image Delivery Error]:', imgErr.message);
           }
+        }
+      }
+
+      // 🎬 14. SOCIAL MEDIA REEL & SHORTS INSPECTION (YouTube, Facebook, Instagram, Vero)
+      const isSocialLink = socialInspectorService.isSocialUrl(promptText);
+      const isComplexSocialQuery = /\b(?:aur\s+(?:bata|batao|samjha|explain)|and\s+explain|tell\s+me|kya\s+hai|recipe|analysis|summary|write|guide|breakdown)\b/i.test(promptText);
+
+      if (isSocialLink && !isComplexSocialQuery) {
+        try {
+          await this.sock?.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+          const extracted = socialInspectorService.extractSocialUrl(promptText);
+          if (extracted && extracted.url) {
+            const inspectRes = await socialInspectorService.inspect(extracted.url);
+            if (inspectRes.ok) {
+              const card = socialInspectorService.formatInspectionCard(inspectRes, isSandy);
+              let thumbBuffer = null;
+              let thumbMime = 'image/jpeg';
+
+              if (inspectRes.thumbnailUrl) {
+                try {
+                  const dl = await socialInspectorService.downloadThumbnailBuffer(inspectRes.thumbnailUrl, 7000);
+                  if (dl && dl.buffer) {
+                    thumbBuffer = dl.buffer;
+                    thumbMime = dl.mimetype || 'image/jpeg';
+                  }
+                } catch (dlErr) {
+                  console.warn('[WhatsApp Social Thumbnail Fetch Warning]:', dlErr.message);
+                }
+              }
+
+              if (thumbBuffer && thumbBuffer.length > 0) {
+                await this.safeSendMessage(remoteJid, {
+                  image: thumbBuffer,
+                  caption: card,
+                  mimetype: thumbMime,
+                }, { quoted: msg });
+              } else {
+                await this.safeSendMessage(remoteJid, { text: card }, { quoted: msg });
+              }
+
+              recordUserMessage(chatId, promptText);
+              recordAssistantMessage(chatId, `[Inspected ${inspectRes.platform} ${inspectRes.type}: ${inspectRes.title}]`, 40, 'gpt-6-luna');
+              await this.sock?.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+              return;
+            }
+          }
+        } catch (socErr) {
+          console.error('[WhatsApp Social Inspect Error]:', socErr.message);
         }
       }
 

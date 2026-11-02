@@ -74,7 +74,7 @@ Rule: Be cheeky, brilliant, and accurate. Sprinkle 🦝 🐾 🍕 💡 ⚡.`;
           ],
           maxTokens: 1000,
           temperature: 0.6,
-          timeoutMs: 12000,
+          timeoutMs: 30000,
         });
         explanation = completion?.text || '';
       } catch (err) {
@@ -133,7 +133,7 @@ Output strictly valid JSON with no markdown wrapping:
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 1100,
           temperature: 0.3,
-          timeoutMs: 12000,
+          timeoutMs: 30000,
         });
 
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -318,7 +318,7 @@ STRUCTURE:
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 1400,
           temperature: 0.5,
-          timeoutMs: 15000,
+          timeoutMs: 30000,
         });
         resultText = completion?.text || '';
       } catch (err) {

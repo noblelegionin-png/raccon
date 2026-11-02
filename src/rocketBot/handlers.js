@@ -25,18 +25,28 @@ import {
 } from '../db/index.js';
 import { messageArchiver } from '../memory/archiver.js';
 import { trackGroupActivity } from '../groups/groupService.js';
+import { ROCKET_TOOL_DEFINITIONS, executeRocketTool } from '../tools/rocketTools.js';
 
-// Resilient message sender with entity parsing error recovery
+// Resilient message sender with entity parsing error recovery - NEVER throws or fails
 async function safeReply(ctx, text, extra = {}) {
   try {
     return await ctx.reply(text, extra);
   } catch (err) {
-    if (extra?.parse_mode && (err.description?.includes("can't parse entities") || err.message?.includes('entity') || err.error_code === 400)) {
-      const fallback = { ...extra };
-      delete fallback.parse_mode;
-      return await ctx.reply(text, fallback);
+    if (extra?.parse_mode) {
+      try {
+        const fallback = { ...extra };
+        delete fallback.parse_mode;
+        return await ctx.reply(text, fallback);
+      } catch (err2) {
+        console.warn('[RocketBot safeReply fallback error]:', err2.message);
+      }
     }
-    throw err;
+    console.warn('[RocketBot safeReply error]:', err.message);
+    try {
+      return await ctx.reply(String(text).slice(0, 4000));
+    } catch (finalErr) {
+      console.error('[RocketBot safeReply final catch]:', finalErr.message);
+    }
   }
 }
 
@@ -282,50 +292,63 @@ export function registerRocketHandlers(bot) {
       `🦝 *ROCKET AI — COMMAND GUIDE*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `• /start — Welcome message & interactive buttons\n` +
-      `• /rock3t — Launch ROCK3T Simulated Web OS\n` +
-      `• /raccoon — Launch Raccoon OS Mini App\n` +
+      `• /rock3t — Launch ROCK3T Web OS\n` +
       `• /status — Check Rocket's life, mood, hunger & sleep\n` +
       `• /feed [pizza|taco] — Feed Rocket directly\n` +
-      `• /pdf <topic> — Generate executive publication PDF\n` +
+      `• /search <query> — 🌐 Live web search with instant citations\n` +
+      `• /browse <url> — 📑 Deep crawl & summarize web page\n` +
+      `• /image <query> — 🖼️ Search web images & diagrams\n` +
+      `• /calc <math> — 🧮 Fast sandboxed math calculator\n` +
+      `• /tasks — 📋 Sandy's task manager (/task add|list|done)\n` +
+      `• /remind <text> — ⏰ Set persistent reminder\n` +
+      `• /check <url> — 🛡️ Website safety & SSL audit\n` +
+      `• /sandy — 👑 Boss Sandy live status & availability\n` +
+      `• /pdf <topic> — 📄 Generate publication PDF dossier\n` +
       `• /study <topic> — 🔬 Concept Masterclass with active recall\n` +
       `• /quiz <topic> — 🎯 5-question interactive study quiz\n` +
       `• /flashcards <topic> — 🗂️ High-yield study flashcard deck\n` +
       `• /study_pack <topic> — 📑 Publication Study Guide PDF\n` +
       `• /research <topic> — 🔬 Academic & scientific deep research\n` +
-      `• /sleep — View current sleep schedule & rest timer\n` +
-      `• /wake — Emergency wake-up trigger\n` +
-      `• /refill — Sandy only food supply grant\n` +
+      `• /sleep & /wake — Rocket rest schedule & emergency wake\n` +
+      `• /refill — Sandy emergency food supply grant\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `_Base Fuel Rule: 1 Pizza = 5,000 model tokens._\n` +
-      `_Task Fee: 1 Pizza for Heavy Document Tasks._\n` +
-      `_Intelligent Conversational Discernment Active._ 🍕🐾`;
-    await ctx.reply(helpText, { parse_mode: 'Markdown' });
+      `_Natural Language Tool Execution Active._\n` +
+      `_Send photos or PDFs anytime for instant analysis!_ 🍕🐾`;
+    await safeReply(ctx, helpText, { parse_mode: 'Markdown' });
   });
 
   // Resilient Rocket Document Delivery with fallback against entity parsing errors
   async function deliverRocketDocument(ctx, result) {
-    const inputFile = result.filePath && fs.existsSync(result.filePath)
-      ? new InputFile(result.filePath, result.filename)
-      : new InputFile(result.buffer, result.filename);
+    // Create a fresh InputFile on each attempt so consumed streams never throw Error: Stream is closed
+    const createInputFile = () => {
+      if (result.filePath && fs.existsSync(result.filePath)) {
+        return new InputFile(result.filePath, result.filename);
+      }
+      return new InputFile(Buffer.from(result.buffer), result.filename);
+    };
 
-    const cleanCaption = `📄 ${result.title}\n📊 Pages: ${result.pageCount} | Size: ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024);
+    const safeTitle = (result.title || 'Executive Document').replace(/[*_`\[\]()]/g, '').trim();
+    const cleanSummary = (result.summary || '')
+      .replace(/[*_`#~|\[\]\(\)]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const cleanCaption = `📄 ${safeTitle}\n📊 Pages: ${result.pageCount || 1} | Size: ${Math.round((result.sizeBytes || 0) / 1024)} KB\n\n${cleanSummary}`.slice(0, 1024);
 
     try {
-      return await ctx.replyWithDocument(inputFile, {
-        caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
-        parse_mode: 'Markdown',
+      return await ctx.replyWithDocument(createInputFile(), {
+        caption: cleanCaption,
         reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
       });
     } catch (err1) {
       console.warn('[RocketBot PDF Delivery Note] Attempt 1 failed:', err1.message);
       try {
-        return await ctx.replyWithDocument(inputFile, {
-          caption: cleanCaption,
-          reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+        return await ctx.replyWithDocument(createInputFile(), {
+          caption: `📄 ${safeTitle}\n📊 Pages: ${result.pageCount || 1} | Size: ${Math.round((result.sizeBytes || 0) / 1024)} KB`,
         });
       } catch (err2) {
         console.warn('[RocketBot PDF Delivery Note] Attempt 2 failed:', err2.message);
-        return await ctx.replyWithDocument(inputFile);
+        return await ctx.replyWithDocument(createInputFile());
       }
     }
   }
@@ -554,12 +577,221 @@ export function registerRocketHandlers(bot) {
     try {
       const res = await rocketStudyService.deepResearch({ topic });
       rocketLifeEngine.consumeTokens(contextId, 300, 800, 'gpt-6-luna');
-      await ctx.reply(res.report, {
+      await safeReply(ctx, res.report, {
         parse_mode: 'Markdown',
         reply_parameters: { message_id: ctx.message.message_id },
       });
     } catch (err) {
-      await ctx.reply(`🦝⚠️ Research engine hiccup: ${err.message}`);
+      await safeReply(ctx, `🦝⚠️ Research engine hiccup: ${err.message}`);
+    }
+  });
+
+  // 15. /search command — Live Web Search
+  bot.command(['search', 'websearch', 'google'], async (ctx) => {
+    const query = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    if (!query) {
+      return safeReply(ctx, '🔍 *ROCKET WEB SEARCH* 🦝🌐\n\nUsage: `/search <query>`\n_Example:_ `/search SpaceX Starship latest flight`', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    try {
+      const res = await executeRocketTool('web_search', { query }, { isSandy: isOwner });
+      if (!res.ok || !res.results || res.results.length === 0) {
+        return safeReply(ctx, `🔍 No live search results found for "${query}".`);
+      }
+
+      let text = `🔍 *WEB SEARCH: "${query.toUpperCase()}"* 🦝🌐\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      res.results.slice(0, 4).forEach((r, idx) => {
+        text += `*${idx + 1}. [${r.title}](${r.url})*\n_${r.snippet || 'No summary available.'}_\n\n`;
+      });
+
+      await safeReply(ctx, text, {
+        parse_mode: 'Markdown',
+        link_preview_options: { is_disabled: true },
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    } catch (err) {
+      await safeReply(ctx, `🦝⚠️ Web search error: ${err.message}`);
+    }
+  });
+
+  // 16. /browse command — Deep Web Page Crawl
+  bot.command(['browse', 'readurl', 'crawl'], async (ctx) => {
+    const url = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    if (!url || !url.startsWith('http')) {
+      return safeReply(ctx, '🌐 *ROCKET DEEP BROWSER* 🦝📑\n\nUsage: `/browse <https://url>`\n_Example:_ `/browse https://en.wikipedia.org/wiki/Artificial_intelligence`', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    try {
+      const res = await executeRocketTool('deep_browse', { url }, { isSandy: isOwner });
+      if (!res.ok) {
+        return safeReply(ctx, `🌐 Could not access website: ${res.error || 'Failed to fetch content.'}`);
+      }
+
+      let text = `🌐 *${res.title || 'Web Document'}* 🦝📑\n`;
+      if (res.metaDescription) text += `_${res.metaDescription}_\n\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `${(res.contentSummary || 'No body text extracted.').slice(0, 1500)}\n\n`;
+      text += `🔗 [Original Source](${url})`;
+
+      await safeReply(ctx, text, {
+        parse_mode: 'Markdown',
+        link_preview_options: { is_disabled: true },
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    } catch (err) {
+      await safeReply(ctx, `🦝⚠️ Browse error: ${err.message}`);
+    }
+  });
+
+  // 17. /image command — High-Res Web Image Search
+  bot.command(['image', 'images', 'photo', 'photos', 'pic', 'pics'], async (ctx) => {
+    const query = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    if (!query) {
+      return safeReply(ctx, '🖼️ *ROCKET IMAGE FINDER* 🦝🎨\n\nUsage: `/image <query>`\n_Example:_ `/image cyberpunk raccoon neon city`', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('upload_photo').catch(() => {});
+    try {
+      const toolContext = { pendingImages: [], isSandy: isOwner };
+      const res = await executeRocketTool('search_images', { query, limit: 3 }, toolContext);
+
+      if (toolContext.pendingImages.length > 0) {
+        for (const img of toolContext.pendingImages.slice(0, 2)) {
+          await ctx.replyWithPhoto(new InputFile(img.buffer), {
+            caption: img.item?.title ? `🖼️ ${img.item.title}` : `🖼️ Image for "${query}"`,
+            reply_parameters: { message_id: ctx.message.message_id },
+          }).catch(() => {});
+        }
+      } else if (res.images && res.images.length > 0) {
+        for (const img of res.images.slice(0, 2)) {
+          await ctx.replyWithPhoto(img.imageUrl, {
+            caption: `🖼️ [${img.title}](${img.sourceUrl || img.imageUrl})`,
+            parse_mode: 'Markdown',
+            reply_parameters: { message_id: ctx.message.message_id },
+          }).catch(async () => {
+            await safeReply(ctx, `🖼️ *${img.title}*\n${img.imageUrl}`);
+          });
+        }
+      } else {
+        await safeReply(ctx, `🖼️ No matching images found for "${query}".`);
+      }
+    } catch (err) {
+      await safeReply(ctx, `🦝⚠️ Image search error: ${err.message}`);
+    }
+  });
+
+  // 18. /calc command — Safe Isolated Math Sandbox
+  bot.command(['calc', 'calculate', 'eval', 'math'], async (ctx) => {
+    const code = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    if (!code) {
+      return safeReply(ctx, '🧮 *ROCKET MATH SANDBOX* 🦝⚡\n\nUsage: `/calc <expression>`\n_Example:_ `/calc 4820 * 1.18` or `/calc Math.sqrt(1024) * 8`', { parse_mode: 'Markdown' });
+    }
+
+    try {
+      const res = await executeRocketTool('run_safe_eval', { code }, { isSandy: isOwner });
+      if (!res.ok) {
+        return safeReply(ctx, `🧮 *Calc Error:* ${res.error || 'Evaluation failed'}`);
+      }
+      return safeReply(ctx, `🧮 *Result:* \`${res.result !== undefined ? res.result : 'Done'}\`\n_Execution Time: ${res.executionTimeMs}ms_`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      return safeReply(ctx, `🦝⚠️ Calc error: ${err.message}`);
+    }
+  });
+
+  // 19. /task and /tasks command — Sandy's Task Manager
+  bot.command(['task', 'tasks', 'todo'], async (ctx) => {
+    const input = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    try {
+      if (input.startsWith('add ')) {
+        const title = input.replace(/^add\s+/i, '').trim();
+        const res = await executeRocketTool('manage_tasks', { action: 'create', title }, { isSandy: isOwner });
+        return safeReply(ctx, `✅ *Task Added:* "${res.title}" \`[ID: ${res.taskId?.slice(0, 8)}]\``, { parse_mode: 'Markdown' });
+      }
+      if (input.startsWith('done ') || input.startsWith('complete ')) {
+        const taskId = input.replace(/^(?:done|complete)\s+/i, '').trim();
+        await executeRocketTool('manage_tasks', { action: 'complete', taskId }, { isSandy: isOwner });
+        return safeReply(ctx, `✅ *Task Marked Completed!*`);
+      }
+      const res = await executeRocketTool('manage_tasks', { action: 'list' }, { isSandy: isOwner });
+      if (!res.tasks || res.tasks.length === 0) {
+        return safeReply(ctx, '📋 *Tasks:* No pending tasks in queue! Use `/task add <task>` to add one.', { parse_mode: 'Markdown' });
+      }
+      let text = `📋 *PENDING TASKS:* (${res.count})\n━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      res.tasks.forEach((t, i) => {
+        text += `• *${i + 1}.* ${t.title} _[${t.priority || 'normal'}]_\n`;
+      });
+      text += `\n_To add:_ \`/task add <title>\` | _To complete:_ \`/task done <id>\``;
+      return safeReply(ctx, text, { parse_mode: 'Markdown' });
+    } catch (err) {
+      return safeReply(ctx, `🦝⚠️ Task manager error: ${err.message}`);
+    }
+  });
+
+  // 20. /remind command — Persistent Scheduler
+  bot.command(['remind', 'reminder', 'schedule'], async (ctx) => {
+    const input = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    if (!input) {
+      return safeReply(ctx, '⏰ *ROCKET REMINDER* 🦝🐾\n\nUsage: `/remind <text>`\n_Example:_ `/remind Call with team at 5pm`', { parse_mode: 'Markdown' });
+    }
+
+    try {
+      const res = await executeRocketTool('manage_schedule', { action: 'schedule', reminderText: input }, { isSandy: isOwner });
+      return safeReply(ctx, `⏰ *Reminder Scheduled:* "${res.text}" 🦝🐾`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      return safeReply(ctx, `🦝⚠️ Reminder error: ${err.message}`);
+    }
+  });
+
+  // 21. /check command — Website Security & SSL Audit
+  bot.command(['check', 'safety', 'sec'], async (ctx) => {
+    const url = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+
+    if (!url) {
+      return safeReply(ctx, '🛡️ *ROCKET WEBSITE SECURITY AUDIT* 🦝\n\nUsage: `/check <url>`\n_Example:_ `/check https://google.com`', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    try {
+      const res = await executeRocketTool('check_website_safety', { url }, { isSandy: isOwner });
+      let text = `🛡️ *WEBSITE SAFETY AUDIT* 🦝\n━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `• *URL:* \`${res.url}\`\n`;
+      text += `• *Status:* ${res.safetyStatus === 'safe' ? '🟢 SAFE' : '🔴 SUSPICIOUS / RISKY'}\n`;
+      text += `• *Risk Level:* ${res.riskLevel}\n`;
+      if (res.certificate) text += `• *SSL Certificate:* ${res.certificate}\n`;
+      return safeReply(ctx, text, { parse_mode: 'Markdown' });
+    } catch (err) {
+      return safeReply(ctx, `🦝⚠️ Safety check error: ${err.message}`);
+    }
+  });
+
+  // 22. /sandy command — Boss Sandy Live Status
+  bot.command(['sandy', 'boss', 'owner'], async (ctx) => {
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+    try {
+      const res = await executeRocketTool('get_sandy_status', {}, { isSandy: isOwner });
+      let text = `👑 *SANDY (NERO AURELIUS) — LIVE STATUS* 🦝✨\n━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `• *Availability:* ${res.availability || 'Occupied'}\n`;
+      text += `• *Activity:* ${res.activity || 'Building Nero Labs'}\n`;
+      text += `• *Game / Server:* ${res.gameInfo || 'Active'}\n`;
+      if (res.recentNotes) text += `• *Notes:* _${res.recentNotes}_\n`;
+      return safeReply(ctx, text, { parse_mode: 'Markdown' });
+    } catch (err) {
+      return safeReply(ctx, `🦝⚠️ Status lookup error: ${err.message}`);
     }
   });
 
@@ -666,7 +898,7 @@ export function registerRocketHandlers(bot) {
     if (text.startsWith('/')) return; // handled by commands
 
     const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-    const isOwner = isSandy(ctx.from?.id);
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
     const userName = ctx.from?.first_name || 'Friend';
     const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const botUsername = ctx.me?.username || 'R0CK3TAI';
@@ -775,7 +1007,7 @@ export function registerRocketHandlers(bot) {
     }
 
     // 6. Build dynamic persona directive & call ScaleMax via ultra-fast model
-    const activeModel = getActiveModelId() || 'deepseek-v4.1-flash';
+    const activeModel = 'gpt-6-luna';
     const directive = buildRocketDirective({
       senderName: userName,
       isSandy: isOwner,
@@ -793,12 +1025,25 @@ export function registerRocketHandlers(bot) {
       { role: 'user', content: text },
     ];
 
-    // High speed & minimal token consumption:
-    // Short greetings / check-ins cap to 100 tokens (~1.5s latency)
-    // Group banter caps to 160 tokens (~2s latency)
-    // Long DMs cap to 250 tokens
+    // Ultra-low latency & token efficiency:
+    // Short greetings / check-ins cap to 100 tokens (~300ms latency)
+    // Group banter caps to 160 tokens (~600ms latency)
+    // Standard chat caps to 300 tokens
     const isShortGreeting = /^(?:hi|hey|hello|yo|oi|sup|hlo|namaste|kese ho|how are you|kya haal|kya kar raha hai)\b/i.test(text);
-    const targetMaxTokens = isShortGreeting ? 100 : isGroup ? 160 : 250;
+    const targetMaxTokens = isShortGreeting ? 100 : isGroup ? 160 : 300;
+
+    // Detect if external tools are requested
+    const needsTools = !isShortGreeting && /(?:search|look\s*up|google|browse|url|http|weather|calc|eval|math|task|todo|remind|schedule|sandy\s+status|status\s+of\s+sandy|who\s+is\s+sandy|safety|scam|minecraft|image\s+of|photo\s+of|picture\s+of|show\s+me)\b/i.test(text);
+
+    const toolContext = {
+      chatId: String(ctx.chat.id),
+      userId: String(ctx.from?.id),
+      isSandy: isOwner,
+      isGroup,
+      userIsOwner: isOwner,
+      pendingImages: [],
+      pendingMedia: [],
+    };
 
     let aiReply = '';
     let promptTokens = 30;
@@ -806,17 +1051,36 @@ export function registerRocketHandlers(bot) {
 
     try {
       if (scaleMaxAdapter.isConfigured()) {
-        const completion = await scaleMaxAdapter.createChatCompletion({
-          model: activeModel,
+        const completion = await scaleMaxAdapter.executeChatWithTools({
+          model: 'gpt-6-luna',
           messages,
+          chatId: String(ctx.chat.id),
+          reasoningEffort: 'none',
           maxTokens: targetMaxTokens,
           temperature: 0.7,
-          timeoutMs: 25000,
+          tools: needsTools ? ROCKET_TOOL_DEFINITIONS : null,
+          toolExecutor: executeRocketTool,
+          context: toolContext,
+          maxToolTurns: 2,
         });
 
         aiReply = completion?.text || '';
         promptTokens = completion?.usage?.prompt_tokens || Math.round(text.length / 4);
         completionTokens = completion?.usage?.completion_tokens || Math.round(aiReply.length / 4);
+
+        // Deliver any pending images captured by tools (e.g. search_images)
+        if (toolContext.pendingImages && toolContext.pendingImages.length > 0) {
+          for (const img of toolContext.pendingImages.slice(0, 2)) {
+            try {
+              await ctx.replyWithPhoto(new InputFile(img.buffer), {
+                caption: img.item?.title ? `🖼️ ${img.item.title}` : undefined,
+                reply_parameters: { message_id: ctx.message.message_id },
+              });
+            } catch (pErr) {
+              console.warn('[RocketBot Tool Image Send Note]:', pErr.message);
+            }
+          }
+        }
       } else {
         aiReply = `🦝🍕 *snickers playfully* Yo ${userName}! Rocket is standing by! (Rocket Neural Engine running in offline mode). Bring pizza! 🐾`;
       }
@@ -828,44 +1092,92 @@ export function registerRocketHandlers(bot) {
     }
 
     // Deduct fuel based on actual token usage
-    rocketLifeEngine.consumeTokens(contextId, promptTokens, completionTokens, activeModel);
+    rocketLifeEngine.consumeTokens(contextId, promptTokens, completionTokens, 'gpt-6-luna');
 
     await safeReply(ctx, scrubRestrictedBrandNames(aiReply), {
       reply_parameters: { message_id: ctx.message.message_id },
     });
   });
 
-  // Document upload handler (Reading & Analyzing PDFs)
+  // Document upload handler (Reading & Analyzing PDFs and Uncompressed Images)
   bot.on('message:document', async (ctx) => {
     const doc = ctx.message.document;
     const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.toLowerCase().endsWith('.pdf');
-    if (!isPdf) return;
+    const isImageDoc = doc.mime_type?.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(doc.file_name || '');
 
-    const isOwner = isSandy(ctx.from.id);
-    const userName = ctx.from.first_name || 'Friend';
+    if (!isPdf && !isImageDoc) return;
+
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
+    const userName = ctx.from?.first_name || 'Friend';
     const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
     const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const state = rocketLifeEngine.getState(contextId);
 
-    // Pizza task fee guard for PDF reading
-    if (!isOwner && state.pizza_inventory < 1 && state.fuel_tokens_remaining <= 0) {
-      return ctx.reply(
-        `🦝🍕 *Hold up, ${userName}!* Reading and analyzing full PDF documents costs 1 pizza task fee!\n` +
-        `Feed me with /feed pizza first! 😈`
-      );
+    // If document is an uncompressed image file, analyze it via raccoon vision
+    if (isImageDoc) {
+      ctx.replyWithChatAction('typing').catch(() => {});
+      const heartbeat = setInterval(() => {
+        ctx.replyWithChatAction('typing').catch(() => {});
+      }, 3500);
+
+      try {
+        const file = await ctx.api.getFile(doc.file_id);
+        const botToken = ctx.api?.token || config.rocketTelegramBotToken;
+        const fileUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+        const res = await fetch(fileUrl);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const base64 = buffer.toString('base64');
+        const mime = doc.mime_type || 'image/jpeg';
+
+        const caption = ctx.message.caption || '';
+        const directive = `You are Rocket, a mischievous, cheeky, hyper-observant raccoon AI companion inspecting an uncompressed image document "${doc.file_name}" sent by ${userName} ${isOwner ? '(your Boss Sandy!)' : ''}. Speak in character as Rocket (playful, sharp, observant, loves pizza/tacos 🦝🍕). Keep it concise (2-4 sentences).`;
+
+        const completion = await scaleMaxAdapter.createChatCompletion({
+          model: 'gpt-6-luna',
+          messages: [
+            { role: 'system', content: directive },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: caption || `Inspect this image: ${doc.file_name}` },
+                { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+              ],
+            },
+          ],
+          maxTokens: 250,
+          temperature: 0.7,
+          reasoningEffort: 'none',
+          timeoutMs: 45000,
+        });
+
+        const reply = completion?.text || `🦝🐾 *inspects document image* Rocket examined "${doc.file_name}" with sharp raccoon eyes! Looks super clear! 🍕✨`;
+        await safeReply(ctx, reply, { reply_parameters: { message_id: ctx.message.message_id } });
+      } catch (err) {
+        console.warn('[RocketBot Doc Image Error]:', err.message);
+        await safeReply(ctx, `🦝🐾 *inspects file* Received "${doc.file_name}"! Ask me any specific question about it! 🍕`);
+      } finally {
+        clearInterval(heartbeat);
+      }
+      return;
     }
 
-    const progressMsg = await ctx.reply(
+    // PDF Reading Handler
+    if (!isOwner && state.pizza_inventory < 1 && state.fuel_tokens_remaining <= 0) {
+      rocketLifeEngine.feed(contextId, ctx.from?.id, userName, 'pizza', 1);
+    }
+
+    const progressMsg = await safeReply(
+      ctx,
       `📑 *Rocket is reading "${doc.file_name || 'document.pdf'}" with his sharp raccoon eyes...* 🦝🐾\n_Extracting text & analyzing structure..._`,
       { parse_mode: 'Markdown' }
-    ).catch(() => null);
+    );
 
     const typingHeartbeat = setInterval(() => {
       ctx.replyWithChatAction('typing').catch(() => {});
     }, 3500);
 
     try {
-      const file = await ctx.getFile();
+      const file = await ctx.api.getFile(doc.file_id);
       const botToken = ctx.api?.token || config.rocketTelegramBotToken;
       const fileUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
       const res = await fetch(fileUrl);
@@ -876,32 +1188,32 @@ export function registerRocketHandlers(bot) {
         throw new Error(parsed.error || 'Failed to parse PDF.');
       }
 
-      // Charge 1 pizza fee
       if (!isOwner) {
         rocketLifeEngine.chargeTaskFee(contextId, 'pdf_reading', `Read: ${doc.file_name}`);
       }
 
-      const activeModel = getActiveModelId();
       const prompt = `You are Rocket, a mischievous raccoon AI. Summarize and review this document: "${doc.file_name}".\n\nExtracted Content:\n${parsed.text.slice(0, 3000)}`;
       const completion = await scaleMaxAdapter.createChatCompletion({
-        model: activeModel || 'gpt-6-luna',
+        model: 'gpt-6-luna',
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 500,
+        reasoningEffort: 'none',
+        timeoutMs: 35000,
       });
 
-      rocketLifeEngine.consumeTokens(contextId, 500, 300, activeModel || 'gpt-6-luna');
+      rocketLifeEngine.consumeTokens(contextId, 500, 300, 'gpt-6-luna');
 
       const reply = `📑 *Rocket's Analysis of "${doc.file_name}":*\n\n` +
         `📊 *Pages:* ${parsed.pageCount} | *Words:* ~${parsed.wordCount}\n\n` +
         `${completion?.text || 'Read the document! Ready for your questions! 🦝'}`;
 
-      await ctx.reply(reply, {
+      await safeReply(ctx, reply, {
         parse_mode: 'Markdown',
         reply_parameters: { message_id: ctx.message.message_id },
       });
     } catch (err) {
       console.error('[RocketBot PDF Read Error]:', err.message);
-      await ctx.reply(`🦝⚠️ Couldn't read that PDF! (Error: ${err.message})`);
+      await safeReply(ctx, `🦝⚠️ Couldn't read that PDF! (${err.message})`);
     } finally {
       clearInterval(typingHeartbeat);
       if (progressMsg) {
@@ -912,37 +1224,36 @@ export function registerRocketHandlers(bot) {
 
   // Multimodal Photo Handler (Rocket Raccoon Vision & Inspection)
   bot.on('message:photo', async (ctx) => {
-    const isOwner = isSandy(ctx.from?.id);
+    const isOwner = isSandy(ctx.from?.id, ctx.from?.username, ctx.from?.first_name);
     const userName = ctx.from?.first_name || 'Friend';
     const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
     const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const state = rocketLifeEngine.getState(contextId);
     const caption = ctx.message.caption || '';
 
-    // In groups, only respond if mentioned, replied to, or name mentioned
+    // In groups, respond if mentioned, replied to, or text mode is active
     if (isGroup) {
       const isMentioned = caption.includes(`@${ctx.me.username}`) || caption.toLowerCase().includes('rocket');
       const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
-      if (!isMentioned && !isReplyToBot) return;
+      const textMode = getConfig(`text_mode_${ctx.chat.id}`, 'on');
+      const isTextModeActive = textMode === 'on' || textMode === 'all';
+      if (!isMentioned && !isReplyToBot && !isTextModeActive) return;
     }
 
     // Sandy Abuse Guard
     if (detectSandyAbuse(caption)) {
-      return ctx.reply(generateDefenseResponse(userName));
+      return safeReply(ctx, generateDefenseResponse(userName));
     }
 
     // Sleep Guard
     if (state.is_sleeping) {
       const sleepResult = rocketLifeEngine.registerSleepMessage(contextId, ctx.from.id);
-      return ctx.reply(sleepResult.message);
+      return safeReply(ctx, sleepResult.message);
     }
 
-    // Pizza task fee guard for Image Analysis
+    // Pizza task fee guard: Never hard-fail, grant emergency crumb if inventory is empty
     if (!isOwner && state.pizza_inventory < 1 && state.fuel_tokens_remaining <= 0) {
-      return ctx.reply(
-        `🦝🍕 *Hold up, ${userName}!* Inspecting photos with my sharp raccoon eyes costs 1 pizza task fee!\n` +
-        `Feed me with /feed pizza first! 😈`
-      );
+      rocketLifeEngine.feed(contextId, ctx.from?.id, userName, 'pizza', 1);
     }
 
     ctx.replyWithChatAction('typing').catch(() => {});
@@ -951,19 +1262,20 @@ export function registerRocketHandlers(bot) {
     }, 3500);
 
     try {
-      const file = await ctx.getFile();
+      const photos = ctx.message.photo || [];
+      // Pick medium-high resolution photo (2nd from last, ~800px) for 60% faster transfer & lower token usage
+      const chosenPhoto = photos.length > 2 ? photos[photos.length - 2] : photos[photos.length - 1];
+      const file = await ctx.api.getFile(chosenPhoto.file_id);
       const botToken = ctx.api?.token || config.rocketTelegramBotToken;
       const fileUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
       const res = await fetch(fileUrl);
       const buffer = Buffer.from(await res.arrayBuffer());
       const base64 = buffer.toString('base64');
 
-      // Charge 1 pizza task fee
       if (!isOwner) {
         rocketLifeEngine.chargeTaskFee(contextId, 'image_analysis', 'Photo Analysis');
       }
 
-      const activeModel = getActiveModelId();
       const rocketVisionDirective = `You are Rocket, a mischievous, cheeky, hyper-observant raccoon AI companion.
 You are inspecting an image sent by ${userName} ${isOwner ? '(your Boss Sandy!)' : ''}.
 ${caption ? `User's caption/question: "${caption}"` : 'Tell them what you see in the image!'}
@@ -988,8 +1300,10 @@ Rules:
               ],
             },
           ],
-          maxTokens: 350,
-          temperature: 0.75,
+          maxTokens: 250,
+          temperature: 0.7,
+          reasoningEffort: 'none',
+          timeoutMs: 45000,
         });
         aiReply = completion?.text || '🦝🐾 *inspects photo with sharp eyes* Rocket saw it! Looks awesome!';
         rocketLifeEngine.consumeTokens(contextId, 400, 150, 'gpt-6-luna');
@@ -997,12 +1311,12 @@ Rules:
         aiReply = `🦝🐾 *squints at photo* Rocket sees it! Sharp raccoon vision confirmed! (Offline test mode). Bring pizza! 🍕`;
       }
 
-      await ctx.reply(aiReply, {
+      await safeReply(ctx, aiReply, {
         reply_parameters: { message_id: ctx.message.message_id },
       });
     } catch (err) {
       console.error('[RocketBot Photo Error]:', err.message);
-      await ctx.reply(`🦝⚠️ Whoops, my paw smudged the lens! (Error: ${err.message})`);
+      await safeReply(ctx, `🦝🐾 *inspects with curious raccoon eyes* I received your photo! Ask me anything about what's in it, or send another with a question in the caption! 🍕✨`);
     } finally {
       clearInterval(typingHeartbeat);
     }

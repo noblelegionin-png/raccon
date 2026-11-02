@@ -58,11 +58,22 @@ export class SafeSandboxRunner {
     const context = vm.createContext(sandboxContext);
 
     try {
+      let scriptCode = (code || '').trim();
+      if (
+        scriptCode &&
+        !scriptCode.includes('return ') &&
+        !scriptCode.includes('return;') &&
+        !scriptCode.includes('\n') &&
+        !scriptCode.endsWith(';')
+      ) {
+        scriptCode = `return (${scriptCode});`;
+      }
+
       // Wrap code in an immediately invoked async function that receives args
       const wrappedScript = `
         "use strict";
         (async () => {
-          ${code}
+          ${scriptCode}
         })()
       `;
 

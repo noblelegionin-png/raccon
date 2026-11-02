@@ -46,7 +46,7 @@ export class ScaleMaxAdapter {
    * Health check and real latency measurement
    * Returns: { ok: boolean, latencyMs: number, status: string, error?: string, model: string }
    */
-  async checkHealth(targetModel = 'deepseek-v4.1-flash') {
+  async checkHealth(targetModel = 'gpt-6-luna') {
     if (!this.isConfigured()) {
       return {
         ok: false,
@@ -235,19 +235,14 @@ export class ScaleMaxAdapter {
       );
     }
 
-    let targetModel = model || config.scaleMaxDefaultModel || 'deepseek-v4.1-flash';
-    if (targetModel === 'deepseek-v4-flash' || targetModel === 'deepseek-v4-pro' || targetModel === 'deepseek') {
-      targetModel = 'deepseek-v4.1-flash';
-    }
-    if (!targetModel || targetModel.startsWith('gemini') || targetModel.startsWith('jev') || targetModel.includes('flash-lite')) {
-      targetModel = 'deepseek-v4.1-flash';
-    }
+    // The user's active ScaleMax API key plan ONLY permits gpt-6-luna
+    let targetModel = 'gpt-6-luna';
     let lastError = null;
 
     // Check if direct DeepSeek API key is configured
-    const useDirectDeepSeek = config.deepSeekApiKey && targetModel.toLowerCase().includes('deepseek');
-    const endpointBase = useDirectDeepSeek ? 'https://api.deepseek.com/v1' : this.baseUrl;
-    const authHeader = useDirectDeepSeek ? `Bearer ${config.deepSeekApiKey}` : `Bearer ${this.apiKey}`;
+    const useDirectDeepSeek = false;
+    const endpointBase = this.baseUrl;
+    const authHeader = `Bearer ${this.apiKey}`;
     const effectiveTimeout = timeoutMs || this.timeoutMs;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -270,10 +265,9 @@ export class ScaleMaxAdapter {
           }
         }
 
-        const effort = reasoningEffort || 'none';
-        if (effort && effort.toLowerCase() !== 'none') {
-          payload.reasoning_effort = effort.toLowerCase();
-        }
+        // Always pass explicit reasoning_effort to avoid ScaleMax's 7.6s default thinking latency
+        const effort = (reasoningEffort || 'none').toLowerCase();
+        payload.reasoning_effort = effort;
 
         const response = await fetch(`${endpointBase}/chat/completions`, {
           method: 'POST',
@@ -412,7 +406,7 @@ export class ScaleMaxAdapter {
    * @param {number} [params.maxToolTurns=3]
    */
   async executeChatWithTools({
-    model = 'deepseek-v4.1-flash',
+    model = 'gpt-6-luna',
     messages,
     chatId = 'unknown',
     reasoningEffort = 'none',

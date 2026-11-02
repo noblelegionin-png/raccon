@@ -15,6 +15,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '../..');
 const PDF_OUTPUT_DIR = path.join(projectRoot, 'data/documents/generated');
+try {
+  if (!fs.existsSync(PDF_OUTPUT_DIR)) {
+    fs.mkdirSync(PDF_OUTPUT_DIR, { recursive: true });
+  }
+} catch {}
 
 // In-Memory Fast Cache for Sub-Second PDF Generation (5-Minute TTL)
 const PDF_MEM_CACHE = new Map();
@@ -837,7 +842,7 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
         ],
         reasoningEffort: 'none',
         maxTokens: tokenLimit,
-        timeoutMs: 4500,
+        timeoutMs: 30000,
       });
       markdownText = completion?.text || '';
     } catch (llmErr) {

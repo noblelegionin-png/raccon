@@ -181,6 +181,8 @@ YOUR DIRECTIVES:
         ],
         maxTokens: 500,
         temperature: 0.5,
+        reasoningEffort: 'none',
+        timeoutMs: 45000,
       });
 
       let cleanedText = (completion.text || '')
@@ -312,6 +314,8 @@ When the user sends or asks about an image:
         ],
         maxTokens: 350,
         temperature: 0.4,
+        reasoningEffort: 'none',
+        timeoutMs: 45000,
       });
 
       const rawText = completion.text || '';

@@ -11,11 +11,20 @@ export const ROLES = {
   MEMBER: 'member',
 };
 
-export function isSandy(userId) {
-  if (!userId) return false;
-  const uid = String(userId).trim();
+export function isSandy(userId, username = null, firstName = null) {
+  if (!userId && !username && !firstName) return false;
+  const uid = userId ? String(userId).trim() : '';
   const ownerId = String(config.rocketOwnerId || config.telegramOwnerId || '8685232094').trim();
-  return uid === ownerId;
+  if (uid && uid === ownerId) return true;
+  if (username) {
+    const un = String(username).toLowerCase();
+    if (un === 's4ndy' || un === 'sandy' || un.includes('s4ndy') || un.includes('nero_aurelius')) return true;
+  }
+  if (firstName) {
+    const fn = String(firstName).toLowerCase();
+    if (fn === 'sandy' || fn.includes('sandy')) return true;
+  }
+  return false;
 }
 
 /**

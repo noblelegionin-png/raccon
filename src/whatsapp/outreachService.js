@@ -150,14 +150,9 @@ export class OutreachService {
     }
 
     // 3. English standard patterns with phone or name:
-    // e.g. "text 918091785996 that the project is deployed"
-    // e.g. "text 9876543210 no hy"
-    // e.g. "text 9876543210: hy"
-    // e.g. "text +91 80918 98350 that comes to play in Minecraft realme"
-    // e.g. "send message to +91 80917 85996: please check email"
-    // e.g. "tell Alex to review the deck"
-    // e.g. "text Rahul no hy"
-    const englishMatch = cleanedText.match(/^(?:(?:text|message|msg|tell|ask|ping|dm|write|whatsapp|send\s+(?:a\s+)?(?:text|message|msg|whatsapp|wa|dm)\s+to)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,30}?)(?::|\s+that\b|\s+to\b|\s+saying\b|\s+saying\s+that\b|\s+asking\b|\s+if\b|\s+whether\b|\s*-\s*|\s*,\s*|\s+no\b|\s+(?=[a-zA-Z0-9]))\s*([\s\S]+)$/i);
+    // First try matching with explicit delimiters (that, to, saying, if, colon, comma, etc.)
+    const englishMatch = cleanedText.match(/^(?:(?:text|message|msg|tell|ask|ping|dm|write|whatsapp|send\s+(?:a\s+)?(?:text|message|msg|whatsapp|wa|dm)\s+to)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,35}?)(?::|\s+that\b|\s+to\b|\s+saying\b|\s+saying\s+that\b|\s+asking\b|\s+if\b|\s+whether\b|\s*-\s*|\s*,\s*|\s+no\b)\s*([\s\S]+)$/i)
+      || cleanedText.match(/^(?:(?:text|message|msg|tell|ask|ping|dm|write|whatsapp|send\s+(?:a\s+)?(?:text|message|msg|whatsapp|wa|dm)\s+to)\s+)(?:to\s+)?([+0-9a-zA-Z._\s-]{3,35}?)(?:\s+(?=[a-zA-Z]))\s*([\s\S]+)$/i);
     if (englishMatch) {
       const targetQuery = englishMatch[1].trim();
       let instruction = englishMatch[2].trim()

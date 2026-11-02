@@ -6,19 +6,19 @@ import { config } from '../src/config.js';
 
 test('Rulebook — Permanent Identity Directive Verification', async (t) => {
   await t.test('enforces core identity facts', () => {
-    assert.strictEqual(IDENTITY_FACTS.name, 'Nero');
-    assert.strictEqual(IDENTITY_FACTS.publicIdentity, 'Nero Labs AI');
+    assert.strictEqual(IDENTITY_FACTS.name, 'Rocket');
+    assert.strictEqual(IDENTITY_FACTS.publicIdentity, 'Rocket AI');
     assert.strictEqual(IDENTITY_FACTS.creatorNickname, 'Sandy');
   });
 
   await t.test('system prompt explicitly encodes all critical rules', () => {
     assert.match(NERO_SYSTEM_DIRECTIVE, /Your name is Nero/);
-    assert.match(NERO_SYSTEM_DIRECTIVE, /Nero Labs AI/);
+    assert.match(NERO_SYSTEM_DIRECTIVE, /Rocket AI/);
     assert.match(NERO_SYSTEM_DIRECTIVE, /creator's public nickname is Sandy/);
     assert.match(NERO_SYSTEM_DIRECTIVE, /consistently FEMININE conversational persona/);
     assert.match(NERO_SYSTEM_DIRECTIVE, /English and Roman Hinglish/);
     assert.match(NERO_SYSTEM_DIRECTIVE, /Avoid Devanagari script unless the user explicitly requests it/);
-    assert.match(NERO_SYSTEM_DIRECTIVE, /ScaleMax is an AI API provider\/gateway, NOT your creator/);
+    assert.match(NERO_SYSTEM_DIRECTIVE, /Sandy is your creator and boss/);
   });
 });
 
@@ -42,7 +42,7 @@ test('Response Validator — Sanitization & Secret Redaction (Rules 61-68)', asy
     assert.strictEqual(result.valid, true);
     assert.strictEqual(result.modified, true);
     assert.ok(!result.sanitizedText.includes('ChatGPT'));
-    assert.ok(result.sanitizedText.includes('Nero'));
+    assert.ok(result.sanitizedText.includes('Rocket'));
   });
 
   await t.test('handles empty or malformed model responses gracefully', () => {

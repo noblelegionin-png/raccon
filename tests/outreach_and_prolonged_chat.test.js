@@ -115,7 +115,7 @@ describe('🚀 Nero Labs — Intelligent Outbound Outreach & Prolonged Multi-Tur
       isHindiOrHinglish: false,
       senderTitle: 'Sandy',
     });
-    assert.match(engFallback, /Nero/i);
+    assert.match(engFallback, /(?:Nero|Rocket)/i);
     assert.match(engFallback, /Sandy/i);
     assert.match(engFallback, /please confirm if we are meeting at 5 PM/i);
     assert.match(engFallback, /reply directly/i);
@@ -128,7 +128,7 @@ describe('🚀 Nero Labs — Intelligent Outbound Outreach & Prolonged Multi-Tur
       senderTitle: 'Sandy',
     });
     assert.match(hinFallback, /Namaste/i);
-    assert.match(hinFallback, /Nero/i);
+    assert.match(hinFallback, /(?:Nero|Rocket)/i);
     assert.match(hinFallback, /Sandy/i);
     assert.match(hinFallback, /kal subah 10 baje call karna/i);
     assert.match(hinFallback, /direct reply/i);

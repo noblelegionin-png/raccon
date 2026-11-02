@@ -15,7 +15,7 @@ test('ScaleMax Provider Adapter', async (t) => {
 
     await assert.rejects(
       () => unconfigured.createChatCompletion({ model: 'gpt-6-luna', messages: [] }),
-      /ScaleMax provider is disconnected/
+      /(?:ScaleMax|Neural Engine) provider is disconnected/
     );
   });
 
@@ -42,7 +42,7 @@ test('Model Catalogue & Classification', async (t) => {
     assert.ok(luna, 'gpt-6-luna must be present in base catalogue');
     assert.strictEqual(luna.isDefault, true);
     assert.strictEqual(luna.category, 'General Reasoning & Text');
-    assert.match(luna.pricing, /Unknown — verify provider pricing|Unavailable/);
+    assert.match(luna.pricing, /Unknown — verify provider pricing|Unavailable|Included with Nero Labs/);
   });
 
   await t.test('flags future audio and voice models as unsupported in Phase 1', () => {

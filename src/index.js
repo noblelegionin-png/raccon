@@ -1,6 +1,7 @@
 import { config, validateConfig } from './config.js';
 import { initDatabase, getDb } from './db/index.js';
 import { startBot, stopBot } from './telegram/bot.js';
+import { startRocketBot, stopRocketBot } from './rocketBot/bot.js';
 import { createWebServer } from './web/server.js';
 import { whatsAppService } from './whatsapp/whatsappService.js';
 import { applyLogNoiseFilter } from './utils/noiseFilter.js';
@@ -50,10 +51,21 @@ async function main() {
     });
   }
 
+  // 4c. Start New Rocket Telegram Bot
+  if (config.rocketTelegramEnabled) {
+    if (config.rocketTelegramBotToken) {
+      console.log('[RocketBot] 🦝 Initializing Rocket Telegram bot...');
+      await startRocketBot();
+    } else {
+      console.log('[RocketBot] ⏳ ROCKET_TELEGRAM_BOT_TOKEN is waiting to be configured from BotFather. Bot transport will connect the moment token is provided.');
+    }
+  }
+
   // 5. Graceful Shutdown
   const shutdown = async (signal) => {
     console.log(`\n[System] Received ${signal}. Shutting down gracefully...`);
     await stopBot();
+    await stopRocketBot();
     try {
       if (whatsAppService.sock) {
         whatsAppService.sock.end();

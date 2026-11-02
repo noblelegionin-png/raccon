@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ROCK3T — Interactive Web OS</title>
+  <link rel="stylesheet" href="os.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="os-viewport" id="osViewport">
+    
+    <!-- ANDROID STATUS BAR -->
+    <header class="os-status-bar">
+      <div class="status-left">
+        <span id="statusBarTime">12:00</span>
+        <span id="statusBarNotif">🦝</span>
+      </div>
+      <div class="status-right">
+        <span>📶</span>
+        <span>5G</span>
+        <span>🔋 100%</span>
+      </div>
+    </header>
+
+    <!-- HORIZONTAL HOME SCREEN PAGER -->
+    <main class="home-pager-container" id="pagerContainer">
+      <div class="home-pages-track" id="pagesTrack">
+        
+        <!-- PAGE -2: WIDGETS & TOOLS -->
+        <section class="home-page" id="pageMinus2">
+          <h2 class="page-title">Widgets & Hub</h2>
+          <p class="page-subtitle">Quick glances & morning updates</p>
+          <div class="os-widget">
+            <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">🌤️ Weather & Vibe</h3>
+            <p style="color: var(--os-text-muted); font-size: 0.85rem;">24°C &bull; Clear Skies &bull; High Pizza Probability 🍕</p>
+          </div>
+
+          <!-- ROCKET LIFE ENGINE TELEMETRY CARD -->
+          <div class="life-engine-card">
+            <div class="life-engine-header">
+              <span style="font-weight: 700; font-size: 0.95rem;">🦝 Rocket Life Engine</span>
+              <span class="life-badge" id="lifeMoodVal">Playful</span>
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--os-text-muted); margin-bottom: 4px;">
+                <span>Hunger</span>
+                <span id="lifeHungerVal">80%</span>
+              </div>
+              <div class="life-meter-track">
+                <div class="life-meter-fill" id="lifeHungerBar" style="width: 80%;"></div>
+              </div>
+            </div>
+            <div class="life-stats-row">
+              <span id="lifeStashVal">🍕 25 | 🌮 5</span>
+              <span id="lifeSleepVal">Active ⚡</span>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <button class="btn-os" style="flex: 1; padding: 6px 8px; font-size: 0.75rem;" onclick="ROCK3T_OS.feedRocket('pizza')">🍕 Feed Pizza</button>
+              <button class="btn-os" style="flex: 1; padding: 6px 8px; font-size: 0.75rem;" onclick="ROCK3T_OS.feedRocket('taco')">🌮 Feed Taco</button>
+              <a href="/raccoon/index.html" class="btn-os primary" style="padding: 6px 10px; font-size: 0.75rem; text-decoration: none; display: flex; align-items: center;" target="_blank">🚀 Life App</a>
+            </div>
+          </div>
+
+          <div class="os-widget">
+            <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">🧠 Rocket Thoughts</h3>
+            <p style="color: var(--os-text-muted); font-size: 0.85rem;" id="widgetRaccoonNote">"Checked the perimeter. No intruders. Pizza safe."</p>
+          </div>
+        </section>
+
+        <!-- PAGE -1: ASSISTANT & FEED -->
+        <section class="home-page" id="pageMinus1">
+          <h2 class="page-title">Assistant Feed</h2>
+          <p class="page-subtitle">Recent activity & Rocket memory</p>
+          <div class="os-widget">
+            <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">⚡ Quick Actions</h3>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn-os" onclick="ROCK3T_OS.openApp('games')">🎮 Quick Match</button>
+              <button class="btn-os" onclick="ROCK3T_OS.openApp('canvas')">🎨 Quick Sketch</button>
+              <button class="btn-os" onclick="ROCK3T_OS.openApp('settings')">⚙️ Edit Profile</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- PAGE 0: CENTRAL WORKSPACE (MAIN HOME SCREEN) -->
+        <section class="home-page" id="pageZero">
+          <div class="os-widget">
+            <div class="widget-clock" id="homeClock">12:00</div>
+            <div class="widget-date" id="homeDate">Monday, November 2</div>
+            <div class="widget-greet" id="homeGreet">Hey Sandy! 🐾</div>
+          </div>
+
+          <!-- CORE APP ICONS GRID -->
+          <div class="app-grid" id="mainAppGrid">
+            <!-- Dynamically populated / Default App Icons -->
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('store')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #00b4d8, #0077b6); color: #fff;">🛍️</div>
+              <span class="app-label">Store</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('canvas')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #ff006e, #8338ec); color: #fff;">🎨</div>
+              <span class="app-label">Canvas</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('games')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #8338ec, #3a0ca3); color: #fff;">🎮</div>
+              <span class="app-label">Games Hub</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('maps')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #38b000, #007200); color: #fff;">🗺️</div>
+              <span class="app-label">Maps</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('settings')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #64748b, #334155); color: #fff;">⚙️</div>
+              <span class="app-label">Settings</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- PAGE +1: TOOLS & CREATIVITY -->
+        <section class="home-page" id="pagePlus1">
+          <h2 class="page-title">Tools & Studio</h2>
+          <p class="page-subtitle">Creative apps & utilities</p>
+          <div class="app-grid">
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('canvas')">
+              <div class="app-icon-badge" style="background: #ff006e; color: #fff;">🎨</div>
+              <span class="app-label">Canvas</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('store')">
+              <div class="app-icon-badge" style="background: #00b4d8; color: #fff;">🛍️</div>
+              <span class="app-label">Get Apps</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- PAGE +2: GAMING & MEDIA -->
+        <section class="home-page" id="pagePlus2">
+          <h2 class="page-title">Arcade & Media</h2>
+          <p class="page-subtitle">Interactive games & media lounge</p>
+          <div class="app-grid">
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('games')">
+              <div class="app-icon-badge" style="background: #8338ec; color: #fff;">🎮</div>
+              <span class="app-label">Tic-Tac-Toe</span>
+            </button>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- PAGE INDICATOR DOTS -->
+    <div class="page-indicators" id="pageIndicators">
+      <div class="indicator-dot" onclick="ROCK3T_OS.goToPage(-2)"></div>
+      <div class="indicator-dot" onclick="ROCK3T_OS.goToPage(-1)"></div>
+      <div class="indicator-dot active" onclick="ROCK3T_OS.goToPage(0)"></div>
+      <div class="indicator-dot" onclick="ROCK3T_OS.goToPage(1)"></div>
+      <div class="indicator-dot" onclick="ROCK3T_OS.goToPage(2)"></div>
+    </div>
+
+    <!-- PERSISTENT BOTTOM DOCK -->
+    <nav class="bottom-dock">
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('store')" title="Store">🛍️</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('canvas')" title="Canvas">🎨</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('games')" title="Games">🎮</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('maps')" title="Maps">🗺️</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('settings')" title="Settings">⚙️</button>
+    </nav>
+
+    <!-- FLOATING ROCKET AI COMPANION -->
+    <div class="floating-companion" id="floatingCompanion">
+      <div class="companion-bubble" id="companionBubble">
+        Hey Sandy! Swipe around to explore your OS! 🐾
+      </div>
+      <div class="companion-avatar-btn" id="companionAvatar" onclick="ROCK3T_COMPANION.toggleChat()">
+        🦝
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         APP WINDOW 1: ROCKET STORE
+         ===================================================================== -->
+    <div class="app-window" id="appWindowStore">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <span class="app-window-title">Rocket Store</span>
+        <div style="width: 32px;"></div>
+      </div>
+      <div class="app-window-body">
+        <h2 class="page-title">Curated Apps</h2>
+        <p class="page-subtitle">Official verified applications for ROCK3T OS</p>
+        <div id="storeAppsList" style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         APP WINDOW 2: CANVAS
+         ===================================================================== -->
+    <div class="app-window" id="appWindowCanvas">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <span class="app-window-title">Canvas Studio</span>
+        <button class="btn-os primary" style="padding: 4px 10px; font-size: 0.75rem;" onclick="ROCK3T_CANVAS.saveDrawing()">Save</button>
+      </div>
+      <div class="app-window-body">
+        <div class="canvas-wrapper">
+          <canvas id="drawingCanvas" width="340" height="340"></canvas>
+          <div class="canvas-toolbar">
+            <div class="color-swatch active" style="background: #0f172a;" onclick="ROCK3T_CANVAS.setColor('#0f172a', this)"></div>
+            <div class="color-swatch" style="background: #00b4d8;" onclick="ROCK3T_CANVAS.setColor('#00b4d8', this)"></div>
+            <div class="color-swatch" style="background: #ff006e;" onclick="ROCK3T_CANVAS.setColor('#ff006e', this)"></div>
+            <div class="color-swatch" style="background: #ff9f1c;" onclick="ROCK3T_CANVAS.setColor('#ff9f1c', this)"></div>
+            <div class="color-swatch" style="background: #38b000;" onclick="ROCK3T_CANVAS.setColor('#38b000', this)"></div>
+            <div class="color-swatch" style="background: #8338ec;" onclick="ROCK3T_CANVAS.setColor('#8338ec', this)"></div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <button class="btn-os" onclick="ROCK3T_CANVAS.clear()">🧹 Clear</button>
+            <button class="btn-os" onclick="ROCK3T_CANVAS.askRocketToDraw()">🦝 Ask Rocket to Draw</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         APP WINDOW 3: GAMES HUB & TIC-TAC-TOE
+         ===================================================================== -->
+    <div class="app-window" id="appWindowGames">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <span class="app-window-title" id="gamesWindowTitle">Games &bull; Hub</span>
+        <button class="btn-os" style="padding: 4px 10px; font-size: 0.75rem;" onclick="ROCK3T_GAMES.newGame()">New Game</button>
+      </div>
+      <div class="app-window-body">
+        <!-- GAME TABS SELECTOR -->
+        <div class="games-tab-bar">
+          <button class="games-tab-btn active" data-game="tictactoe" onclick="ROCK3T_GAMES.switchGame('tictactoe')">❌⭕ Tic-Tac-Toe</button>
+          <button class="games-tab-btn" data-game="snakes" onclick="ROCK3T_GAMES.switchGame('snakes')">🎲 Snakes & Ladders</button>
+          <button class="games-tab-btn" data-game="ludo" onclick="ROCK3T_GAMES.switchGame('ludo')">🏆 Ludo</button>
+          <button class="games-tab-btn" data-game="chess" onclick="ROCK3T_GAMES.switchGame('chess')">♟️ Chess</button>
+        </div>
+
+        <!-- ACTIVE GAME AREA 1: TIC-TAC-TOE -->
+        <div class="ttt-container" id="tttGameArea">
+          <div class="ttt-scoreboard">
+            <div class="ttt-score-pill">You (X): <span id="scoreHuman">0</span></div>
+            <div class="ttt-score-pill">Rocket (O): <span id="scoreRocket">0</span></div>
+            <div class="ttt-score-pill">Draws: <span id="scoreDraws">0</span></div>
+          </div>
+
+          <div class="ttt-board" id="tttBoard">
+            <div class="ttt-cell" data-index="0" onclick="ROCK3T_GAMES.handleCellClick(0)"></div>
+            <div class="ttt-cell" data-index="1" onclick="ROCK3T_GAMES.handleCellClick(1)"></div>
+            <div class="ttt-cell" data-index="2" onclick="ROCK3T_GAMES.handleCellClick(2)"></div>
+            <div class="ttt-cell" data-index="3" onclick="ROCK3T_GAMES.handleCellClick(3)"></div>
+            <div class="ttt-cell" data-index="4" onclick="ROCK3T_GAMES.handleCellClick(4)"></div>
+            <div class="ttt-cell" data-index="5" onclick="ROCK3T_GAMES.handleCellClick(5)"></div>
+            <div class="ttt-cell" data-index="6" onclick="ROCK3T_GAMES.handleCellClick(6)"></div>
+            <div class="ttt-cell" data-index="7" onclick="ROCK3T_GAMES.handleCellClick(7)"></div>
+            <div class="ttt-cell" data-index="8" onclick="ROCK3T_GAMES.handleCellClick(8)"></div>
+          </div>
+
+          <div class="ttt-reaction-bubble" id="tttReaction">
+            🦝 Tap any square to place your X! Let's see your moves!
+          </div>
+        </div>
+
+        <!-- FUTURE GAME ROADMAP PREVIEW AREA -->
+        <div class="game-preview-card" id="futureGameArea" style="display: none;">
+          <div class="game-preview-icon" id="previewGameIcon">🎲</div>
+          <span class="game-roadmap-badge" id="previewGameBadge">Phase 2 Expansion</span>
+          <h3 id="previewGameTitle" style="font-size: 1.3rem; font-weight: 800; margin-top: 4px;">Snakes & Ladders</h3>
+          <p id="previewGameDesc" style="color: var(--os-text-muted); font-size: 0.88rem; max-width: 320px; line-height: 1.4;">
+            Roll the dice and race Rocket to square 100!
+          </p>
+          <div class="ttt-reaction-bubble" id="previewGameBanter" style="margin-top: 4px;">
+            🦝 Rocket: "I'm still training my paws to roll 6s every time!"
+          </div>
+          <button class="btn-os primary" style="margin-top: 8px; padding: 10px 20px;" onclick="ROCK3T_GAMES.notifyMe()">
+            🔔 Notify Me When Available
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         APP WINDOW 4: ROCKET MAPS
+         ===================================================================== -->
+    <div class="app-window" id="appWindowMaps">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <span class="app-window-title">Rocket Maps</span>
+        <div style="width: 32px;"></div>
+      </div>
+      <div class="app-window-body" style="padding: 0; display: flex; flex-direction: column;">
+        <div style="padding: 12px 16px; border-bottom: 1px solid var(--os-border);">
+          <input type="text" placeholder="Search locations, pizza joints, hideouts..." style="width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--os-border); background: var(--os-surface-hover); color: var(--os-text);">
+        </div>
+        <div style="flex: 1; background: #e2e8f0; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          <!-- Simulated vector map background -->
+          <svg width="100%" height="100%" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#e0e7ff"/>
+            <path d="M 0 120 Q 200 150 400 100" stroke="#93c5fd" stroke-width="24" fill="none"/>
+            <path d="M 120 0 L 140 400" stroke="#cbd5e1" stroke-width="12" fill="none"/>
+            <path d="M 0 250 L 400 230" stroke="#cbd5e1" stroke-width="14" fill="none"/>
+            <circle cx="200" cy="200" r="12" fill="#ef4444"/>
+            <text x="220" y="205" font-size="12" font-weight="700" fill="#1e293b">Nero Labs HQ 🦝</text>
+            <circle cx="100" cy="120" r="10" fill="#f59e0b"/>
+            <text x="115" y="125" font-size="11" font-weight="600" fill="#1e293b">Pizza Plaza 🍕</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         APP WINDOW 5: SETTINGS & 50 PERSONAL QUESTIONS
+         ===================================================================== -->
+    <div class="app-window" id="appWindowSettings">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <span class="app-window-title">Settings</span>
+        <div style="width: 32px;"></div>
+      </div>
+      <div class="app-window-body">
+        
+        <!-- SECTION 1: APPEARANCE -->
+        <h3 class="settings-section-title">Appearance & Display</h3>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h4>Dark Theme</h4>
+            <p>Toggle light / dark OS surface</p>
+          </div>
+          <button class="btn-os" id="themeToggleBtn" onclick="ROCK3T_SETTINGS.toggleTheme()">Toggle Dark</button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h4>Animation Speed</h4>
+            <p>Adjust window & gesture transitions</p>
+          </div>
+          <select class="btn-os" id="animSpeedSelect" onchange="ROCK3T_SETTINGS.setAnimSpeed(this.value)">
+            <option value="1">Normal (1x)</option>
+            <option value="0.5">Snappy (0.5x)</option>
+            <option value="1.5">Cinematic (1.5x)</option>
+            <option value="0">Off (Instant)</option>
+          </select>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h4>Display Scale (DPI)</h4>
+            <p>Simulated viewport scale</p>
+          </div>
+          <select class="btn-os" id="dpiSelect" onchange="ROCK3T_SETTINGS.setDpiScale(this.value)">
+            <option value="1">100% (Standard)</option>
+            <option value="0.95">95% (Compact)</option>
+            <option value="1.05">105% (Large)</option>
+          </select>
+        </div>
+
+        <!-- WALLPAPER CUSTOMIZATION -->
+        <div class="settings-item" style="flex-direction: column; align-items: stretch; gap: 10px;">
+          <div class="settings-item-info">
+            <h4>Wallpaper & Custom Background</h4>
+            <p>Default: Pure clean white. Upload from device or enter custom image URL.</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-os" onclick="ROCK3T_SETTINGS.resetWallpaper()">⚪ Pure White (Default)</button>
+            <button class="btn-os" onclick="ROCK3T_SETTINGS.setWallpaper('linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')">🌫️ Soft Frost</button>
+            <button class="btn-os" onclick="ROCK3T_SETTINGS.setWallpaper('linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)')">🌌 Midnight Deep</button>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <input type="text" id="wallpaperUrlInput" placeholder="Paste image URL (https://...)..." class="question-input" style="flex: 1;">
+            <button class="btn-os primary" onclick="ROCK3T_SETTINGS.setWallpaper(document.getElementById('wallpaperUrlInput').value)">Apply</button>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
+            <input type="file" id="wallpaperFileInput" accept="image/*" style="display: none;" onchange="ROCK3T_SETTINGS.handleWallpaperUpload(this.files[0])">
+            <button class="btn-os" onclick="document.getElementById('wallpaperFileInput').click()">📁 Upload from Device</button>
+            <button class="btn-os" onclick="ROCK3T_SETTINGS.resetWallpaper()">Reset to White</button>
+          </div>
+        </div>
+
+        <!-- SECTION 2: PERSONAL INFORMATION (50 QUESTIONS) -->
+        <h3 class="settings-section-title" style="margin-top: 30px;">
+          Personal Information (<span id="infoAnsweredCount">0</span>/50)
+        </h3>
+        <p class="page-subtitle" style="margin-bottom: 12px;">
+          All optional. Helps Rocket tailor conversation, banter, and suggestions exclusively for you.
+        </p>
+
+        <div id="questionsContainer">
+          <!-- Populated by settings.js with 6 accordion categories -->
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- APPLICATION SCRIPTS -->
+  <script src="os.js"></script>
+  <script src="games.js"></script>
+  <script src="canvas.js"></script>
+  <script src="settings.js"></script>
+  <script src="companion.js"></script>
+</body>
+</html>

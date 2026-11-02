@@ -34,3 +34,9 @@ services:
         value: "all"
       - key: WHATSAPP_NOTIFY_TELEGRAM
         value: "true"
+      - key: ROCKET_TELEGRAM_ENABLED
+        value: "true"
+      - key: ROCKET_TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ROCKET_OWNER_ID
+        value: "8685232094"

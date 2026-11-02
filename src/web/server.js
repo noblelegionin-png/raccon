@@ -3,6 +3,8 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
+import { rocketRouter } from '../rocket/routes.js';
+import { rock3tRouter } from '../rock3t/routes.js';
 import {
   getDb,
   getAllConfig,
@@ -137,6 +139,22 @@ export function createWebServer() {
   // Static directory for Mobile Mini App
   const publicDir = path.join(__dirname, 'public');
   app.use(express.static(publicDir));
+
+  // 🦝 Mount Rocket Life Engine & Raccoon OS APIs
+  app.use('/api/rocket', rocketRouter);
+
+  // 🚀 Mount ROCK3T Web OS APIs & Routes
+  app.use('/api/rock3t', rock3tRouter);
+
+  // Dedicated Raccoon OS Telegram Mini App Routes
+  app.get(['/rocket', '/raccoon', '/raccoon-os'], (req, res) => {
+    res.sendFile(path.join(publicDir, 'raccoon', 'index.html'));
+  });
+
+  // Dedicated ROCK3T Interactive Web OS Routes
+  app.get(['/rock3t', '/os', '/web-os'], (req, res) => {
+    res.sendFile(path.join(publicDir, 'rock3t', 'index.html'));
+  });
 
   // Health probe
   app.get('/healthz', (req, res) => {

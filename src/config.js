@@ -16,10 +16,16 @@ function cleanEnv(val, fallback = '') {
 }
 
 export const config = {
-  // Telegram
+  // Telegram (Legacy)
   telegramEnabled: cleanEnv(process.env.TELEGRAM_ENABLED, 'false') === 'true',
   telegramBotToken: cleanEnv(process.env.TELEGRAM_BOT_TOKEN),
   telegramOwnerId: cleanEnv(process.env.TELEGRAM_OWNER_ID),
+
+  // 🦝 ROCKET NEW TELEGRAM BOT & RACCOON OS
+  rocketTelegramEnabled: cleanEnv(process.env.ROCKET_TELEGRAM_ENABLED, 'true') === 'true',
+  rocketTelegramBotToken: cleanEnv(process.env.ROCKET_TELEGRAM_BOT_TOKEN),
+  rocketOwnerId: cleanEnv(process.env.ROCKET_OWNER_ID, cleanEnv(process.env.TELEGRAM_OWNER_ID, '8685232094')),
+  rocketMiniAppUrl: cleanEnv(process.env.ROCKET_MINIAPP_URL, cleanEnv(process.env.WEBAPP_PUBLIC_URL)),
 
   // ScaleMax & Model Provider
   scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY),

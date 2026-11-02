@@ -75,6 +75,7 @@
           <div class="os-widget">
             <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">⚡ Quick Actions</h3>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn-os primary" onclick="ROCK3T_OS.openApp('chat')">💬 Chat with Rocket</button>
               <button class="btn-os" onclick="ROCK3T_OS.openApp('study')">🔬 Study Hub</button>
               <button class="btn-os" onclick="ROCK3T_OS.openApp('games')">🎮 Quick Match</button>
               <button class="btn-os" onclick="ROCK3T_OS.openApp('canvas')">🎨 Quick Sketch</button>
@@ -93,26 +94,25 @@
 
           <!-- CORE APP ICONS GRID -->
           <div class="app-grid" id="mainAppGrid">
-            <!-- Dynamically populated / Default App Icons -->
-            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('store')">
-              <div class="app-icon-badge" style="background: linear-gradient(135deg, #00b4d8, #0077b6); color: #fff;">🛍️</div>
-              <span class="app-label">Store</span>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('chat')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #ff9f1c, #ff006e); color: #fff;">💬</div>
+              <span class="app-label">Rocket AI</span>
             </button>
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('study')">
               <div class="app-icon-badge" style="background: linear-gradient(135deg, #4361ee, #3a0ca3); color: #fff;">🔬</div>
               <span class="app-label">Study Hub</span>
             </button>
-            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('canvas')">
-              <div class="app-icon-badge" style="background: linear-gradient(135deg, #ff006e, #8338ec); color: #fff;">🎨</div>
-              <span class="app-label">Canvas</span>
-            </button>
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('games')">
               <div class="app-icon-badge" style="background: linear-gradient(135deg, #8338ec, #3a0ca3); color: #fff;">🎮</div>
               <span class="app-label">Games Hub</span>
             </button>
-            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('maps')">
-              <div class="app-icon-badge" style="background: linear-gradient(135deg, #38b000, #007200); color: #fff;">🗺️</div>
-              <span class="app-label">Maps</span>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('canvas')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #ff006e, #8338ec); color: #fff;">🎨</div>
+              <span class="app-label">Canvas</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('store')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #00b4d8, #0077b6); color: #fff;">🛍️</div>
+              <span class="app-label">Store</span>
             </button>
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('settings')">
               <div class="app-icon-badge" style="background: linear-gradient(135deg, #64748b, #334155); color: #fff;">⚙️</div>
@@ -126,6 +126,10 @@
           <h2 class="page-title">Tools & Studio</h2>
           <p class="page-subtitle">Creative apps & utilities</p>
           <div class="app-grid">
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('chat')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #ff9f1c, #ff006e); color: #fff;">💬</div>
+              <span class="app-label">Rocket AI</span>
+            </button>
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('study')">
               <div class="app-icon-badge" style="background: #4361ee; color: #fff;">🔬</div>
               <span class="app-label">Study Hub</span>
@@ -167,20 +171,47 @@
 
     <!-- PERSISTENT BOTTOM DOCK -->
     <nav class="bottom-dock">
-      <button class="dock-icon" onclick="ROCK3T_OS.openApp('store')" title="Store">🛍️</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('chat')" title="Rocket AI">💬</button>
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('study')" title="Study Hub">🔬</button>
-      <button class="dock-icon" onclick="ROCK3T_OS.openApp('canvas')" title="Canvas">🎨</button>
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('games')" title="Games">🎮</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('canvas')" title="Canvas">🎨</button>
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('settings')" title="Settings">⚙️</button>
     </nav>
 
-    <!-- FLOATING ROCKET AI COMPANION -->
+    <!-- FLOATING ROCKET AI COMPANION (HOMESCREEN ONLY, NON-BLOCKING) -->
     <div class="floating-companion" id="floatingCompanion">
-      <div class="companion-bubble" id="companionBubble">
-        Hey Sandy! Swipe around to explore your OS! 🐾
+      <div class="companion-bubble" id="companionBubble" style="display: none;">
+        Hey Sandy! 🐾
       </div>
-      <div class="companion-avatar-btn" id="companionAvatar" onclick="ROCK3T_COMPANION.toggleChat()">
+      <div class="companion-avatar-btn" id="companionAvatar" title="Chat with Rocket">
         🦝
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         APP WINDOW 0: ROCKET AI CHAT (FIRST-CLASS NATIVE APP)
+         ===================================================================== -->
+    <div class="app-window" id="appWindowChat">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+          <span class="app-window-title" style="display: flex; align-items: center; gap: 6px;">
+            <span>🦝</span> Rocket AI
+          </span>
+          <span style="font-size: 0.72rem; color: var(--os-text-muted); font-weight: 500;">Neural Core &bull; 24/7 Companion</span>
+        </div>
+        <button class="app-back-btn" style="font-size: 0.9rem;" onclick="ROCK3T_COMPANION.clearChat()" title="Clear Chat">🗑️</button>
+      </div>
+      <div class="app-window-body" style="display: flex; flex-direction: column; padding: 0; overflow: hidden; height: 100%;">
+        <div id="companionChatLogs" style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <div class="chat-bubble-assistant">
+            Haan boss! 🦝🐾 Main sun raha hoon. Ask me anything, tell me to research, practice study topics, or draw! 🍕⚡
+          </div>
+        </div>
+        <div class="chat-input-bar">
+          <input type="text" id="companionInput" placeholder="Message Rocket..." autocomplete="off" onkeydown="if(event.key==='Enter') ROCK3T_COMPANION.sendChat()">
+          <button class="btn-os primary chat-send-btn" onclick="ROCK3T_COMPANION.sendChat()">➤</button>
+        </div>
       </div>
     </div>
 

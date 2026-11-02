@@ -91,13 +91,10 @@ const ROCK3T_GAMES = {
     if (badgeEl) badgeEl.textContent = meta.eta;
     if (descEl) descEl.textContent = meta.description;
     if (banterEl) banterEl.textContent = `🦝 Rocket: "${meta.banter}"`;
-
-    ROCK3T_COMPANION?.say(meta.banter);
   },
 
   notifyMe() {
     const meta = this.catalog[this.activeGame];
-    ROCK3T_COMPANION?.say(`Reminder locked! You'll be the first to duel me in ${meta?.name || 'this game'}! 🐾🔔`);
     alert(`Reminder registered for ${meta?.name || 'this game'}!`);
   },
 
@@ -183,9 +180,6 @@ const ROCK3T_GAMES = {
         if (reactionBox && data.reaction) {
           reactionBox.innerHTML = `<strong>${data.reaction}</strong>`;
         }
-
-        // Also voice through floating companion!
-        ROCK3T_COMPANION?.say(data.reaction || 'Good game! Rematch? 🍕');
       } else {
         if (reactionBox) {
           reactionBox.textContent = "Your turn! Where are you placing your next X? 🐾";

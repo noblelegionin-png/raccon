@@ -32,8 +32,6 @@ const ROCK3T_SETTINGS = {
       headers: ROCK3T_OS.getAuthHeaders(),
       body: JSON.stringify({ theme: next }),
     }).catch(() => {});
-
-    ROCK3T_COMPANION?.say(next === 'dark' ? "Stealth mode active! 🌙🦝" : "Pure clean white mode restored! ☀️");
   },
 
   setAnimSpeed(speed) {

@@ -188,6 +188,12 @@ const ROCK3T_OS = {
     let isSwiping = false;
 
     container.addEventListener('touchstart', (e) => {
+      // Do not initiate page swipe on buttons, inputs, links, or widgets
+      const target = e.target;
+      if (target.closest('button, input, select, textarea, a, .btn-os, .dock-icon, .app-icon-item, .life-engine-card, #floatingCompanion')) {
+        isSwiping = false;
+        return;
+      }
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       isSwiping = true;
@@ -200,8 +206,8 @@ const ROCK3T_OS = {
       const diffX = e.changedTouches[0].clientX - startX;
       const diffY = e.changedTouches[0].clientY - startY;
 
-      // Only trigger if horizontal swipe exceeds 45px and is predominantly horizontal
-      if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY)) {
+      // Only trigger if horizontal swipe exceeds 55px and is predominantly horizontal (1.6x)
+      if (Math.abs(diffX) > 55 && Math.abs(diffX) > Math.abs(diffY) * 1.6) {
         if (diffX < 0) {
           // Swiped left -> advance page
           this.goToPage(Math.min(2, this.currentPage + 1));
@@ -216,13 +222,14 @@ const ROCK3T_OS = {
   openApp(appId) {
     console.log(`[ROCK3T OS] Opening App: ${appId}`);
     this.activeApp = appId;
+    document.body.classList.add('app-open');
 
     // Show native Telegram back button
     if (window.Telegram?.WebApp?.BackButton) {
       window.Telegram.WebApp.BackButton.show();
     }
 
-    // Capitalize app name for window ID (e.g. store -> appWindowStore)
+    // Capitalize app name for window ID (e.g. store -> appWindowStore, chat -> appWindowChat)
     const windowId = `appWindow${appId.charAt(0).toUpperCase() + appId.slice(1)}`;
     const win = document.getElementById(windowId);
 
@@ -234,9 +241,12 @@ const ROCK3T_OS = {
       if (appId === 'canvas') ROCK3T_CANVAS?.onAppOpened();
       if (appId === 'store') this.loadStoreApps();
       if (appId === 'settings') ROCK3T_SETTINGS?.onAppOpened();
-
-      // Inform companion of current app context
-      ROCK3T_COMPANION?.onAppContextChange(appId);
+      if (appId === 'chat') {
+        setTimeout(() => {
+          const input = document.getElementById('companionInput');
+          if (input) input.focus();
+        }, 200);
+      }
     }
   },
 
@@ -248,7 +258,7 @@ const ROCK3T_OS = {
       win.classList.remove('open');
     }
     this.activeApp = null;
-    ROCK3T_COMPANION?.onAppContextChange('homescreen');
+    document.body.classList.remove('app-open');
 
     // Hide native Telegram back button
     if (window.Telegram?.WebApp?.BackButton) {

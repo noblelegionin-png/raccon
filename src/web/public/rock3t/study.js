@@ -23,7 +23,6 @@ const ROCK3T_STUDY = {
       this.currentTopic = 'Transformers in AI';
       this.loadMasterclass('Transformers in AI');
     }
-    ROCK3T_COMPANION?.say('Welcome to the Study Hub! Pick any topic and let’s master it together! 🎓🐾');
   },
 
   getAuthHeaders() {

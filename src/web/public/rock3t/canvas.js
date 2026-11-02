@@ -17,12 +17,11 @@ const ROCK3T_CANVAS = {
     if (!this.canvas) return;
     this.ctx = this.canvas.getContext('2d');
 
-    // Ensure high-DPI crisp rendering
+    // Ensure responsive crisp square rendering
     const rect = this.canvas.getBoundingClientRect();
-    if (this.canvas.width !== 340) {
-      this.canvas.width = 340;
-      this.canvas.height = 340;
-    }
+    const side = Math.min(340, Math.max(260, Math.floor(rect.width || 320)));
+    this.canvas.width = side;
+    this.canvas.height = side;
 
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
@@ -115,7 +114,7 @@ const ROCK3T_CANVAS = {
       });
       const data = await res.json();
       if (data.ok) {
-        ROCK3T_COMPANION?.say("Saved your masterpiece to the archive! 🎨✨");
+        alert("Saved your masterpiece to the archive! 🎨✨");
       }
     } catch (err) {
       console.warn('Save drawing error:', err);

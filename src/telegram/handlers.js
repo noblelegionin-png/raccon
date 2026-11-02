@@ -3321,15 +3321,55 @@ export function registerBotHandlers(bot) {
     const speakerLabel = userIsOwner ? 'Sandy (Boss)' : senderName;
     const contextualPrompt = isPrivate ? promptText : `[${speakerLabel}]: ${promptText}`;
     recordUserMessage(chatId, contextualPrompt);
+
+    const detectedIntent = detectUserIntent(promptText);
+    const activeModel = getActiveModelId() || 'gpt-6-luna';
+
+    // ⚡ INSTANT FAST-PATH FOR CASUAL GREETINGS (<10ms Response Latency)
+    const wordCount = promptText.trim().split(/\s+/).length;
+    if (detectedIntent === 'greeting' && !replyContext && wordCount <= 4) {
+      const GREETINGS = [
+        `Hey ${speakerLabel}! 🦝🐾 Tail fluffed and ready for action! What are we hacking together today? 🍕⚡`,
+        `Yo ${speakerLabel}! Rocket reporting for duty! 🦝 Mischief level high, systems nominal. What's up? 🍕😈`,
+        `Sup ${speakerLabel}! 🦝 Ready to hack the day or grab some pizza? 🍕🐾`,
+      ];
+      const pick = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
+      recordAssistantMessage(chatId, pick, 0, activeModel);
+      return ctx.reply(pick, {
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    }
+
     const messages = buildChatContext(chatId, contextualPrompt, {
       senderId: userId,
       senderName: speakerLabel,
       replyContext,
       userIsOwner,
     });
-    const isOwnerPrivateDm = isPrivate && userIsOwner;
-    const reasoningEffort = isOwnerPrivateDm ? 'xhigh' : 'low';
-    const activeModel = getActiveModelId() || 'gpt-6-luna';
+
+    // ⚡ HIGH-SPEED REASONING & TOKEN ALLOCATION:
+    // Default to 'none' (zero hidden thinking delay, sub-second responses)
+    // Only engage deep reasoning if user explicitly requests deep proofs, architecture audits, or complex math
+    const isExplicitDeepRequested = /(?:deep\s+reasoning|think\s+deeply|deep\s+research|audit\s+code|complex\s+math|prove|step\s+by\s+step\s+proof)/i.test(promptText);
+    const configuredSpeedMode = getConfig('sandy_speed_mode', 'fast');
+    const globalReasoning = getConfig('reasoning_effort', 'none');
+
+    let reasoningEffort = 'none';
+    if (isExplicitDeepRequested || ((configuredSpeedMode === 'deep' || configuredSpeedMode === 'max') && globalReasoning !== 'none')) {
+      reasoningEffort = globalReasoning !== 'none' ? globalReasoning : 'low';
+    }
+
+    const explicitLimit = extractExplicitWordLimit(promptText);
+    const targetMaxTokens = explicitLimit
+      ? Math.min(explicitLimit * 2, 1000)
+      : isExplicitDeepRequested
+      ? 750
+      : userIsOwner
+      ? 450
+      : 350;
+
+    // Detect if tools are needed or if this is purely conversational (saving 1-2s of tool-evaluation latency)
+    const needsTools = /(?:pdf|generate|draw|photo|image|search|browse|ban|kick|mute|unmute|poll|quiz|drive|remind|schedule|weather|calc|who are you|open app)/i.test(promptText);
 
     await ctx.replyWithChatAction('typing').catch(() => {});
     const typingPulse = setInterval(() => {
@@ -3352,8 +3392,8 @@ export function registerBotHandlers(bot) {
         messages,
         chatId: String(chatId),
         reasoningEffort,
-        maxTokens: userIsOwner ? 1000 : 500,
-        tools: ROCKET_TOOL_DEFINITIONS,
+        maxTokens: targetMaxTokens,
+        tools: needsTools ? ROCKET_TOOL_DEFINITIONS : null,
         toolExecutor: executeRocketTool,
         context: toolContext,
       });

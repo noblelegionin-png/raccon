@@ -150,6 +150,35 @@ async function runBenchmark() {
       if (!data.ok) throw new Error('State failed');
     });
 
+    // 13. Web Dashboard /api/status (Fast-Cached)
+    await measure('GET /api/status (Web Dashboard Status)', async () => {
+      const res = await fetch(`${baseUrl}/api/status`);
+      const data = await res.json();
+      if (!data.ok) throw new Error('Status failed');
+    });
+
+    // 14. PDF Generation (Fresh)
+    await measure('POST /api/rock3t/study/pdf (PDF Generation)', async () => {
+      const res = await fetch(`${baseUrl}/api/rock3t/study/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dashboard-access-key': 'master_dashboard_key_2026' },
+        body: JSON.stringify({ topic: 'Artificial Intelligence', pages: 2 })
+      });
+      if (res.status !== 200) throw new Error('PDF failed');
+      await res.arrayBuffer();
+    });
+
+    // 15. PDF Generation (Memory Cached)
+    await measure('POST /api/rock3t/study/pdf (PDF Cached)', async () => {
+      const res = await fetch(`${baseUrl}/api/rock3t/study/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dashboard-access-key': 'master_dashboard_key_2026' },
+        body: JSON.stringify({ topic: 'Artificial Intelligence', pages: 2 })
+      });
+      if (res.status !== 200) throw new Error('PDF cached failed');
+      await res.arrayBuffer();
+    });
+
     console.log('\n✅ All Latency Tests Completed Successfully!');
     const avg = results.reduce((a, b) => a + b.duration, 0) / results.length;
     console.log(`📊 Average Latency Across Everything: ${avg.toFixed(2)} ms`);

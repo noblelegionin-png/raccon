@@ -217,6 +217,10 @@ export function createWebServer() {
   });
 
   // System status & health summary
+  // High-performance cached health status for web dashboard
+  let cachedProviderHealth = null;
+  let lastProviderHealthCheck = 0;
+
   app.get('/api/status', async (req, res) => {
     try {
       const switches = getAllConfig();
@@ -225,10 +229,15 @@ export function createWebServer() {
       const usageStats = getTokenUsageStats();
       const storageStatus = googleDriveAdapter.getStatus();
 
-      // Lightweight health check against ScaleMax
-      const providerHealth = await scaleMaxAdapter.checkHealth(activeModel);
-      if (providerHealth.latencyMs) {
-        recordModelLatency(activeModel, providerHealth.latencyMs);
+      // Lightweight 15-second cached health check against ScaleMax
+      let providerHealth = cachedProviderHealth;
+      if (!providerHealth || (Date.now() - lastProviderHealthCheck > 15000)) {
+        providerHealth = await scaleMaxAdapter.checkHealth(activeModel);
+        cachedProviderHealth = providerHealth;
+        lastProviderHealthCheck = Date.now();
+        if (providerHealth.latencyMs) {
+          recordModelLatency(activeModel, providerHealth.latencyMs);
+        }
       }
 
       res.json({

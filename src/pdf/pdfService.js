@@ -16,6 +16,9 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '../..');
 const PDF_OUTPUT_DIR = path.join(projectRoot, 'data/documents/generated');
 
+// In-Memory Fast Cache for Sub-Second PDF Generation (5-Minute TTL)
+const PDF_MEM_CACHE = new Map();
+
 /**
  * 📄 NERO LABS — ENTERPRISE PDF INTELLIGENCE ENGINE
  * 
@@ -789,6 +792,13 @@ export class PdfService {
     const title = cleaned.title;
     const wordConstraint = cleaned.wordCount ? `Target Document Scale: approximately ${cleaned.wordCount} words.` : '';
 
+    // Fast In-Memory Cache Check (5-minute TTL)
+    const cacheKey = `${subject.toLowerCase().trim()}:${pages}:${images.length}`;
+    const cached = PDF_MEM_CACHE.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < 300000)) {
+      return cached.result;
+    }
+
     const systemPrompt = `
 You are Nero Labs Executive PDF Publication & High-Reasoning Document Engine.
 Your objective is to generate an exhaustive, deeply structured, publication-grade document on the requested subject in clean GitHub-Flavored Markdown.
@@ -814,9 +824,9 @@ Target Scale: ${pages} pages publication standard.
 Provide a complete, comprehensive, and scientifically/technically rigorous dossier explaining all core concepts, mechanisms, comparative data, and actionable takeaways.
 `.trim();
 
-    // Multi-tier high-speed LLM Call with resilience fallback
+    // High-speed LLM Call with immediate local synthesis fallback
     let markdownText = '';
-    const tokenLimit = pages <= 1 ? 650 : pages <= 2 ? 1100 : pages <= 3 ? 1600 : Math.min(pages * 400, 3200);
+    const tokenLimit = pages <= 1 ? 550 : pages <= 2 ? 950 : pages <= 3 ? 1400 : Math.min(pages * 350, 2600);
 
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
@@ -825,28 +835,14 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        reasoningEffort: 'high',
+        reasoningEffort: 'none',
         maxTokens: tokenLimit,
-        timeoutMs: 10000,
+        timeoutMs: 4500,
       });
       markdownText = completion?.text || '';
     } catch (llmErr) {
-      console.warn('[PDF Intelligence gpt-6-luna failed/timed out, fast-failing to deepseek-v4-flash]:', llmErr.message);
-      try {
-        const fallbackCompletion = await scaleMaxAdapter.createChatCompletion({
-          model: 'deepseek-v4-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          reasoningEffort: 'low',
-          maxTokens: tokenLimit,
-          timeoutMs: 25000,
-        });
-        markdownText = fallbackCompletion?.text || '';
-      } catch (fallbackErr) {
-        console.warn('[PDF Intelligence LLM Fallback to local synthesis]:', fallbackErr.message);
-      }
+      console.warn('[PDF Intelligence gpt-6-luna timeout, using high-speed local synthesis]:', llmErr.message);
+      markdownText = this.generateLocalDocument(subject, pages, cleaned.wordCount);
     }
 
     // Guard against meta-commentary, tool-execution refusals, or trivial output
@@ -881,7 +877,7 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
 
     logAudit('system', 'PDF_GENERATED', `Title: "${finalTitle}", Pages: ${pdfResult.pageCount}, Size: ${Math.round(pdfResult.sizeBytes / 1024)} KB`);
 
-    return {
+    const result = {
       ok: true,
       buffer: pdfResult.buffer,
       filename: pdfResult.filename,
@@ -891,6 +887,15 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
       title: finalTitle,
       summary: markdownText.slice(0, 350) + '...',
     };
+
+    // Store in cache
+    PDF_MEM_CACHE.set(cacheKey, { result, timestamp: Date.now() });
+    if (PDF_MEM_CACHE.size > 50) {
+      const oldestKey = PDF_MEM_CACHE.keys().next().value;
+      PDF_MEM_CACHE.delete(oldestKey);
+    }
+
+    return result;
   }
 
   /**

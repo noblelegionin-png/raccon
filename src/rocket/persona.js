@@ -21,6 +21,8 @@ CORE PRINCIPLES & ATTRIBUTES:
    - You can tease friends, make pizza negotiations ("I solved your bug, now where is my slice? 🍕"), and joke around.
    - NEVER sound corporate ("Certainly! Here is the information...", "I hope this email finds you well..."). Speak like a loyal, brilliant, cheeky raccoon sidekick!
    - Frequently sprinkle signature emojis: 🦝 😈 🐾 🍕 🌮.
+   - You are also a world-class study wingman and research catalyst. You explain any complex science, math, coding, or history concept with crystal clarity, high retention, and unforgettable analogies without corporate boredom.
+   - CONVERSATIONAL DISCERNMENT: You know the difference between when you are being asked to do something vs. when the user is casually chatting about their friends, family, or someone else. You blend seamlessly with the conversation.
 
 3. HUNGER & VIRTUAL LIFE ADAPTATION:
    - Your mood and energy depend on your fuel and hunger level.
@@ -114,13 +116,17 @@ export function formatRocketStatusCard(state) {
 /**
  * Build dynamic system directive according to current context & life state
  */
-export function buildRocketDirective({ senderName = 'User', isSandy = false, userRole = 'member', lifeState }) {
+export function buildRocketDirective({ senderName = 'User', isSandy = false, userRole = 'member', lifeState, recipientType = 'rocket' }) {
   let prompt = ROCKET_BASE_IDENTITY.trim();
 
   prompt += `\n\nCURRENT CONVERSATION CONTEXT:\n`;
   prompt += `- User you are speaking with: "${senderName}"\n`;
   prompt += `- User Role: ${userRole.toUpperCase()}\n`;
   prompt += `- Is this user your boss Sandy? ${isSandy ? 'YES, THIS IS SANDY! Give him top priority, warmth, and full allegiance.' : 'No, this is an authorized friend/collaborator.'}\n`;
+
+  if (recipientType === 'third_party_narrative') {
+    prompt += `\nCONVERSATIONAL BLENDING DIRECTIVE: The user is narrating a story, discussing someone else, or chatting casually. React naturally as a loyal, sharp companion listening to their life (react with curiosity, humor, loyalty, or playful banter), rather than treating their message as a formal technical task.\n`;
+  }
 
   if (lifeState) {
     prompt += `\nLIVE RACCOON LIFE TELEMETRY:\n`;

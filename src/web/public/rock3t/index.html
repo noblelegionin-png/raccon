@@ -75,6 +75,7 @@
           <div class="os-widget">
             <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">⚡ Quick Actions</h3>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn-os" onclick="ROCK3T_OS.openApp('study')">🔬 Study Hub</button>
               <button class="btn-os" onclick="ROCK3T_OS.openApp('games')">🎮 Quick Match</button>
               <button class="btn-os" onclick="ROCK3T_OS.openApp('canvas')">🎨 Quick Sketch</button>
               <button class="btn-os" onclick="ROCK3T_OS.openApp('settings')">⚙️ Edit Profile</button>
@@ -96,6 +97,10 @@
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('store')">
               <div class="app-icon-badge" style="background: linear-gradient(135deg, #00b4d8, #0077b6); color: #fff;">🛍️</div>
               <span class="app-label">Store</span>
+            </button>
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('study')">
+              <div class="app-icon-badge" style="background: linear-gradient(135deg, #4361ee, #3a0ca3); color: #fff;">🔬</div>
+              <span class="app-label">Study Hub</span>
             </button>
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('canvas')">
               <div class="app-icon-badge" style="background: linear-gradient(135deg, #ff006e, #8338ec); color: #fff;">🎨</div>
@@ -121,6 +126,10 @@
           <h2 class="page-title">Tools & Studio</h2>
           <p class="page-subtitle">Creative apps & utilities</p>
           <div class="app-grid">
+            <button class="app-icon-item" onclick="ROCK3T_OS.openApp('study')">
+              <div class="app-icon-badge" style="background: #4361ee; color: #fff;">🔬</div>
+              <span class="app-label">Study Hub</span>
+            </button>
             <button class="app-icon-item" onclick="ROCK3T_OS.openApp('canvas')">
               <div class="app-icon-badge" style="background: #ff006e; color: #fff;">🎨</div>
               <span class="app-label">Canvas</span>
@@ -159,9 +168,9 @@
     <!-- PERSISTENT BOTTOM DOCK -->
     <nav class="bottom-dock">
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('store')" title="Store">🛍️</button>
+      <button class="dock-icon" onclick="ROCK3T_OS.openApp('study')" title="Study Hub">🔬</button>
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('canvas')" title="Canvas">🎨</button>
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('games')" title="Games">🎮</button>
-      <button class="dock-icon" onclick="ROCK3T_OS.openApp('maps')" title="Maps">🗺️</button>
       <button class="dock-icon" onclick="ROCK3T_OS.openApp('settings')" title="Settings">⚙️</button>
     </nav>
 
@@ -393,6 +402,144 @@
       </div>
     </div>
 
+    <!-- =====================================================================
+         APP WINDOW 6: STUDY & RESEARCH HUB
+         ===================================================================== -->
+    <div class="app-window" id="appWindowStudy">
+      <div class="app-window-header">
+        <button class="app-back-btn" onclick="ROCK3T_OS.closeApp()">✕</button>
+        <span class="app-window-title">Study & Research Hub 🔬</span>
+        <button class="btn-os primary" style="padding: 4px 10px; font-size: 0.75rem;" onclick="ROCK3T_STUDY.quickExportPdf()">PDF 📑</button>
+      </div>
+      <div class="app-window-body" style="padding: 16px;">
+        <!-- TOPIC SEARCH BAR & QUICK PILLS -->
+        <div class="study-search-container">
+          <div class="study-search-box">
+            <span class="study-search-icon">🔍</span>
+            <input type="text" id="studyTopicInput" class="study-input" placeholder="Topic to master (e.g. Transformers, Photosynthesis)..." onkeydown="if(event.key==='Enter') ROCK3T_STUDY.executeCurrentTab()">
+            <button class="btn-os primary" style="padding: 6px 14px; font-size: 0.8rem;" onclick="ROCK3T_STUDY.executeCurrentTab()">Explore 🚀</button>
+          </div>
+          <div class="study-pill-row">
+            <span class="study-pill" onclick="ROCK3T_STUDY.setTopicAndRun('Transformers in AI')">⚡ Transformers</span>
+            <span class="study-pill" onclick="ROCK3T_STUDY.setTopicAndRun('Photosynthesis')">🧬 Photosynthesis</span>
+            <span class="study-pill" onclick="ROCK3T_STUDY.setTopicAndRun('Quantum Computing')">⚛️ Quantum Computing</span>
+            <span class="study-pill" onclick="ROCK3T_STUDY.setTopicAndRun('Black Holes')">🌌 Black Holes</span>
+            <span class="study-pill" onclick="ROCK3T_STUDY.setTopicAndRun('Neural Networks')">🧠 Neural Networks</span>
+          </div>
+        </div>
+
+        <!-- STUDY HUB MODE TABS -->
+        <div class="study-tab-bar">
+          <button class="study-tab-btn active" data-tab="masterclass" onclick="ROCK3T_STUDY.switchTab('masterclass')">💡 Masterclass</button>
+          <button class="study-tab-btn" data-tab="flashcards" onclick="ROCK3T_STUDY.switchTab('flashcards')">🗂️ Flashcards</button>
+          <button class="study-tab-btn" data-tab="quiz" onclick="ROCK3T_STUDY.switchTab('quiz')">🎯 Quiz Arena</button>
+          <button class="study-tab-btn" data-tab="research" onclick="ROCK3T_STUDY.switchTab('research')">🔬 Deep Research</button>
+          <button class="study-tab-btn" data-tab="pdf" onclick="ROCK3T_STUDY.switchTab('pdf')">📑 PDF Pack</button>
+        </div>
+
+        <!-- TAB 1: MASTERCLASS -->
+        <div class="study-tab-content active" id="studyTabMasterclass">
+          <div class="study-actions-row">
+            <span class="study-badge" id="studyMasterclassTopic">Topic: Ready</span>
+            <button class="btn-os" style="font-size: 0.75rem; padding: 4px 8px;" onclick="ROCK3T_STUDY.copyMasterclassText()">📋 Copy Notes</button>
+          </div>
+          <div class="study-content-card" id="masterclassOutput">
+            <div class="study-placeholder">
+              <div style="font-size: 2.2rem; margin-bottom: 8px;">🎓</div>
+              <h3>Ready to Master Any Concept</h3>
+              <p>Type a topic above or tap one of the quick tags to generate a 6-part ultra-high retention breakdown with analogies, formulas, and traps.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: FLASHCARDS -->
+        <div class="study-tab-content" id="studyTabFlashcards">
+          <div class="study-actions-row">
+            <span class="study-badge" id="flashcardCounter">Card 1 of 0</span>
+            <button class="btn-os" style="font-size: 0.75rem; padding: 4px 8px;" onclick="ROCK3T_STUDY.shuffleFlashcards()">🔀 Shuffle</button>
+          </div>
+          <div class="flashcard-scene" onclick="ROCK3T_STUDY.flipFlashcard()">
+            <div class="flashcard-card" id="flashcardElement">
+              <div class="flashcard-face flashcard-front">
+                <span class="flashcard-tag">CONCEPT / PROMPT</span>
+                <p class="flashcard-text" id="flashcardFrontText">Enter a topic to generate flashcards!</p>
+                <span class="flashcard-hint">Tap card to flip 🔄</span>
+              </div>
+              <div class="flashcard-face flashcard-back">
+                <span class="flashcard-tag" style="background: rgba(255,255,255,0.2); color: #fff;">CORE INSIGHT / ANSWER</span>
+                <p class="flashcard-text" id="flashcardBackText">The answer and high-yield takeaway will appear here.</p>
+                <span class="flashcard-hint" style="color: rgba(255,255,255,0.8);">Tap card to flip back 🔄</span>
+              </div>
+            </div>
+          </div>
+          <div class="flashcard-controls">
+            <button class="btn-os" onclick="ROCK3T_STUDY.prevFlashcard()">⬅ Prev</button>
+            <button class="btn-os primary" onclick="ROCK3T_STUDY.flipFlashcard()">🔄 Flip</button>
+            <button class="btn-os" onclick="ROCK3T_STUDY.nextFlashcard()">Next ➡</button>
+          </div>
+        </div>
+
+        <!-- TAB 3: QUIZ ARENA -->
+        <div class="study-tab-content" id="studyTabQuiz">
+          <div class="quiz-score-banner">
+            <div>
+              <span style="font-size: 0.8rem; color: var(--os-text-muted);">Current Score</span>
+              <div style="font-size: 1.25rem; font-weight: 800;" id="quizScoreDisplay">0 / 0 🌟</div>
+            </div>
+            <button class="btn-os" style="font-size: 0.75rem; padding: 4px 10px;" onclick="ROCK3T_STUDY.restartQuiz()">🔄 Restart Quiz</button>
+          </div>
+          <div id="quizContainer" style="display: flex; flex-direction: column; gap: 14px; margin-top: 12px;">
+            <div class="study-placeholder">
+              <div style="font-size: 2.2rem; margin-bottom: 8px;">🎯</div>
+              <h3>Interactive Active-Recall Quiz</h3>
+              <p>Test your knowledge with 5 high-yield questions generated on demand with instant feedback!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: DEEP RESEARCH -->
+        <div class="study-tab-content" id="studyTabResearch">
+          <div class="study-actions-row">
+            <span class="study-badge" id="studyResearchTopic">Research Dossier</span>
+            <button class="btn-os" style="font-size: 0.75rem; padding: 4px 8px;" onclick="ROCK3T_STUDY.copyResearchText()">📋 Copy Dossier</button>
+          </div>
+          <div class="study-content-card" id="researchOutput">
+            <div class="study-placeholder">
+              <div style="font-size: 2.2rem; margin-bottom: 8px;">🔬</div>
+              <h3>Executive Academic Dossier</h3>
+              <p>Conduct state-of-the-art literature review, comparative methodology matrices, and emerging breakthroughs.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 5: PDF STUDY PACK -->
+        <div class="study-tab-content" id="studyTabPdf">
+          <div class="study-content-card" style="text-align: center; padding: 24px;">
+            <div style="font-size: 3rem; margin-bottom: 12px;">📑</div>
+            <h3 style="font-size: 1.2rem; font-weight: 800; margin-bottom: 6px;">Publication-Grade Study Guide</h3>
+            <p style="color: var(--os-text-muted); font-size: 0.85rem; max-width: 340px; margin: 0 auto 18px;">
+              Generates a university-level revision dossier with syllabus breakdown, proofs, tables, numericals, and cheatsheets.
+            </p>
+            <div style="display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;">
+              <label style="font-size: 0.85rem; font-weight: 600;">Length:</label>
+              <select id="studyPdfPages" class="btn-os" style="padding: 6px 12px;">
+                <option value="1">1 Page (Quick Cheat Sheet)</option>
+                <option value="3" selected>3 Pages (Full Revision Dossier)</option>
+                <option value="5">5 Pages (Exhaustive Course Syllabus)</option>
+              </select>
+            </div>
+            <div>
+              <button class="btn-os primary" id="btnGenerateStudyPdf" style="padding: 10px 24px; font-size: 0.95rem;" onclick="ROCK3T_STUDY.downloadStudyPdf()">
+                🚀 Generate & Download PDF
+              </button>
+            </div>
+            <div id="pdfDownloadStatus" style="margin-top: 12px; font-size: 0.8rem; color: var(--os-text-muted);"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 
   <!-- APPLICATION SCRIPTS -->
@@ -401,5 +548,6 @@
   <script src="canvas.js"></script>
   <script src="settings.js"></script>
   <script src="companion.js"></script>
+  <script src="study.js"></script>
 </body>
 </html>

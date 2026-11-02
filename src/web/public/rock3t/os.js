@@ -230,6 +230,7 @@ const ROCK3T_OS = {
       win.classList.add('open');
       // Trigger app-specific activation hooks
       if (appId === 'games') ROCK3T_GAMES?.onAppOpened();
+      if (appId === 'study') ROCK3T_STUDY?.onAppOpened();
       if (appId === 'canvas') ROCK3T_CANVAS?.onAppOpened();
       if (appId === 'store') this.loadStoreApps();
       if (appId === 'settings') ROCK3T_SETTINGS?.onAppOpened();

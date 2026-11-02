@@ -124,6 +124,17 @@ export const DEFAULT_STORE_APPS = [
     developer: 'Nero Labs',
   },
   {
+    id: 'study',
+    name: 'Study Hub',
+    category: 'Education',
+    icon: '🔬',
+    color: '#4361ee',
+    description: 'Advanced Study & Research Hub: Concept Explainer, Interactive Flashcards, Quiz Arena, and 1-Click PDF Study Guides.',
+    installedByDefault: true,
+    version: '1.2.0',
+    developer: 'Nero Labs',
+  },
+  {
     id: 'notes',
     name: 'Rocket Notes',
     category: 'Productivity',

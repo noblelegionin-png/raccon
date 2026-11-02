@@ -11,9 +11,7 @@ services:
       - key: DATABASE_PATH
         value: /app/data/nerolabs.db
       - key: TELEGRAM_ENABLED
-        value: "true"
-      - key: TELEGRAM_BOT_TOKEN
-        value: "8283843309:AAECXqKTNz1PdTgsJULDwie8mBrjwZep8Cg"
+        value: "false"
       - key: TELEGRAM_OWNER_ID
         value: "8685232094"
       - key: SCALEMAX_API_KEY

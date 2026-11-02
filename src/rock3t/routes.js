@@ -12,6 +12,7 @@ import { executeRock3tTool, ROCK3T_TOOLS } from './smartTools.js';
 import { rocketAuthMiddleware } from '../rocket/rbac.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
+import { rocketStudyService } from '../study/studyService.js';
 
 export const rock3tRouter = express.Router();
 
@@ -354,6 +355,85 @@ BEHAVIOR:
       toolResult,
       appContext,
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 13. POST /api/rock3t/study/explain
+ */
+rock3tRouter.post('/study/explain', async (req, res) => {
+  try {
+    const { topic = '', level = 'deep' } = req.body;
+    const user = req.rocketUser;
+    const result = await rocketStudyService.explainTopic({
+      topic,
+      level,
+      senderName: user.first_name || 'Friend',
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 14. POST /api/rock3t/study/quiz
+ */
+rock3tRouter.post('/study/quiz', async (req, res) => {
+  try {
+    const { topic = '', count = 5 } = req.body;
+    const result = await rocketStudyService.generateQuiz({ topic, count });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 15. POST /api/rock3t/study/flashcards
+ */
+rock3tRouter.post('/study/flashcards', async (req, res) => {
+  try {
+    const { topic = '', count = 6 } = req.body;
+    const result = await rocketStudyService.generateFlashcards({ topic, count });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 16. POST /api/rock3t/study/research
+ */
+rock3tRouter.post('/study/research', async (req, res) => {
+  try {
+    const { topic = '', focus = '' } = req.body;
+    const result = await rocketStudyService.deepResearch({ topic, focus });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 17. POST /api/rock3t/study/pdf
+ */
+rock3tRouter.post('/study/pdf', async (req, res) => {
+  try {
+    const { topic = '', pages = 3 } = req.body;
+    const result = await rocketStudyService.generateStudyPackPdf({
+      topic,
+      targetPages: parseInt(pages, 10) || 3,
+    });
+
+    if (result && result.buffer) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename || 'study_guide.pdf'}"`);
+      return res.send(result.buffer);
+    }
+    res.status(500).json({ ok: false, error: 'Could not generate PDF study pack.' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

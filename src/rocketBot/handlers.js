@@ -14,6 +14,8 @@ import {
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { pdfService } from '../pdf/pdfService.js';
+import { discernConversationalAddress } from '../conversation/addressDiscernment.js';
+import { rocketStudyService } from '../study/studyService.js';
 
 export function registerRocketHandlers(bot) {
   const miniAppUrl = config.rocketMiniAppUrl || config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
@@ -178,13 +180,18 @@ export function registerRocketHandlers(bot) {
       `• /status — Check Rocket's life, mood, hunger & sleep\n` +
       `• /feed [pizza|taco] — Feed Rocket directly\n` +
       `• /pdf <topic> — Generate executive publication PDF\n` +
+      `• /study <topic> — 🔬 Concept Masterclass with active recall\n` +
+      `• /quiz <topic> — 🎯 5-question interactive study quiz\n` +
+      `• /flashcards <topic> — 🗂️ High-yield study flashcard deck\n` +
+      `• /study_pack <topic> — 📑 Publication Study Guide PDF\n` +
+      `• /research <topic> — 🔬 Academic & scientific deep research\n` +
       `• /sleep — View current sleep schedule & rest timer\n` +
       `• /wake — Emergency wake-up trigger\n` +
       `• /refill — Sandy only food supply grant\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `_Base Fuel Rule: 1 Pizza = 5,000 model tokens._\n` +
-      `_Task Fee: 1 Pizza for PDF Generation / Reading._\n` +
-      `_1h guaranteed rest in every 12h cycle._ 🍕🐾`;
+      `_Task Fee: 1 Pizza for Heavy Document Tasks._\n` +
+      `_Intelligent Conversational Discernment Active._ 🍕🐾`;
     await ctx.reply(helpText, { parse_mode: 'Markdown' });
   });
 
@@ -291,6 +298,164 @@ export function registerRocketHandlers(bot) {
     await handleRocketPdfGeneration(ctx, input, targetPages, isOwner, contextId, userName);
   });
 
+  // 10. /study, /explain, /learn commands
+  bot.command(['study', 'explain', 'learn'], async (ctx) => {
+    const input = (ctx.match || '').trim();
+    const userName = ctx.from?.first_name || 'Friend';
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+
+    if (!input) {
+      return ctx.reply(
+        `🔬 *ROCKET STUDY MASTERCLASS* 🦝💡\n\n` +
+        `Usage:\n` +
+        `• \`/study <topic>\` — Complete 6-point concept breakdown & active recall\n` +
+        `• \`/quiz <topic>\` — 5-question test with explanations\n` +
+        `• \`/flashcards <topic>\` — Rapid spaced repetition flashcards\n` +
+        `• \`/study_pack <topic>\` — 1-Click publication PDF study dossier\n` +
+        `• \`/research <topic>\` — Academic & scientific deep research\n\n` +
+        `_Example:_ \`/study Photosynthesis\` or \`/study Quantum Computing\` ⚡`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    const typingHeartbeat = setInterval(() => {
+      ctx.replyWithChatAction('typing').catch(() => {});
+    }, 3500);
+
+    try {
+      const result = await rocketStudyService.explainTopic({
+        topic: input,
+        senderName: userName,
+      });
+
+      rocketLifeEngine.consumeTokens(contextId, 250, 600, 'gpt-6-luna');
+      await ctx.reply(result.formattedText, {
+        parse_mode: 'Markdown',
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    } catch (err) {
+      console.error('[RocketBot Study Error]:', err.message);
+      await ctx.reply(`🦝⚠️ Whoops, dropped my study flashcards! (Error: ${err.message})`);
+    } finally {
+      clearInterval(typingHeartbeat);
+    }
+  });
+
+  // 11. /quiz command
+  bot.command('quiz', async (ctx) => {
+    const topic = (ctx.match || '').trim();
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+
+    if (!topic) {
+      return ctx.reply('🎯 *Rocket Quiz Arena*\n\nUsage: `/quiz <topic>` (e.g. `/quiz Physics Motion` or `/quiz JavaScript Closures`)', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    try {
+      const quizRes = await rocketStudyService.generateQuiz({ topic });
+      rocketLifeEngine.consumeTokens(contextId, 200, 450, 'deepseek-v4-flash');
+
+      let quizText = `🎯 *ROCKET STUDY QUIZ: ${topic.toUpperCase()}* 🦝⚡\n`;
+      quizText += `_Test your active recall! Answers revealed below:_\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      quizRes.questions.forEach((q, idx) => {
+        quizText += `*${idx + 1}. ${q.question}*\n`;
+        q.options.forEach((opt) => {
+          quizText += `  ${opt}\n`;
+        });
+        quizText += `\n`;
+      });
+
+      quizText += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      quizText += `🔑 *ANSWER KEY & EXPLANATIONS:*\n\n`;
+      quizRes.questions.forEach((q, idx) => {
+        quizText += `*Q${idx + 1} Answer: [Option ${q.correctAnswer}]*\n_${q.explanation}_\n\n`;
+      });
+
+      await ctx.reply(quizText, { parse_mode: 'Markdown' });
+    } catch (err) {
+      await ctx.reply(`🦝⚠️ Couldn't generate quiz: ${err.message}`);
+    }
+  });
+
+  // 12. /flashcards command
+  bot.command('flashcards', async (ctx) => {
+    const topic = (ctx.match || '').trim();
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+
+    if (!topic) {
+      return ctx.reply('🗂️ *Rocket High-Yield Flashcards*\n\nUsage: `/flashcards <topic>` (e.g. `/flashcards Mitochondria` or `/flashcards Linear Regression`)', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    try {
+      const fcRes = await rocketStudyService.generateFlashcards({ topic });
+      rocketLifeEngine.consumeTokens(contextId, 180, 350, 'deepseek-v4-flash');
+
+      let fcText = `🗂️ *HIGH-YIELD FLASHCARDS: ${topic.toUpperCase()}* 🦝💡\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      fcRes.flashcards.forEach((card, i) => {
+        fcText += `*CARD ${i + 1}*\n`;
+        fcText += `❓ *Concept:* ${card.front}\n`;
+        fcText += `💡 *High-Yield Answer:* _${card.back}_\n\n`;
+      });
+
+      await ctx.reply(fcText, { parse_mode: 'Markdown' });
+    } catch (err) {
+      await ctx.reply(`🦝⚠️ Flashcard deck error: ${err.message}`);
+    }
+  });
+
+  // 13. /study_pack and /research_pack commands
+  bot.command(['study_pack', 'studypack', 'research_pack', 'studyguide'], async (ctx) => {
+    const input = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id);
+    const userName = ctx.from?.first_name || 'Friend';
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+
+    if (!input) {
+      return ctx.reply(
+        `📑 *ROCKET STUDY PACK GENERATOR* 🦝🎓\n\n` +
+        `Usage:\n` +
+        `• \`/study_pack <topic>\` — Complete publication study guide with syllabus, theory, formulas & practice problems.\n` +
+        `• \`/study_pack 4 pages on Organic Chemistry\`\n\n` +
+        `_Task Fee: 1 Pizza per dossier. High-reasoning publication engine._ 🍕📘`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const pages = pdfService.extractTargetPages(input) || 3;
+    const studyPrompt = `Comprehensive University-Level Study Guide & Exam Dossier on "${input}". Include course syllabus breakdown, core theoretical proofs, comparative mechanism tables, practice numericals, and revision cheat sheet.`;
+    await handleRocketPdfGeneration(ctx, studyPrompt, pages, isOwner, contextId, userName);
+  });
+
+  // 14. /research command
+  bot.command('research', async (ctx) => {
+    const topic = (ctx.match || '').trim();
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+
+    if (!topic) {
+      return ctx.reply('🔬 *Rocket Academic & Scientific Deep Research*\n\nUsage: `/research <topic>` (e.g. `/research Quantum Supremacy` or `/research Solid State Batteries`)', { parse_mode: 'Markdown' });
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    try {
+      const res = await rocketStudyService.deepResearch({ topic });
+      rocketLifeEngine.consumeTokens(contextId, 300, 800, 'gpt-6-luna');
+      await ctx.reply(res.report, {
+        parse_mode: 'Markdown',
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    } catch (err) {
+      await ctx.reply(`🦝⚠️ Research engine hiccup: ${err.message}`);
+    }
+  });
+
   // Inline callback query handlers
   bot.on('callback_query:data', async (ctx) => {
     const data = ctx.callbackQuery.data;
@@ -314,26 +479,60 @@ export function registerRocketHandlers(bot) {
     if (text.startsWith('/')) return; // handled by commands
 
     const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-    const botUsername = ctx.me.username;
+    const isOwner = isSandy(ctx.from?.id);
+    const userName = ctx.from?.first_name || 'Friend';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+    const botUsername = ctx.me?.username || 'R0CK3TAI';
+    const botId = ctx.me?.id;
 
-    // In groups, only respond if mentioned, replied to, or name mentioned
-    if (isGroup) {
-      const isMentioned = text.includes(`@${botUsername}`) || text.toLowerCase().includes('rocket');
-      const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
-      if (!isMentioned && !isReplyToBot) {
-        return; // ignore non-directed chat in groups
+    // Discern conversational address: Is the user talking to Rocket or someone else?
+    const address = discernConversationalAddress({
+      text,
+      isGroup,
+      botUsername,
+      botId,
+      replyToMessage: ctx.message.reply_to_message,
+      isOwner,
+    });
+
+    // In group chats: Never interrupt if talking to another human or general chat!
+    if (isGroup && !address.isAddressedToRocket) {
+      return; // Silent observation, blends seamlessly with the group!
+    }
+
+    // In 1-on-1 private chat: Check if user is asking bot to wait or talking to someone else
+    if (!isGroup && address.isTalkingToSomeoneElse) {
+      if (/\b(?:don'?t\s+reply|shh|wait\s+bro|holding|on\s+call|busy\s+talking|call\s+pe\s+hu)\b/i.test(text)) {
+        return ctx.reply('🤐🐾 *zips lips and nods quietly* Stealth mode on! Take your time, boss!');
       }
     }
 
-    const isOwner = isSandy(ctx.from.id);
-    const userName = ctx.from.first_name || 'Friend';
-    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const state = rocketLifeEngine.getState(contextId);
 
-    // 0. PDF Generation Request in Natural Language
+    // 0a. PDF Generation Request in Natural Language
     if (pdfService.isPdfGenerationRequest(text)) {
       const targetPages = pdfService.extractTargetPages(text);
       return handleRocketPdfGeneration(ctx, text, targetPages, isOwner, contextId, userName);
+    }
+
+    // 0b. Natural Language Study / Explain Request
+    const studyPromptMatch = text.match(/^(?:teach\s+me|explain|study\s+guide\s+for|masterclass\s+on)\s+(.+)/i);
+    if (studyPromptMatch && !pdfService.isPdfGenerationRequest(text)) {
+      const topicToExplain = studyPromptMatch[1].trim();
+      ctx.replyWithChatAction('typing').catch(() => {});
+      try {
+        const studyRes = await rocketStudyService.explainTopic({
+          topic: topicToExplain,
+          senderName: userName,
+        });
+        rocketLifeEngine.consumeTokens(contextId, 250, 600, 'gpt-6-luna');
+        return ctx.reply(studyRes.formattedText, {
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+      } catch (stErr) {
+        console.warn('[NL Study Fallthrough]:', stErr.message);
+      }
     }
 
     // 1. Sandy Abuse Guard
@@ -369,6 +568,7 @@ export function registerRocketHandlers(bot) {
       isSandy: isOwner,
       userRole: isOwner ? 'owner' : 'member',
       lifeState: state,
+      recipientType: address.recipientType,
     });
 
     const messages = [

@@ -345,6 +345,9 @@ export class ScaleMaxAdapter {
                 maxTokens,
                 max_tokens,
                 temperature,
+                timeoutMs: effectiveTimeout,
+                tools,
+                tool_choice,
               });
             }
           } catch (pErr) {

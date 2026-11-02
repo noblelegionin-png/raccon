@@ -825,10 +825,10 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
       });
       markdownText = completion?.text || '';
     } catch (llmErr) {
-      console.warn('[PDF Intelligence gpt-6-luna failed/timed out, fast-failing to deepseek-v4.1-flash]:', llmErr.message);
+      console.warn('[PDF Intelligence gpt-6-luna failed/timed out, fast-failing to deepseek-v4-flash]:', llmErr.message);
       try {
         const fallbackCompletion = await scaleMaxAdapter.createChatCompletion({
-          model: 'deepseek-v4.1-flash',
+          model: 'deepseek-v4-flash',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },

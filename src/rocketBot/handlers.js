@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { InlineKeyboard, InputFile } from 'grammy';
 import { config } from '../config.js';
 import { rocketLifeEngine } from '../rocket/lifeEngine.js';
@@ -187,6 +188,34 @@ export function registerRocketHandlers(bot) {
     await ctx.reply(helpText, { parse_mode: 'Markdown' });
   });
 
+  // Resilient Rocket Document Delivery with fallback against entity parsing errors
+  async function deliverRocketDocument(ctx, result) {
+    const inputFile = result.filePath && fs.existsSync(result.filePath)
+      ? new InputFile(result.filePath, result.filename)
+      : new InputFile(result.buffer, result.filename);
+
+    const cleanCaption = `📄 ${result.title}\n📊 Pages: ${result.pageCount} | Size: ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024);
+
+    try {
+      return await ctx.replyWithDocument(inputFile, {
+        caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
+        parse_mode: 'Markdown',
+        reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+      });
+    } catch (err1) {
+      console.warn('[RocketBot PDF Delivery Note] Attempt 1 failed:', err1.message);
+      try {
+        return await ctx.replyWithDocument(inputFile, {
+          caption: cleanCaption,
+          reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+        });
+      } catch (err2) {
+        console.warn('[RocketBot PDF Delivery Note] Attempt 2 failed:', err2.message);
+        return await ctx.replyWithDocument(inputFile);
+      }
+    }
+  }
+
   // Dedicated Rocket PDF Generation Helper
   async function handleRocketPdfGeneration(ctx, prompt, targetPages = 3, isOwner, contextId, userName) {
     const state = rocketLifeEngine.getState(contextId);
@@ -224,11 +253,7 @@ export function registerRocketHandlers(bot) {
         // Deduct model tokens
         rocketLifeEngine.consumeTokens(contextId, 400, targetPages * 350, 'gpt-6-luna');
 
-        await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
-          caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
-          parse_mode: 'Markdown',
-          reply_parameters: { message_id: ctx.message?.message_id },
-        });
+        await deliverRocketDocument(ctx, result);
       } else {
         throw new Error('PDF output buffer was empty.');
       }

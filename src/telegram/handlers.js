@@ -81,6 +81,37 @@ import { mediaDownloaderService } from '../media/mediaDownloaderService.js';
 import { socialInspectorService } from '../media/socialInspectorService.js';
 import { ROCKET_TOOL_DEFINITIONS, executeRocketTool } from '../tools/rocketTools.js';
 
+// Helper to deliver PDF documents with multi-tier fallback against Telegram markdown entity parsing rejections
+async function deliverTelegramDocument(ctx, result) {
+  const inputFile = result.filePath && fs.existsSync(result.filePath)
+    ? new InputFile(result.filePath, result.filename)
+    : new InputFile(result.buffer, result.filename);
+
+  const cleanCaption = `📄 ${result.title}\n📊 Pages: ${result.pageCount} | Size: ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024);
+
+  // Attempt 1: Markdown formatted caption
+  try {
+    return await ctx.replyWithDocument(inputFile, {
+      caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
+      parse_mode: 'Markdown',
+      reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+    });
+  } catch (err1) {
+    console.warn('[Telegram Document Delivery Note] Attempt 1 failed:', err1.message);
+    // Attempt 2: Plain text caption (avoids unescaped markdown parse errors)
+    try {
+      return await ctx.replyWithDocument(inputFile, {
+        caption: cleanCaption,
+        reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+      });
+    } catch (err2) {
+      console.warn('[Telegram Document Delivery Note] Attempt 2 failed:', err2.message);
+      // Attempt 3: Bare document delivery without caption or reply_parameters
+      return await ctx.replyWithDocument(inputFile);
+    }
+  }
+}
+
 // Pending download sessions for Telegram users ("Ask link and done" flow)
 const pendingDownloadSessionsTelegram = new Map();
 
@@ -2013,7 +2044,9 @@ export function registerBotHandlers(bot) {
     }
 
     const cmdText = (ctx.message?.text || '').trim();
-    const isExplicitGen = cmdText.startsWith('/pdf_gen') || cmdText.startsWith('/create_pdf') || cmdText.startsWith('/makepdf') || pdfService.isPdfGenerationRequest(input);
+    const isUrl = input.startsWith('http://') || input.startsWith('https://');
+    const isPdfCommand = /^\/(?:pdf|pdf_gen|create_pdf|makepdf|generate_pdf)\b/i.test(cmdText);
+    const isExplicitGen = (!isUrl && isPdfCommand) || pdfService.isPdfGenerationRequest(input) || pdfService.isPdfGenerationRequest(cmdText);
 
     if (isExplicitGen) {
       const targetPages = pdfService.extractTargetPages(input);
@@ -2032,11 +2065,7 @@ export function registerBotHandlers(bot) {
           targetPages,
         });
         if (result && result.buffer) {
-          return await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
-            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
-            parse_mode: 'Markdown',
-            reply_parameters: { message_id: ctx.message.message_id },
-          });
+          return await deliverTelegramDocument(ctx, result);
         }
       } catch (genErr) {
         console.error('[Telegram PDF Generation Error]:', genErr.message);
@@ -2887,11 +2916,7 @@ export function registerBotHandlers(bot) {
           targetPages,
         });
         if (result && result.buffer) {
-          return await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
-            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
-            parse_mode: 'Markdown',
-            reply_parameters: { message_id: ctx.message.message_id },
-          });
+          return await deliverTelegramDocument(ctx, result);
         }
       } catch (genErr) {
         console.error('[Telegram PDF Generation Error]:', genErr.message);

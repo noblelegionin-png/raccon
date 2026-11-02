@@ -1,4 +1,4 @@
-import { InlineKeyboard } from 'grammy';
+import { InlineKeyboard, InputFile } from 'grammy';
 import { config } from '../config.js';
 import { rocketLifeEngine } from '../rocket/lifeEngine.js';
 import { getUserRole, isSandy } from '../rocket/rbac.js';
@@ -12,6 +12,7 @@ import {
 } from '../rocket/persona.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
+import { pdfService } from '../pdf/pdfService.js';
 
 export function registerRocketHandlers(bot) {
   const miniAppUrl = config.rocketMiniAppUrl || config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
@@ -171,16 +172,98 @@ export function registerRocketHandlers(bot) {
       `🦝 *ROCKET AI — COMMAND GUIDE*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `• /start — Welcome message & interactive buttons\n` +
+      `• /rock3t — Launch ROCK3T Simulated Web OS\n` +
       `• /raccoon — Launch Raccoon OS Mini App\n` +
       `• /status — Check Rocket's life, mood, hunger & sleep\n` +
       `• /feed [pizza|taco] — Feed Rocket directly\n` +
+      `• /pdf <topic> — Generate executive publication PDF\n` +
       `• /sleep — View current sleep schedule & rest timer\n` +
       `• /wake — Emergency wake-up trigger\n` +
       `• /refill — Sandy only food supply grant\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `_Base Fuel Rule: 1 Pizza = 5,000 model tokens._\n` +
+      `_Task Fee: 1 Pizza for PDF Generation / Reading._\n` +
       `_1h guaranteed rest in every 12h cycle._ 🍕🐾`;
     await ctx.reply(helpText, { parse_mode: 'Markdown' });
+  });
+
+  // Dedicated Rocket PDF Generation Helper
+  async function handleRocketPdfGeneration(ctx, prompt, targetPages = 3, isOwner, contextId, userName) {
+    const state = rocketLifeEngine.getState(contextId);
+
+    // Pizza fee guard
+    if (!isOwner && state.pizza_inventory < 1 && state.fuel_tokens_remaining <= 0) {
+      return ctx.reply(
+        `🦝🍕 *Hold up, ${userName}!* Generating an executive multi-page PDF requires heavy raccoon brainpower!\n\n` +
+        `• *Task Fee:* 1 Pizza 🍕\n` +
+        `• *Your Stash:* ${state.pizza_inventory} Pizzas\n\n` +
+        `Feed me a pizza with \`/feed pizza\` or ask Boss Sandy for an emergency drop! 😈🐾`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    // Send immediate progress status to kill perceived latency
+    const statusMsg = await ctx.reply(
+      `📄 *Hold my pizza! Rocket is drafting your ${targetPages}-page publication PDF...* 🦝🐾\n` +
+      `_Structuring chapters, comparative tables & vector typography..._`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => null);
+
+    // Heartbeat upload action
+    const actionHeartbeat = setInterval(() => {
+      ctx.replyWithChatAction('upload_document').catch(() => {});
+    }, 3500);
+
+    try {
+      const result = await pdfService.generatePdfFromPrompt({ prompt, targetPages });
+      if (result && result.buffer) {
+        // Charge 1 pizza task fee
+        if (!isOwner) {
+          rocketLifeEngine.chargeTaskFee(contextId, 'pdf_generation', `PDF: ${result.title}`);
+        }
+        // Deduct model tokens
+        rocketLifeEngine.consumeTokens(contextId, 400, targetPages * 350, 'gpt-6-luna');
+
+        await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
+          caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
+          parse_mode: 'Markdown',
+          reply_parameters: { message_id: ctx.message?.message_id },
+        });
+      } else {
+        throw new Error('PDF output buffer was empty.');
+      }
+    } catch (err) {
+      console.error('[RocketBot PDF Gen Error]:', err.message);
+      await ctx.reply(`🦝⚠️ Whoops, my claws slipped on the printer toner! (Error: ${err.message})`);
+    } finally {
+      clearInterval(actionHeartbeat);
+      if (statusMsg) {
+        await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+      }
+    }
+  }
+
+  // 9. /pdf and /pdf_gen commands
+  bot.command(['pdf', 'pdf_gen', 'create_pdf', 'makepdf'], async (ctx) => {
+    const input = (ctx.match || '').trim();
+    const isOwner = isSandy(ctx.from?.id);
+    const userName = ctx.from?.first_name || 'Friend';
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+
+    if (!input) {
+      return ctx.reply(
+        `📄 *ROCKET PDF STUDIO* 🦝🐾\n\n` +
+        `Usage:\n` +
+        `• \`/pdf <topic>\` — Generate an executive publication dossier\n` +
+        `• \`/pdf 5 pages on AI Agents in 2026\` — Specify page count\n\n` +
+        `_Task Fee: 1 Pizza per dossier. Powered by GPT-6 Luna & PDFKit._ 🍕✨`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const targetPages = pdfService.extractTargetPages(input);
+    await handleRocketPdfGeneration(ctx, input, targetPages, isOwner, contextId, userName);
   });
 
   // Inline callback query handlers
@@ -222,6 +305,12 @@ export function registerRocketHandlers(bot) {
     const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const state = rocketLifeEngine.getState(contextId);
 
+    // 0. PDF Generation Request in Natural Language
+    if (pdfService.isPdfGenerationRequest(text)) {
+      const targetPages = pdfService.extractTargetPages(text);
+      return handleRocketPdfGeneration(ctx, text, targetPages, isOwner, contextId, userName);
+    }
+
     // 1. Sandy Abuse Guard
     if (detectSandyAbuse(text)) {
       const defense = generateDefenseResponse(userName);
@@ -242,10 +331,13 @@ export function registerRocketHandlers(bot) {
       }
     }
 
-    // 4. Send typing chat action
-    await ctx.replyWithChatAction('typing');
+    // 4. Send typing chat action heartbeat to eliminate perceived latency
+    ctx.replyWithChatAction('typing').catch(() => {});
+    const typingHeartbeat = setInterval(() => {
+      ctx.replyWithChatAction('typing').catch(() => {});
+    }, 3500);
 
-    // 5. Build dynamic persona directive & call ScaleMax GPT-6 Luna
+    // 5. Build dynamic persona directive & call ScaleMax via optimized adapter
     const activeModel = getActiveModelId();
     const directive = buildRocketDirective({
       senderName: userName,
@@ -263,40 +355,106 @@ export function registerRocketHandlers(bot) {
     let promptTokens = 30;
     let completionTokens = 40;
 
-    if (scaleMaxAdapter.isConfigured()) {
-      try {
-        const response = await fetch(`${scaleMaxAdapter.baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${scaleMaxAdapter.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: activeModel || 'gpt-6-luna',
-            messages,
-            max_tokens: 650,
-            temperature: 0.75,
-          }),
+    try {
+      if (scaleMaxAdapter.isConfigured()) {
+        const completion = await scaleMaxAdapter.createChatCompletion({
+          model: activeModel || 'gpt-6-luna',
+          messages,
+          maxTokens: 650,
+          temperature: 0.75,
+          timeoutMs: 18000,
         });
 
-        if (response.ok) {
-          const json = await response.json();
-          aiReply = json.choices?.[0]?.message?.content || '';
-          promptTokens = json.usage?.prompt_tokens || Math.round(text.length / 4);
-          completionTokens = json.usage?.completion_tokens || Math.round(aiReply.length / 4);
-        } else {
-          throw new Error(`ScaleMax HTTP ${response.status}`);
-        }
-      } catch (err) {
-        aiReply = `🦝🐾 *rubs whiskers* Whoops, had a little glitch reaching the server! But Rocket is right here! (Error: ${err.message})`;
+        aiReply = completion?.text || '';
+        promptTokens = completion?.usage?.prompt_tokens || Math.round(text.length / 4);
+        completionTokens = completion?.usage?.completion_tokens || Math.round(aiReply.length / 4);
+      } else {
+        aiReply = `🦝🍕 *snickers playfully* Yo ${userName}! Rocket is standing by! (ScaleMax running in offline test mode). Bring pizza! 🐾`;
       }
-    } else {
-      aiReply = `🦝🍕 *snickers playfully* Yo ${userName}! Rocket is standing by! (ScaleMax running in offline test mode). Bring pizza! 🐾`;
+    } catch (err) {
+      console.warn('[RocketBot Chat Error]:', err.message);
+      aiReply = `🦝🐾 *rubs whiskers* Whoops, had a little glitch reaching the server! But Rocket is right here! Remind me in a sec! 😈`;
+    } finally {
+      clearInterval(typingHeartbeat);
     }
 
     // Deduct fuel based on actual token usage
     rocketLifeEngine.consumeTokens(contextId, promptTokens, completionTokens, activeModel || 'gpt-6-luna');
 
     await ctx.reply(aiReply);
+  });
+
+  // Document upload handler (Reading & Analyzing PDFs)
+  bot.on('message:document', async (ctx) => {
+    const doc = ctx.message.document;
+    const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.toLowerCase().endsWith('.pdf');
+    if (!isPdf) return;
+
+    const isOwner = isSandy(ctx.from.id);
+    const userName = ctx.from.first_name || 'Friend';
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+    const state = rocketLifeEngine.getState(contextId);
+
+    // Pizza task fee guard for PDF reading
+    if (!isOwner && state.pizza_inventory < 1 && state.fuel_tokens_remaining <= 0) {
+      return ctx.reply(
+        `🦝🍕 *Hold up, ${userName}!* Reading and analyzing full PDF documents costs 1 pizza task fee!\n` +
+        `Feed me with /feed pizza first! 😈`
+      );
+    }
+
+    const progressMsg = await ctx.reply(
+      `📑 *Rocket is reading "${doc.file_name || 'document.pdf'}" with his sharp raccoon eyes...* 🦝🐾\n_Extracting text & analyzing structure..._`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => null);
+
+    const typingHeartbeat = setInterval(() => {
+      ctx.replyWithChatAction('typing').catch(() => {});
+    }, 3500);
+
+    try {
+      const file = await ctx.getFile();
+      const fileUrl = `https://api.telegram.org/file/bot${config.rocketTelegramBotToken}/${file.file_path}`;
+      const res = await fetch(fileUrl);
+      const buffer = Buffer.from(await res.arrayBuffer());
+
+      const parsed = await pdfService.readPdf(buffer);
+      if (!parsed.ok) {
+        throw new Error(parsed.error || 'Failed to parse PDF.');
+      }
+
+      // Charge 1 pizza fee
+      if (!isOwner) {
+        rocketLifeEngine.chargeTaskFee(contextId, 'pdf_reading', `Read: ${doc.file_name}`);
+      }
+
+      const activeModel = getActiveModelId();
+      const prompt = `You are Rocket, a mischievous raccoon AI. Summarize and review this document: "${doc.file_name}".\n\nExtracted Content:\n${parsed.text.slice(0, 3000)}`;
+      const completion = await scaleMaxAdapter.createChatCompletion({
+        model: activeModel || 'gpt-6-luna',
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 500,
+      });
+
+      rocketLifeEngine.consumeTokens(contextId, 500, 300, activeModel || 'gpt-6-luna');
+
+      const reply = `📑 *Rocket's Analysis of "${doc.file_name}":*\n\n` +
+        `📊 *Pages:* ${parsed.pageCount} | *Words:* ~${parsed.wordCount}\n\n` +
+        `${completion?.text || 'Read the document! Ready for your questions! 🦝'}`;
+
+      await ctx.reply(reply, {
+        parse_mode: 'Markdown',
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    } catch (err) {
+      console.error('[RocketBot PDF Read Error]:', err.message);
+      await ctx.reply(`🦝⚠️ Couldn't read that PDF! (Error: ${err.message})`);
+    } finally {
+      clearInterval(typingHeartbeat);
+      if (progressMsg) {
+        await ctx.api.deleteMessage(ctx.chat.id, progressMsg.message_id).catch(() => {});
+      }
+    }
   });
 }

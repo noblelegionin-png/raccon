@@ -2776,6 +2776,7 @@ class WhatsAppService {
       }
 
       // 📥 11. UNIVERSAL MEDIA DOWNLOADER ("ASK LINK AND DONE")
+      const chatId = isSandy ? 'wa_sandy_master' : `wa_${remoteJid}`;
       const hasMediaUrl = mediaDownloaderService.isMediaUrl(promptText);
       const isDownloadReq = mediaDownloaderService.isDownloadIntent(promptText);
       const pendingSession = this.pendingDownloadSessions?.get(chatId);

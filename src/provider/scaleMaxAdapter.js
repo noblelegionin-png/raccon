@@ -370,13 +370,15 @@ export class ScaleMaxAdapter {
           lastError = err;
         }
 
-        // Don't retry on authentication or not found errors
+        // Don't retry on timeout, authentication, or not found errors
         if (
+          err.name === 'AbortError' ||
+          err.message?.includes('timed out') ||
           err.message?.includes('401') ||
           err.message?.includes('404') ||
           err.message?.includes('Authentication Failed')
         ) {
-          throw err;
+          throw lastError || err;
         }
 
         // Bounded retry backoff

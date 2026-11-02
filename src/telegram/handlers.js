@@ -2016,16 +2016,24 @@ export function registerBotHandlers(bot) {
     const isExplicitGen = cmdText.startsWith('/pdf_gen') || cmdText.startsWith('/create_pdf') || cmdText.startsWith('/makepdf') || pdfService.isPdfGenerationRequest(input);
 
     if (isExplicitGen) {
-      await ctx.replyWithChatAction('upload_document').catch(() => {});
+      const targetPages = pdfService.extractTargetPages(input);
+      const progressMsg = await ctx.reply(
+        `📄 *Generating ${targetPages}-page publication PDF...* ⏳\n_Structuring chapters, comparative tables & vector typography..._`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => null);
+
+      const actionHeartbeat = setInterval(() => {
+        ctx.replyWithChatAction('upload_document').catch(() => {});
+      }, 3500);
+
       try {
-        const targetPages = pdfService.extractTargetPages(input);
         const result = await pdfService.generatePdfFromPrompt({
           prompt: input,
           targetPages,
         });
         if (result && result.buffer) {
           return await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
-            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount}\n\n${result.summary}`.slice(0, 1024),
+            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
             parse_mode: 'Markdown',
             reply_parameters: { message_id: ctx.message.message_id },
           });
@@ -2033,6 +2041,11 @@ export function registerBotHandlers(bot) {
       } catch (genErr) {
         console.error('[Telegram PDF Generation Error]:', genErr.message);
         return ctx.reply(`⚠️ Failed to generate PDF document: ${genErr.message}`);
+      } finally {
+        clearInterval(actionHeartbeat);
+        if (progressMsg) {
+          await ctx.api.deleteMessage(ctx.chat.id, progressMsg.message_id).catch(() => {});
+        }
       }
     }
 
@@ -2858,16 +2871,24 @@ export function registerBotHandlers(bot) {
 
     // 0j-2. Generative Multi-Page PDF Creation (up to 50 pages, High Reasoning)
     if (pdfService.isPdfGenerationRequest(text)) {
-      await ctx.replyWithChatAction('upload_document').catch(() => {});
+      const targetPages = pdfService.extractTargetPages(text);
+      const progressMsg = await ctx.reply(
+        `📄 *Generating ${targetPages}-page publication PDF...* ⏳\n_Structuring chapters, comparative tables & vector typography..._`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => null);
+
+      const actionHeartbeat = setInterval(() => {
+        ctx.replyWithChatAction('upload_document').catch(() => {});
+      }, 3500);
+
       try {
-        const targetPages = pdfService.extractTargetPages(text);
         const result = await pdfService.generatePdfFromPrompt({
           prompt: text,
           targetPages,
         });
         if (result && result.buffer) {
           return await ctx.replyWithDocument(new InputFile(result.buffer, result.filename), {
-            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount}\n\n${result.summary}`.slice(0, 1024),
+            caption: `📄 *${result.title}*\n📊 *Pages:* ${result.pageCount} | *Size:* ${Math.round(result.sizeBytes / 1024)} KB\n\n${result.summary}`.slice(0, 1024),
             parse_mode: 'Markdown',
             reply_parameters: { message_id: ctx.message.message_id },
           });
@@ -2875,6 +2896,11 @@ export function registerBotHandlers(bot) {
       } catch (genErr) {
         console.error('[Telegram PDF Generation Error]:', genErr.message);
         return ctx.reply(`⚠️ Failed to generate PDF document: ${genErr.message}`);
+      } finally {
+        clearInterval(actionHeartbeat);
+        if (progressMsg) {
+          await ctx.api.deleteMessage(ctx.chat.id, progressMsg.message_id).catch(() => {});
+        }
       }
     }
 

@@ -24,6 +24,34 @@ export const TASK_FEES = {
   VIDEO_DOWNLOAD: { name: 'Video Download', feePizzas: 1 },
 };
 
+/**
+ * Resilient SQLite write transaction with immediate lock & exponential backoff on SQLITE_BUSY
+ */
+function withImmediateTransaction(db, fn, maxRetries = 8) {
+  let attempt = 0;
+  while (true) {
+    try {
+      db.exec('BEGIN IMMEDIATE TRANSACTION;');
+      const result = fn();
+      db.exec('COMMIT;');
+      return result;
+    } catch (err) {
+      try {
+        db.exec('ROLLBACK;');
+      } catch {}
+      const isLock = err.code === 'ERR_SQLITE_ERROR' && (String(err.message).includes('locked') || String(err.message).includes('busy'));
+      if (isLock && attempt < maxRetries) {
+        attempt++;
+        const sleepMs = 30 * attempt;
+        const start = Date.now();
+        while (Date.now() - start < sleepMs) {}
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export class RocketLifeEngine {
   constructor() {
     initRocketDb();
@@ -214,28 +242,28 @@ export class RocketLifeEngine {
     const caloriesAdded = num * caloriesPerItem;
     const nowIso = new Date().toISOString();
 
-    db.exec('BEGIN TRANSACTION;');
-    try {
-      const state = this.getState(contextId);
+    // 1. Ensure state exists & dynamic sleep evaluated outside transaction
+    const state = this.getState(contextId);
 
-      const nextPizzas = validItem === 'pizza' ? state.pizza_inventory + num : state.pizza_inventory;
-      const nextTacos = validItem === 'taco' ? state.taco_inventory + num : state.taco_inventory;
-      const nextFuel = state.fuel_tokens_remaining + tokensToAdd;
+    const nextPizzas = validItem === 'pizza' ? state.pizza_inventory + num : state.pizza_inventory;
+    const nextTacos = validItem === 'taco' ? state.taco_inventory + num : state.taco_inventory;
+    const nextFuel = state.fuel_tokens_remaining + tokensToAdd;
 
-      // Increase hunger level: 1 pizza restores 25% hunger up to 100%
-      const hungerIncrease = num * (validItem === 'pizza' ? 25.0 : 20.0);
-      const nextHunger = Math.min(100.0, state.hunger_level + hungerIncrease);
-      const nextHungerState = this.calculateHungerState(nextHunger);
+    // Increase hunger level: 1 pizza restores 25% hunger up to 100%
+    const hungerIncrease = num * (validItem === 'pizza' ? 25.0 : 20.0);
+    const nextHunger = Math.min(100.0, state.hunger_level + hungerIncrease);
+    const nextHungerState = this.calculateHungerState(nextHunger);
 
-      // Playful weight & calories
-      const nextCaloriesEaten = state.fictional_calories_eaten + caloriesAdded;
-      const netCalories = nextCaloriesEaten - state.fictional_calories_burned;
-      const nextWeight = Number((8.5 + (netCalories / 7700)).toFixed(2));
-      const fitness = this.calculateFitness(nextWeight);
+    // Playful weight & calories
+    const nextCaloriesEaten = state.fictional_calories_eaten + caloriesAdded;
+    const netCalories = nextCaloriesEaten - state.fictional_calories_burned;
+    const nextWeight = Number((8.5 + (netCalories / 7700)).toFixed(2));
+    const fitness = this.calculateFitness(nextWeight);
 
-      // Mood evolves
-      const nextMood = nextHunger >= 75 ? 'ENERGETIC' : 'PLAYFUL';
+    // Mood evolves
+    const nextMood = nextHunger >= 75 ? 'ENERGETIC' : 'PLAYFUL';
 
+    withImmediateTransaction(db, () => {
       db.prepare(`
         UPDATE rocket_life_state
         SET pizza_inventory = ?, taco_inventory = ?, fuel_tokens_remaining = ?,
@@ -278,13 +306,9 @@ export class RocketLifeEngine {
         `Fed Rocket ${num} ${validItem}(s)`,
         nowIso
       );
+    });
 
-      db.exec('COMMIT;');
-      return this.getState(contextId);
-    } catch (err) {
-      db.exec('ROLLBACK;');
-      throw err;
-    }
+    return this.getState(contextId);
   }
 
   /**
@@ -299,43 +323,43 @@ export class RocketLifeEngine {
     const nowIso = new Date().toISOString();
     const caloriesBurned = Math.max(5, Math.round(totalTokens * 0.05));
 
-    db.exec('BEGIN TRANSACTION;');
-    try {
-      const state = this.getState(contextId);
+    // 1. Ensure state exists outside transaction
+    const state = this.getState(contextId);
 
-      let remainingFuel = state.fuel_tokens_remaining - totalTokens;
-      let pizzas = state.pizza_inventory;
-      let tacos = state.taco_inventory;
+    let remainingFuel = state.fuel_tokens_remaining - totalTokens;
+    let pizzas = state.pizza_inventory;
+    let tacos = state.taco_inventory;
 
-      // If fuel runs out, automatically convert pizza or tacos from inventory if available
-      while (remainingFuel < 0 && (pizzas > 0 || tacos > 0)) {
-        if (pizzas > 0) {
-          pizzas -= 1;
-          remainingFuel += TOKENS_PER_FOOD;
-        } else if (tacos > 0) {
-          tacos -= 1;
-          remainingFuel += TOKENS_PER_FOOD;
-        }
+    // If fuel runs out, automatically convert pizza or tacos from inventory if available
+    while (remainingFuel < 0 && (pizzas > 0 || tacos > 0)) {
+      if (pizzas > 0) {
+        pizzas -= 1;
+        remainingFuel += TOKENS_PER_FOOD;
+      } else if (tacos > 0) {
+        tacos -= 1;
+        remainingFuel += TOKENS_PER_FOOD;
       }
+    }
 
-      // Calculate total available fuel capacity for hunger %
-      const totalFuelCapacity = Math.max(0, remainingFuel) + (pizzas + tacos) * TOKENS_PER_FOOD;
-      // 50,000 tokens (10 pizzas) = 100% hunger satisfaction
-      const nextHunger = Math.max(0.0, Math.min(100.0, Number(((totalFuelCapacity / 50000) * 100).toFixed(1))));
-      const nextHungerState = this.calculateHungerState(nextHunger);
+    // Calculate total available fuel capacity for hunger %
+    const totalFuelCapacity = Math.max(0, remainingFuel) + (pizzas + tacos) * TOKENS_PER_FOOD;
+    // 50,000 tokens (10 pizzas) = 100% hunger satisfaction
+    const nextHunger = Math.max(0.0, Math.min(100.0, Number(((totalFuelCapacity / 50000) * 100).toFixed(1))));
+    const nextHungerState = this.calculateHungerState(nextHunger);
 
-      // Playful weight reduction with work
-      const nextCaloriesBurned = state.fictional_calories_burned + caloriesBurned;
-      const netCalories = state.fictional_calories_eaten - nextCaloriesBurned;
-      const nextWeight = Number((8.5 + (netCalories / 7700)).toFixed(2));
-      const fitness = this.calculateFitness(nextWeight);
+    // Playful weight reduction with work
+    const nextCaloriesBurned = state.fictional_calories_burned + caloriesBurned;
+    const netCalories = state.fictional_calories_eaten - nextCaloriesBurned;
+    const nextWeight = Number((8.5 + (netCalories / 7700)).toFixed(2));
+    const fitness = this.calculateFitness(nextWeight);
 
-      // Mood reacts to hunger
-      let nextMood = state.mood;
-      if (nextHunger <= 0) nextMood = 'STARVING';
-      else if (nextHunger < 25) nextMood = 'EXHAUSTED';
-      else if (nextHunger < 50) nextMood = 'HUNGRY';
+    // Mood reacts to hunger
+    let nextMood = state.mood;
+    if (nextHunger <= 0) nextMood = 'STARVING';
+    else if (nextHunger < 25) nextMood = 'EXHAUSTED';
+    else if (nextHunger < 50) nextMood = 'HUNGRY';
 
+    withImmediateTransaction(db, () => {
       db.prepare(`
         UPDATE rocket_life_state
         SET fuel_tokens_remaining = ?, pizza_inventory = ?, taco_inventory = ?,
@@ -370,13 +394,9 @@ export class RocketLifeEngine {
           context_id, user_id, user_name, item_type, action, amount, fuel_tokens_equivalent, tokens_used, note, created_at
         ) VALUES (?, 'system', 'ScaleMax AI', 'tokens', 'consume_token', 0, 0, ?, ?, ?)
       `).run(contextId, totalTokens, `Model: ${modelId} (${inputTokens} in / ${outputTokens} out)`, nowIso);
+    });
 
-      db.exec('COMMIT;');
-      return this.getState(contextId);
-    } catch (err) {
-      db.exec('ROLLBACK;');
-      throw err;
-    }
+    return this.getState(contextId);
   }
 
   /**
@@ -387,36 +407,35 @@ export class RocketLifeEngine {
     const db = getDb();
     const nowIso = new Date().toISOString();
 
-    db.exec('BEGIN TRANSACTION;');
-    try {
-      const state = this.getState(contextId);
+    // 1. Ensure state exists outside transaction
+    const state = this.getState(contextId);
 
-      if (state.pizza_inventory <= 0 && state.taco_inventory <= 0 && state.fuel_tokens_remaining < TOKENS_PER_FOOD) {
-        // Insufficient food for fee
-        db.exec('ROLLBACK;');
-        return {
-          success: false,
-          reason: 'NO_PIZZA',
-          message: '🦝🍕 *gasps dramatically* Hey! This heavy task requires a 1-pizza fee! My pizza box is empty! Feed me first, boss!',
-        };
-      }
+    if (state.pizza_inventory <= 0 && state.taco_inventory <= 0 && state.fuel_tokens_remaining < TOKENS_PER_FOOD) {
+      // Insufficient food for fee
+      return {
+        success: false,
+        reason: 'NO_PIZZA',
+        message: '🦝🍕 *gasps dramatically* Hey! This heavy task requires a 1-pizza fee! My pizza box is empty! Feed me first, boss!',
+      };
+    }
 
-      let nextPizzas = state.pizza_inventory;
-      let nextTacos = state.taco_inventory;
-      let nextFuel = state.fuel_tokens_remaining;
+    let nextPizzas = state.pizza_inventory;
+    let nextTacos = state.taco_inventory;
+    let nextFuel = state.fuel_tokens_remaining;
 
-      if (nextPizzas > 0) {
-        nextPizzas -= 1;
-      } else if (nextTacos > 0) {
-        nextTacos -= 1;
-      } else {
-        nextFuel -= TOKENS_PER_FOOD;
-      }
+    if (nextPizzas > 0) {
+      nextPizzas -= 1;
+    } else if (nextTacos > 0) {
+      nextTacos -= 1;
+    } else {
+      nextFuel -= TOKENS_PER_FOOD;
+    }
 
-      const totalFuelCapacity = Math.max(0, nextFuel) + (nextPizzas + nextTacos) * TOKENS_PER_FOOD;
-      const nextHunger = Math.max(0.0, Math.min(100.0, Number(((totalFuelCapacity / 50000) * 100).toFixed(1))));
-      const nextHungerState = this.calculateHungerState(nextHunger);
+    const totalFuelCapacity = Math.max(0, nextFuel) + (nextPizzas + nextTacos) * TOKENS_PER_FOOD;
+    const nextHunger = Math.max(0.0, Math.min(100.0, Number(((totalFuelCapacity / 50000) * 100).toFixed(1))));
+    const nextHungerState = this.calculateHungerState(nextHunger);
 
+    withImmediateTransaction(db, () => {
       db.prepare(`
         UPDATE rocket_life_state
         SET pizza_inventory = ?, taco_inventory = ?, fuel_tokens_remaining = ?,
@@ -432,13 +451,9 @@ export class RocketLifeEngine {
           context_id, user_id, user_name, item_type, action, amount, fuel_tokens_equivalent, task_type, note, created_at
         ) VALUES (?, 'system', 'Task Fee Engine', 'pizza', 'task_fee', 1, ?, ?, ?, ?)
       `).run(contextId, TOKENS_PER_FOOD, taskType, details, nowIso);
+    });
 
-      db.exec('COMMIT;');
-      return { success: true, state: this.getState(contextId) };
-    } catch (err) {
-      db.exec('ROLLBACK;');
-      throw err;
-    }
+    return { success: true, state: this.getState(contextId) };
   }
 
   /**

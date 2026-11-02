@@ -853,6 +853,12 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
       markdownText = this.generateLocalDocument(subject, pages, cleaned.wordCount);
     }
 
+    // Strip outer markdown code block fence if returned by model
+    markdownText = markdownText.trim();
+    if (markdownText.startsWith('```')) {
+      markdownText = markdownText.replace(/^```(?:markdown)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+    }
+
     // Extract Title from markdown (or use cleaned.title)
     const titleMatch = markdownText.match(/^#\s+(.+)$/m);
     const finalTitle = titleMatch ? titleMatch[1].replace(/\*\*/g, '').trim() : title;

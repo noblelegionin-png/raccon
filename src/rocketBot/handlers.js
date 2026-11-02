@@ -440,7 +440,8 @@ export function registerRocketHandlers(bot) {
 
     try {
       const file = await ctx.getFile();
-      const fileUrl = `https://api.telegram.org/file/bot${config.rocketTelegramBotToken}/${file.file_path}`;
+      const botToken = ctx.api?.token || config.rocketTelegramBotToken;
+      const fileUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
       const res = await fetch(fileUrl);
       const buffer = Buffer.from(await res.arrayBuffer());
 
@@ -481,5 +482,120 @@ export function registerRocketHandlers(bot) {
         await ctx.api.deleteMessage(ctx.chat.id, progressMsg.message_id).catch(() => {});
       }
     }
+  });
+
+  // Multimodal Photo Handler (Rocket Raccoon Vision & Inspection)
+  bot.on('message:photo', async (ctx) => {
+    const isOwner = isSandy(ctx.from?.id);
+    const userName = ctx.from?.first_name || 'Friend';
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
+    const state = rocketLifeEngine.getState(contextId);
+    const caption = ctx.message.caption || '';
+
+    // In groups, only respond if mentioned, replied to, or name mentioned
+    if (isGroup) {
+      const isMentioned = caption.includes(`@${ctx.me.username}`) || caption.toLowerCase().includes('rocket');
+      const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
+      if (!isMentioned && !isReplyToBot) return;
+    }
+
+    // Sandy Abuse Guard
+    if (detectSandyAbuse(caption)) {
+      return ctx.reply(generateDefenseResponse(userName));
+    }
+
+    // Sleep Guard
+    if (state.is_sleeping) {
+      const sleepResult = rocketLifeEngine.registerSleepMessage(contextId, ctx.from.id);
+      return ctx.reply(sleepResult.message);
+    }
+
+    // Pizza task fee guard for Image Analysis
+    if (!isOwner && state.pizza_inventory < 1 && state.fuel_tokens_remaining <= 0) {
+      return ctx.reply(
+        `🦝🍕 *Hold up, ${userName}!* Inspecting photos with my sharp raccoon eyes costs 1 pizza task fee!\n` +
+        `Feed me with /feed pizza first! 😈`
+      );
+    }
+
+    ctx.replyWithChatAction('typing').catch(() => {});
+    const typingHeartbeat = setInterval(() => {
+      ctx.replyWithChatAction('typing').catch(() => {});
+    }, 3500);
+
+    try {
+      const file = await ctx.getFile();
+      const botToken = ctx.api?.token || config.rocketTelegramBotToken;
+      const fileUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+      const res = await fetch(fileUrl);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const base64 = buffer.toString('base64');
+
+      // Charge 1 pizza task fee
+      if (!isOwner) {
+        rocketLifeEngine.chargeTaskFee(contextId, 'image_analysis', 'Photo Analysis');
+      }
+
+      const activeModel = getActiveModelId();
+      const rocketVisionDirective = `You are Rocket, a mischievous, cheeky, hyper-observant raccoon AI companion.
+You are inspecting an image sent by ${userName} ${isOwner ? '(your Boss Sandy!)' : ''}.
+${caption ? `User's caption/question: "${caption}"` : 'Tell them what you see in the image!'}
+
+Rules:
+- Speak in character as Rocket the raccoon (playful, cheeky, observant, loves pizza/tacos 🦝🐾🍕).
+- Keep your answer short, punchy, and hilarious (2 to 4 sentences).
+- If it is food (especially pizza, tacos, trash, or snacks), get super excited!
+- If it is a person or object, notice the fun, prominent details!`;
+
+      let aiReply = '';
+      if (scaleMaxAdapter.isConfigured()) {
+        const completion = await scaleMaxAdapter.createChatCompletion({
+          model: 'gpt-6-luna',
+          messages: [
+            { role: 'system', content: rocketVisionDirective },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: caption || 'Look at this picture!' },
+                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
+              ],
+            },
+          ],
+          maxTokens: 350,
+          temperature: 0.75,
+        });
+        aiReply = completion?.text || '🦝🐾 *inspects photo with sharp eyes* Rocket saw it! Looks awesome!';
+        rocketLifeEngine.consumeTokens(contextId, 400, 150, 'gpt-6-luna');
+      } else {
+        aiReply = `🦝🐾 *squints at photo* Rocket sees it! Sharp raccoon vision confirmed! (Offline test mode). Bring pizza! 🍕`;
+      }
+
+      await ctx.reply(aiReply, {
+        reply_parameters: { message_id: ctx.message.message_id },
+      });
+    } catch (err) {
+      console.error('[RocketBot Photo Error]:', err.message);
+      await ctx.reply(`🦝⚠️ Whoops, my paw smudged the lens! (Error: ${err.message})`);
+    } finally {
+      clearInterval(typingHeartbeat);
+    }
+  });
+
+  // Voice & Audio Handler
+  bot.on(['message:voice', 'message:audio'], async (ctx) => {
+    if (ctx.chat.type !== 'private') return;
+    await ctx.reply('🦝🐾 *ears twitch* I hear that audio note! My raccoon ears are sharp! Type me a message or feed me pizza while I sharpen my claws! 🍕😈');
+  });
+
+  // Sticker Handler
+  bot.on('message:sticker', async (ctx) => {
+    if (ctx.chat.type !== 'private') return;
+    const stickerReplies = [
+      '🦝🐾 *bats at the sticker with agile paws* Nice sticker! Got any pizza to go with that? 🍕',
+      '😈 *snickers mischievously* Sending stickers? I see you have good taste! 🦝✨',
+      '🌮 *sniffs sticker* Not edible, but I approve! 🦝🐾',
+    ];
+    await ctx.reply(stickerReplies[Math.floor(Math.random() * stickerReplies.length)]);
   });
 }

@@ -328,7 +328,12 @@ BEHAVIOR:
           if (choice?.tool_calls && choice.tool_calls.length > 0) {
             const tc = choice.tool_calls[0];
             const fnName = tc.function.name;
-            const fnArgs = JSON.parse(tc.function.arguments || '{}');
+            let fnArgs = {};
+            try {
+              fnArgs = JSON.parse(tc.function.arguments || '{}');
+            } catch (pErr) {
+              console.warn('[Companion Chat Tool Args Parse Warn]:', pErr.message);
+            }
             toolResult = await executeRock3tTool(fnName, fnArgs, { userId: user.id, isOwner: user.isOwner });
             aiReply = choice.content || `🦝🐾 Done! I executed ${fnName} for you!`;
           } else {

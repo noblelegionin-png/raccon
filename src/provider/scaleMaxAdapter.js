@@ -365,7 +365,7 @@ export class ScaleMaxAdapter {
       } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-          lastError = new Error(`Request to ScaleMax for model '${targetModel}' timed out after ${this.timeoutMs / 1000}s.`);
+          lastError = new Error(`Request to ScaleMax for model '${targetModel}' timed out after ${effectiveTimeout / 1000}s.`);
         } else {
           lastError = err;
         }

@@ -153,16 +153,7 @@ export function verifyRocketTelegramInitData(initDataRaw, botTokenOverride = nul
       }
     }
 
-    // Graceful fallback for web view if signed with a test key
-    const userJson = params.get('user');
-    if (userJson) {
-      try {
-        const user = JSON.parse(userJson);
-        return { valid: true, user, fallback: true };
-      } catch {}
-    }
-
-    return { valid: false, error: 'Hash mismatch' };
+    return { valid: false, error: 'Invalid Telegram HMAC signature: hash mismatch' };
   } catch (err) {
     return { valid: false, error: err.message };
   }

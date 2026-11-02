@@ -154,7 +154,7 @@ body {
   height: 100%;
   flex-shrink: 0;
   transform: translate3d(-40%, 0, 0);
-  transition: transform calc(0.36s * var(--anim-speed, 1)) cubic-bezier(0.16, 1, 0.3, 1), filter calc(0.28s * var(--anim-speed, 1)) ease;
+  transition: transform calc(0.32s * var(--anim-speed, 1)) cubic-bezier(0.16, 1, 0.3, 1), filter calc(0.12s * var(--anim-speed, 1)) ease;
   will-change: transform, filter;
   filter: blur(var(--motion-blur, 0px));
   backface-visibility: hidden;
@@ -163,7 +163,7 @@ body {
 }
 
 .home-pages-track.sliding {
-  filter: blur(var(--motion-blur, 3.2px));
+  filter: blur(var(--motion-blur, 1.2px));
 }
 
 .home-page {

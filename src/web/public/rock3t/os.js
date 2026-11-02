@@ -274,8 +274,8 @@ const ROCK3T_OS = {
         track.classList.remove('sliding');
       } else {
         track.classList.add('sliding');
-        track.style.transition = 'transform calc(0.36s * var(--anim-speed, 1)) cubic-bezier(0.16, 1, 0.3, 1), filter calc(0.28s * var(--anim-speed, 1)) ease';
-        track.style.setProperty('--motion-blur', '3.8px');
+        track.style.transition = 'transform calc(0.32s * var(--anim-speed, 1)) cubic-bezier(0.16, 1, 0.3, 1), filter calc(0.12s * var(--anim-speed, 1)) ease';
+        track.style.setProperty('--motion-blur', '1.6px');
         track.style.transform = `translate3d(${targetTranslatePx}px, 0, 0)`;
         
         clearTimeout(this._slideTimer);
@@ -283,7 +283,7 @@ const ROCK3T_OS = {
           track.classList.remove('sliding');
           track.style.setProperty('--motion-blur', '0px');
           track.style.transition = 'none';
-        }, 360);
+        }, 160);
       }
     }
 
@@ -318,11 +318,21 @@ const ROCK3T_OS = {
     let isSwipingHorizontal = false;
     let startTranslatePx = 0;
 
+    // Global capturing click blocker: prevents accidental button taps when swiping pages
+    let suppressClick = false;
+    window.addEventListener('click', (e) => {
+      if (suppressClick) {
+        e.preventDefault();
+        e.stopPropagation();
+        suppressClick = false;
+      }
+    }, true);
+
     container.addEventListener('touchstart', (e) => {
       if (this.activeApp) return;
       const target = e.target;
-      // Do not initiate page swipe on interactive elements or companion avatar
-      if (target.closest('button, input, select, textarea, a, .btn-os, .dock-icon, #floatingCompanion, .food-feed-btn, .c4-drop-btn, .rps-choice-btn')) {
+      // Do not initiate horizontal page swipe on form inputs, textareas, or companion avatar drag
+      if (target.closest('input, textarea, select, #companionAvatar')) {
         isTracking = false;
         return;
       }
@@ -335,6 +345,7 @@ const ROCK3T_OS = {
       velocity = 0;
       isTracking = true;
       isSwipingHorizontal = false;
+      suppressClick = false;
       const width = this.getContainerWidth();
       startTranslatePx = - (this.currentPage + 2) * width;
     }, { passive: true });
@@ -356,6 +367,7 @@ const ROCK3T_OS = {
         }
         if (Math.abs(diffX) > 6 && Math.abs(diffX) >= Math.abs(diffY)) {
           isSwipingHorizontal = true;
+          suppressClick = true; // Block any button click under thumb
           track.classList.add('sliding');
           track.style.transition = 'none'; // Instant 120 FPS 1:1 finger tracking
         }
@@ -379,8 +391,8 @@ const ROCK3T_OS = {
           effectiveDiffX = diffX * 0.28;
         }
 
-        // Dynamic 120 FPS Motion Blur proportional to finger speed
-        const blurAmount = Math.min(5.5, Math.abs(velocity) * 2.8);
+        // Dynamic 120 FPS Motion Blur proportional to finger speed (50% shorter/tighter)
+        const blurAmount = Math.min(2.2, Math.abs(velocity) * 1.2);
         track.style.setProperty('--motion-blur', `${blurAmount.toFixed(1)}px`);
 
         // Direct 1:1 pixel displacement
@@ -394,6 +406,10 @@ const ROCK3T_OS = {
 
       if (!isSwipingHorizontal) return;
       isSwipingHorizontal = false;
+
+      // Keep suppressClick active for 80ms to swallow trailing synthetic click event
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 80);
 
       const touch = (e.changedTouches && e.changedTouches[0]) || { clientX: lastX };
       const diffX = touch.clientX - startX;

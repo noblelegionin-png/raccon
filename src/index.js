@@ -36,11 +36,11 @@ async function main() {
     console.log(`[WebServer] Health probe: http://localhost:${config.port}/healthz`);
   });
 
-  // 4. Start Telegram Bot Long-Polling
+  // 4. Start Telegram Bot Long-Polling (First/Legacy Bot)
   if (config.telegramEnabled && config.telegramBotToken) {
     await startBot();
   } else {
-    console.log('[TelegramBot] Telegram bot is UNDEPLOYED / DISABLED (TELEGRAM_ENABLED=false). Long-polling skipped.');
+    console.log('[TelegramBot] First Telegram bot is DISCONTINUED / RETIRED (TELEGRAM_ENABLED=false). Long-polling skipped.');
   }
 
   // 4b. Start WhatsApp 24/7 Live Bridge

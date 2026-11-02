@@ -11,6 +11,18 @@ export function getRocketBotInstance() {
   return rocketBotInstance;
 }
 
+export function getRocketBotApi() {
+  return rocketBotInstance ? rocketBotInstance.api : null;
+}
+
+export function getRocketBotStatus() {
+  return {
+    isEnabled: Boolean(config.rocketTelegramEnabled),
+    isConfigured: Boolean(config.rocketTelegramBotToken),
+    isRunning: isBotRunning,
+  };
+}
+
 export function createRocketBot() {
   const token = config.rocketTelegramBotToken;
   if (!token) {

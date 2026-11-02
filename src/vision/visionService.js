@@ -210,7 +210,8 @@ YOUR DIRECTIVES:
    * Download a photo file from Telegram Bot API servers
    */
   async downloadTelegramFile(api, fileId) {
-    if (!config.telegramBotToken) {
+    const token = api?.token || config.rocketTelegramBotToken || config.telegramBotToken;
+    if (!token) {
       throw new Error('Telegram bot token is not configured.');
     }
 
@@ -220,7 +221,7 @@ YOUR DIRECTIVES:
         throw new Error('Telegram did not return a valid file path for this attachment.');
       }
 
-      const downloadUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${fileInfo.file_path}`;
+      const downloadUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
       const res = await fetch(downloadUrl);
 
       if (!res.ok) {

@@ -31,6 +31,7 @@ export class SecuritySupervisor {
 
     const secrets = [
       { name: 'TELEGRAM_BOT_TOKEN', val: config.telegramBotToken },
+      { name: 'ROCKET_TELEGRAM_BOT_TOKEN', val: config.rocketTelegramBotToken },
       { name: 'SCALEMAX_API_KEY', val: config.scaleMaxApiKey },
       { name: 'DASHBOARD_ACCESS_KEY', val: config.dashboardAccessKey },
     ].filter((s) => s.val && s.val.length > 5);
@@ -116,8 +117,11 @@ export class SecuritySupervisor {
     if (!config.scaleMaxApiKey) {
       findings.push({ severity: 'HIGH', issue: 'SCALEMAX_API_KEY missing. AI provider calls will fail.' });
     }
-    if (!config.telegramBotToken) {
-      findings.push({ severity: 'CRITICAL', issue: 'TELEGRAM_BOT_TOKEN missing. Telegram transport is offline.' });
+    if (config.telegramEnabled && !config.telegramBotToken) {
+      findings.push({ severity: 'CRITICAL', issue: 'TELEGRAM_BOT_TOKEN missing while TELEGRAM_ENABLED=true. Telegram transport is offline.' });
+    }
+    if (config.rocketTelegramEnabled && !config.rocketTelegramBotToken) {
+      findings.push({ severity: 'CRITICAL', issue: 'ROCKET_TELEGRAM_BOT_TOKEN missing while ROCKET_TELEGRAM_ENABLED=true.' });
     }
     if (!config.dashboardAccessKey || config.dashboardAccessKey === 'change_this_secret_in_production') {
       findings.push({ severity: 'MEDIUM', issue: 'DASHBOARD_ACCESS_KEY is default or weak. Consider setting a strong key.' });

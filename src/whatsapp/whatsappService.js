@@ -27,6 +27,7 @@ import {
 import { logAudit, getRecentConversation, addNote, getUserNotes, isWhatsAppMessageProcessed, recordWhatsAppMessageProcessed, getConfig, setConfig } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { getBotApi } from '../telegram/bot.js';
+import { getRocketBotApi } from '../rocketBot/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
 import { visionService } from '../vision/visionService.js';
 import { extractExplicitWordLimit, detectUserIntent } from '../conversation/intentDetector.js';
@@ -4041,11 +4042,12 @@ class WhatsAppService {
   async notifyTelegramOwner(message) {
     // Isolated Platform Guard: WhatsApp and Telegram operate completely independently.
     // Zero cross-platform notifications sent to Telegram if disabled or separated.
-    if (!config.whatsAppNotifyTelegram || !config.telegramOwnerId) return;
+    const ownerId = config.rocketOwnerId || config.telegramOwnerId;
+    if (!config.whatsAppNotifyTelegram || !ownerId) return;
     try {
-      const api = getBotApi();
+      const api = getRocketBotApi() || getBotApi();
       if (api) {
-        await api.sendMessage(Number(config.telegramOwnerId), message, {
+        await api.sendMessage(Number(ownerId), message, {
           parse_mode: 'Markdown',
         });
       }

@@ -831,7 +831,7 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
 
     // High-speed LLM Call with immediate local synthesis fallback
     let markdownText = '';
-    const tokenLimit = pages <= 1 ? 550 : pages <= 2 ? 950 : pages <= 3 ? 1400 : Math.min(pages * 350, 2600);
+    const tokenLimit = Math.min(pages * 300, 750);
 
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
@@ -842,7 +842,7 @@ Provide a complete, comprehensive, and scientifically/technically rigorous dossi
         ],
         reasoningEffort: 'none',
         maxTokens: tokenLimit,
-        timeoutMs: 30000,
+        timeoutMs: 15000,
       });
       markdownText = completion?.text || '';
     } catch (llmErr) {
@@ -1011,8 +1011,9 @@ Please provide your high-reasoning document analysis now:
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        reasoningEffort: 'high',
-        maxTokens: 1800,
+        reasoningEffort: 'none',
+        maxTokens: 1200,
+        timeoutMs: 35000,
       });
 
       return {

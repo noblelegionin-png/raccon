@@ -139,28 +139,62 @@ body {
 /* HORIZONTAL HOME SCREEN PAGER */
 .home-pager-container {
   flex: 1;
+  min-height: 0;
+  width: 100%;
   position: relative;
   overflow: hidden;
-  display: flex;
+  display: block;
+  touch-action: pan-y pinch-zoom;
 }
 
 .home-pages-track {
   display: flex;
+  flex-direction: row;
   width: 500%;
+  min-width: 500%;
+  max-width: 500%;
   height: 100%;
-  transition: transform calc(0.35s * var(--anim-speed)) cubic-bezier(0.25, 1, 0.5, 1);
-  will-change: transform;
+  flex-shrink: 0;
+  transform: translate3d(-40%, 0, 0);
+  transition: transform calc(0.38s * var(--anim-speed)) cubic-bezier(0.16, 1, 0.3, 1), filter calc(0.3s * var(--anim-speed)) ease;
+  will-change: transform, filter;
+  filter: blur(var(--motion-blur, 0px));
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.home-pages-track.sliding {
+  filter: blur(var(--motion-blur, 1.8px));
 }
 
 .home-page {
-  width: 20%;
+  flex: 0 0 20% !important;
+  width: 20% !important;
+  min-width: 20% !important;
+  max-width: 20% !important;
   height: 100%;
-  padding: 10px 20px;
+  padding: 10px 20px 90px 20px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  flex-shrink: 0 !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y pinch-zoom;
+  transition: transform calc(0.32s * var(--anim-speed)) cubic-bezier(0.16, 1, 0.3, 1), opacity calc(0.28s * var(--anim-speed)) ease;
+  will-change: transform, opacity;
+}
+
+.home-pages-track.sliding .home-page:not(.current-page) {
+  opacity: 0.82;
+  transform: scale(0.975);
+}
+
+.home-page.current-page {
+  opacity: 1;
+  transform: scale(1);
 }
 
 /* PURE TYPOGRAPHY (NO UNNECESSARY BOXES) */
@@ -1342,7 +1376,13 @@ body.app-open .floating-companion,
   }
 
   .home-page {
+    flex: 0 0 20% !important;
+    width: 20% !important;
+    min-width: 20% !important;
+    max-width: 20% !important;
+    flex-shrink: 0 !important;
     padding: 12px 14px calc(100px + env(safe-area-inset-bottom, 0px)) 14px;
+    box-sizing: border-box !important;
   }
 
   .widget-clock {

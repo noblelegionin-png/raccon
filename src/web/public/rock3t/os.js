@@ -45,13 +45,21 @@ const ROCK3T_OS = {
     this.updateClock();
     setInterval(() => this.updateClock(), 1000);
 
-    // 3. Setup Touch / Swipe Gestures on Home Pager
+    // 3. Setup Touch / Swipe Gestures on Home Pager (120 FPS high smoothness & motion blur)
     this.setupSwipeGestures();
 
-    // 4. Fetch User Profile & Installed Apps
+    // 4. Default to Page 0 (Central Main Workspace) on boot
+    this.goToPage(0, false);
+
+    // 5. Realign on window resize or orientation change
+    window.addEventListener('resize', () => {
+      this.goToPage(this.currentPage, false);
+    });
+
+    // 6. Fetch User Profile & Installed Apps
     this.fetchProfile();
 
-    // 5. Fetch Rocket Life Engine Telemetry
+    // 7. Fetch Rocket Life Engine Telemetry
     this.fetchLifeEngineStatus();
     setInterval(() => this.fetchLifeEngineStatus(), 15000);
   },
@@ -157,16 +165,32 @@ const ROCK3T_OS = {
     }
   },
 
-  goToPage(pageIndex) {
+  goToPage(pageIndex, animate = true) {
     if (pageIndex < -2 || pageIndex > 2) return;
     this.currentPage = pageIndex;
 
     const track = document.getElementById('pagesTrack');
-    // Pages are ordered: -2 (0%), -1 (20%), 0 (40%), 1 (60%), 2 (80%)
-    // Offset translation percentage = (pageIndex + 2) * -20%
+    // Pages are ordered: -2 (0%), -1 (-20%), 0 (-40%), 1 (-60%), 2 (-80%)
     const translatePercent = (pageIndex + 2) * -20;
+    
     if (track) {
-      track.style.transform = `translateX(${translatePercent}%)`;
+      if (!animate) {
+        track.style.transition = 'none';
+        track.style.setProperty('--motion-blur', '0px');
+        track.style.transform = `translate3d(${translatePercent}%, 0, 0)`;
+        track.classList.remove('sliding');
+      } else {
+        track.classList.add('sliding');
+        track.style.transition = 'transform calc(0.38s * var(--anim-speed, 1)) cubic-bezier(0.16, 1, 0.3, 1), filter calc(0.3s * var(--anim-speed, 1)) ease';
+        track.style.setProperty('--motion-blur', '2.2px');
+        track.style.transform = `translate3d(${translatePercent}%, 0, 0)`;
+        
+        clearTimeout(this._slideTimer);
+        this._slideTimer = setTimeout(() => {
+          track.classList.remove('sliding');
+          track.style.setProperty('--motion-blur', '0px');
+        }, 380);
+      }
     }
 
     // Update indicator dots
@@ -175,48 +199,127 @@ const ROCK3T_OS = {
       dot.classList.toggle('active', idx === (pageIndex + 2));
     });
 
+    // Update current-page class on sections
+    const pages = document.querySelectorAll('.home-page');
+    pages.forEach((p, idx) => {
+      p.classList.toggle('current-page', idx === (pageIndex + 2));
+    });
+
     // Notify Companion
     ROCK3T_COMPANION?.onNavigate(pageIndex);
   },
 
   setupSwipeGestures() {
     const container = document.getElementById('pagerContainer');
-    if (!container) return;
+    const track = document.getElementById('pagesTrack');
+    if (!container || !track) return;
 
     let startX = 0;
     let startY = 0;
-    let isSwiping = false;
+    let startTime = 0;
+    let lastX = 0;
+    let lastTime = 0;
+    let velocity = 0;
+    let isTracking = false;
+    let isSwipingHorizontal = false;
+    let startTranslatePercent = 0;
 
     container.addEventListener('touchstart', (e) => {
-      // Do not initiate page swipe on buttons, inputs, links, or widgets
+      if (this.activeApp) return;
       const target = e.target;
-      if (target.closest('button, input, select, textarea, a, .btn-os, .dock-icon, .app-icon-item, .life-engine-card, #floatingCompanion')) {
-        isSwiping = false;
+      // Do not initiate page swipe on buttons, inputs, links, or companion avatar
+      if (target.closest('button, input, select, textarea, a, .btn-os, .dock-icon, #floatingCompanion')) {
+        isTracking = false;
         return;
       }
+
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      isSwiping = true;
+      startTime = performance.now();
+      lastX = startX;
+      lastTime = startTime;
+      velocity = 0;
+      isTracking = true;
+      isSwipingHorizontal = false;
+      startTranslatePercent = (this.currentPage + 2) * -20;
     }, { passive: true });
 
-    container.addEventListener('touchend', (e) => {
-      if (!isSwiping) return;
-      isSwiping = false;
+    container.addEventListener('touchmove', (e) => {
+      if (!isTracking || !e.touches[0]) return;
 
-      const diffX = e.changedTouches[0].clientX - startX;
-      const diffY = e.changedTouches[0].clientY - startY;
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const diffX = currentX - startX;
+      const diffY = currentY - startY;
 
-      // Only trigger if horizontal swipe exceeds 55px and is predominantly horizontal (1.6x)
-      if (Math.abs(diffX) > 55 && Math.abs(diffX) > Math.abs(diffY) * 1.6) {
-        if (diffX < 0) {
-          // Swiped left -> advance page
-          this.goToPage(Math.min(2, this.currentPage + 1));
-        } else {
-          // Swiped right -> go back page
-          this.goToPage(Math.max(-2, this.currentPage - 1));
+      // Lock direction after 7px of movement
+      if (!isSwipingHorizontal) {
+        if (Math.abs(diffY) > 8 && Math.abs(diffY) > Math.abs(diffX)) {
+          // Dominantly vertical: cancel horizontal tracking and allow native page scroll
+          isTracking = false;
+          return;
+        }
+        if (Math.abs(diffX) > 8 && Math.abs(diffX) >= Math.abs(diffY)) {
+          isSwipingHorizontal = true;
+          track.classList.add('sliding');
+          track.style.transition = 'none'; // Instant 120 FPS 1:1 finger tracking
         }
       }
-    }, { passive: true });
+
+      if (isSwipingHorizontal) {
+        if (e.cancelable) e.preventDefault();
+
+        // Calculate velocity
+        const now = performance.now();
+        const dt = now - lastTime;
+        if (dt > 10) {
+          velocity = (currentX - lastX) / dt;
+          lastX = currentX;
+          lastTime = now;
+        }
+
+        // Convert delta pixels to track percentage (1 container width = 20% of track)
+        const containerWidth = container.clientWidth || window.innerWidth || 360;
+        let deltaPercent = (diffX / containerWidth) * 20;
+
+        // Rubber-band resistance at boundaries
+        if ((this.currentPage === -2 && diffX > 0) || (this.currentPage === 2 && diffX < 0)) {
+          deltaPercent *= 0.3;
+        }
+
+        // Dynamic Motion Blur based on dragging speed
+        const blurAmount = Math.min(3.5, Math.abs(velocity) * 1.6);
+        track.style.setProperty('--motion-blur', `${blurAmount.toFixed(1)}px`);
+
+        track.style.transform = `translate3d(${startTranslatePercent + deltaPercent}%, 0, 0)`;
+      }
+    }, { passive: false });
+
+    const handleTouchEnd = (e) => {
+      if (!isTracking) return;
+      isTracking = false;
+
+      if (!isSwipingHorizontal) return;
+      isSwipingHorizontal = false;
+
+      const touch = (e.changedTouches && e.changedTouches[0]) || { clientX: lastX };
+      const diffX = touch.clientX - startX;
+      const containerWidth = container.clientWidth || window.innerWidth || 360;
+      const movedPercent = Math.abs(diffX) / containerWidth;
+
+      // Decide target page: quick flick (velocity > 0.3 px/ms) or dragged over 18% of screen
+      let targetPage = this.currentPage;
+      if (velocity < -0.3 || (diffX < 0 && movedPercent > 0.18)) {
+        targetPage = Math.min(2, this.currentPage + 1);
+      } else if (velocity > 0.3 || (diffX > 0 && movedPercent > 0.18)) {
+        targetPage = Math.max(-2, this.currentPage - 1);
+      }
+
+      this.goToPage(targetPage, true);
+    };
+
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
   },
 
   openApp(appId) {

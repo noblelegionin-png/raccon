@@ -46,7 +46,7 @@ export class ScaleMaxAdapter {
    * Health check and real latency measurement
    * Returns: { ok: boolean, latencyMs: number, status: string, error?: string, model: string }
    */
-  async checkHealth(targetModel = 'gpt-6-luna') {
+  async checkHealth(targetModel = 'deepseek-v4.1-flash') {
     if (!this.isConfigured()) {
       return {
         ok: false,
@@ -235,9 +235,12 @@ export class ScaleMaxAdapter {
       );
     }
 
-    let targetModel = model || config.scaleMaxDefaultModel || 'gpt-6-luna';
+    let targetModel = model || config.scaleMaxDefaultModel || 'deepseek-v4.1-flash';
+    if (targetModel === 'deepseek-v4-flash' || targetModel === 'deepseek-v4-pro' || targetModel === 'deepseek') {
+      targetModel = 'deepseek-v4.1-flash';
+    }
     if (!targetModel || targetModel.startsWith('gemini') || targetModel.startsWith('jev') || targetModel.includes('flash-lite')) {
-      targetModel = 'gpt-6-luna';
+      targetModel = 'deepseek-v4.1-flash';
     }
     let lastError = null;
 
@@ -409,7 +412,7 @@ export class ScaleMaxAdapter {
    * @param {number} [params.maxToolTurns=3]
    */
   async executeChatWithTools({
-    model = 'gpt-6-luna',
+    model = 'deepseek-v4.1-flash',
     messages,
     chatId = 'unknown',
     reasoningEffort = 'none',

@@ -74,7 +74,7 @@ Rule: Be cheeky, brilliant, and accurate. Sprinkle 🦝 🐾 🍕 💡 ⚡.`;
           ],
           maxTokens: 1000,
           temperature: 0.6,
-          timeoutMs: 3800,
+          timeoutMs: 12000,
         });
         explanation = completion?.text || '';
       } catch (err) {
@@ -125,14 +125,15 @@ Output strictly valid JSON with no markdown wrapping:
   ]
 }`;
 
+    const activeModel = getActiveModelId() || 'deepseek-v4.1-flash';
     if (scaleMaxAdapter.isConfigured()) {
       try {
         const completion = await scaleMaxAdapter.createChatCompletion({
-          model: 'gpt-6-luna',
+          model: activeModel,
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 1100,
           temperature: 0.3,
-          timeoutMs: 3800,
+          timeoutMs: 12000,
         });
 
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -220,14 +221,15 @@ Output strictly valid JSON with no markdown wrapping:
   ]
 }`;
 
+    const activeModel = getActiveModelId() || 'deepseek-v4.1-flash';
     if (scaleMaxAdapter.isConfigured()) {
       try {
         const completion = await scaleMaxAdapter.createChatCompletion({
-          model: 'gpt-6-luna',
+          model: activeModel,
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 800,
           temperature: 0.3,
-          timeoutMs: 3800,
+          timeoutMs: 12000,
         });
 
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -308,14 +310,15 @@ STRUCTURE:
 [Top 3 bullet points for practitioners or researchers.]`;
 
     let resultText = '';
+    const activeModel = getActiveModelId() || 'deepseek-v4.1-flash';
     if (scaleMaxAdapter.isConfigured()) {
       try {
         const completion = await scaleMaxAdapter.createChatCompletion({
-          model: 'gpt-6-luna',
+          model: activeModel,
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 1400,
           temperature: 0.5,
-          timeoutMs: 8000,
+          timeoutMs: 15000,
         });
         resultText = completion?.text || '';
       } catch (err) {

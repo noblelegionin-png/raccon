@@ -17,18 +17,108 @@ import { pdfService } from '../pdf/pdfService.js';
 import { discernConversationalAddress } from '../conversation/addressDiscernment.js';
 import { rocketStudyService } from '../study/studyService.js';
 import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
+import {
+  getConfig,
+  setConfig,
+  registerOrUpdateGroup,
+  getLatestChatMessages,
+} from '../db/index.js';
+import { messageArchiver } from '../memory/archiver.js';
+import { trackGroupActivity } from '../groups/groupService.js';
+
+// Resilient message sender with entity parsing error recovery
+async function safeReply(ctx, text, extra = {}) {
+  try {
+    return await ctx.reply(text, extra);
+  } catch (err) {
+    if (extra?.parse_mode && (err.description?.includes("can't parse entities") || err.message?.includes('entity') || err.error_code === 400)) {
+      const fallback = { ...extra };
+      delete fallback.parse_mode;
+      return await ctx.reply(text, fallback);
+    }
+    throw err;
+  }
+}
 
 export function registerRocketHandlers(bot) {
   const miniAppUrl = config.rocketMiniAppUrl || config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
   const cleanAppUrl = miniAppUrl.replace(/\/+$/, '');
 
-  // 1. /start command
-  bot.command('start', async (ctx) => {
+  function renderRocketGroupControlMessage(ctx, state) {
+    const title = ctx.chat?.title || 'This Group';
+    const textMode = getConfig(`text_mode_${ctx.chat.id}`, 'on');
+    const isChatActive = textMode === 'on' || textMode === 'all' || textMode === 'true';
+    const botUsername = ctx.me?.username || 'R0CK3TAI';
+
+    let msg = `🦝 *ROCKET AI — GROUP HUB & SETUP* 🐾😈\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `• *Group:* *${title}*\n`;
+    msg += `• *Chat Mode:* ${isChatActive ? '🟢 *CHAT ACTIVE (BANTER ON)*' : '⚪ *QUIET MODE (STANDBY)*'}\n`;
+    msg += `• *Status:* ${isChatActive ? 'Rocket actively listens and banters with the group.' : 'Rocket speaks only when called ("Rocket..."), mentioned, or replied to.'}\n`;
+    msg += `• *Mood:* ${state.mood} 🦝\n`;
+    msg += `• *Hunger:* ${state.hunger_level}% [${state.hunger_state}]\n`;
+    msg += `• *Group Pizza Stash:* ${state.pizza_inventory} 🍕 | *Tacos:* ${state.taco_inventory} 🌮\n\n`;
+    msg += `*How to talk to Rocket:* \n`;
+    msg += `👉 Say *"Rocket"*, *"Rocky"*, or mention @${botUsername} anywhere in your message!\n`;
+    msg += `👉 Reply directly to any message sent by Rocket.\n`;
+    msg += `👉 Tap *[ 🟢 Chat Mode ]* below to toggle active group banter.\n`;
+    msg += `👉 Tap *[ 🚀 Open ROCK3T Mini App ]* below to launch the Group Web OS!\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `_Owner: Sandy (Nero Aurelius) 👑_`;
+    return msg;
+  }
+
+  function buildRocketGroupKeyboard(ctx) {
+    const textMode = getConfig(`text_mode_${ctx.chat.id}`, 'on');
+    const isChatActive = textMode === 'on' || textMode === 'all' || textMode === 'true';
+    const botUsername = ctx.me?.username || 'R0CK3TAI';
+    const webAppUrl = `${cleanAppUrl}/rock3t/index.html?group_id=${ctx.chat.id}&group_name=${encodeURIComponent(ctx.chat.title || 'Group')}`;
+    const directTelegramMiniApp = `https://t.me/${botUsername}?startapp=group_${ctx.chat.id}`;
+    const raccoonHubUrl = `${cleanAppUrl}/raccoon/index.html?group_id=${ctx.chat.id}`;
+
+    // Note: Telegram strictly forbids .webApp() inside group chats (error 400 BUTTON_TYPE_INVALID).
+    // Using .url() buttons for groups guarantees 100% successful delivery and direct launch!
+    return new InlineKeyboard()
+      .url('🚀 Open ROCK3T Mini App', directTelegramMiniApp)
+      .url('🌐 Group Web OS', webAppUrl)
+      .row()
+      .url('🦝 Life Engine Hub', raccoonHubUrl)
+      .row()
+      .text(isChatActive ? '🟢 Chat Active (Tap for Quiet)' : '⚪ Quiet Mode (Tap to Chat)', `rocket_toggle_chat_${ctx.chat.id}`)
+      .row()
+      .text('🍕 Feed Group Pizza', `rocket_group_feed_pizza_${ctx.chat.id}`)
+      .text('🌮 Feed Group Taco', `rocket_group_feed_taco_${ctx.chat.id}`)
+      .row()
+      .text('📊 Life Status', `rocket_group_status_${ctx.chat.id}`)
+      .text('📌 Pin Hub', `rocket_group_pin_${ctx.chat.id}`);
+  }
+
+  // 1. /start and /setup commands
+  bot.command(['start', 'setup'], async (ctx) => {
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
     const isOwner = isSandy(ctx.from?.id);
     const userName = ctx.from?.first_name || 'Friend';
-    const contextId = ctx.chat.type === 'private' ? `user_${ctx.from.id}` : `group_${ctx.chat.id}`;
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const state = rocketLifeEngine.getState(contextId);
 
+    // Group flow: Register group, configure text mode, and send valid group inline buttons
+    if (isGroup) {
+      trackGroupActivity(ctx.chat);
+      registerOrUpdateGroup(ctx.chat.id, ctx.chat.title, ctx.chat.type, 1);
+      if (!getConfig(`text_mode_${ctx.chat.id}`, null)) {
+        setConfig(`text_mode_${ctx.chat.id}`, 'on');
+      }
+
+      const welcomeMsg = renderRocketGroupControlMessage(ctx, state);
+      const keyboard = buildRocketGroupKeyboard(ctx);
+
+      return safeReply(ctx, welcomeMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
+    }
+
+    // Private 1-on-1 DM flow: Full native .webApp() integration
     const keyboard = new InlineKeyboard()
       .webApp('🚀 Launch ROCK3T OS', `${cleanAppUrl}/rock3t/index.html`)
       .row()
@@ -53,7 +143,7 @@ export function registerRocketHandlers(bot) {
     welcomeText += `• *Pizza Stash:* ${state.pizza_inventory} 🍕 | *Tacos:* ${state.taco_inventory} 🌮\n\n`;
     welcomeText += `Tap *ROCK3T OS* below to enter your personal simulated Android Web OS with Tic-Tac-Toe, Canvas, Store, Settings & 50 Profile Questions!`;
 
-    await ctx.reply(welcomeText, {
+    await safeReply(ctx, welcomeText, {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
@@ -61,28 +151,44 @@ export function registerRocketHandlers(bot) {
 
   // 2. /status command
   bot.command('status', async (ctx) => {
-    const contextId = ctx.chat.type === 'private' ? `user_${ctx.from.id}` : `group_${ctx.chat.id}`;
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const contextId = isGroup ? `group_${ctx.chat.id}` : `user_${ctx.from.id}`;
     const state = rocketLifeEngine.getState(contextId);
     const card = formatRocketStatusCard(state);
 
-    const keyboard = new InlineKeyboard()
-      .webApp('🚀 Open Raccoon OS', `${cleanAppUrl}/raccoon/index.html`)
-      .text('🔄 Refresh', 'view_status');
+    const keyboard = isGroup
+      ? new InlineKeyboard()
+          .url('🚀 Open Group Web OS', `${cleanAppUrl}/rock3t/index.html?group_id=${ctx.chat.id}`)
+          .text('🔄 Refresh', `rocket_group_status_${ctx.chat.id}`)
+      : new InlineKeyboard()
+          .webApp('🚀 Open Raccoon OS', `${cleanAppUrl}/raccoon/index.html`)
+          .text('🔄 Refresh', 'view_status');
 
-    await ctx.reply(card, {
+    await safeReply(ctx, card, {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
   });
 
-  // 3. /rock3t, /os, /app commands
-  bot.command(['rock3t', 'os', 'app', 'raccoon'], async (ctx) => {
-    const keyboard = new InlineKeyboard()
-      .webApp('🚀 Launch ROCK3T OS', `${cleanAppUrl}/rock3t/index.html`)
-      .row()
-      .webApp('🦝 Open Life Engine Hub', `${cleanAppUrl}/raccoon/index.html`);
+  // 3. /rock3t, /os, /app, /miniapp commands
+  bot.command(['rock3t', 'os', 'app', 'raccoon', 'miniapp'], async (ctx) => {
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const botUsername = ctx.me?.username || 'R0CK3TAI';
+    const webAppUrl = `${cleanAppUrl}/rock3t/index.html?group_id=${ctx.chat.id}&group_name=${encodeURIComponent(ctx.chat.title || 'Group')}`;
+    const directTelegramMiniApp = `https://t.me/${botUsername}?startapp=group_${ctx.chat.id}`;
 
-    await ctx.reply('🐾 Launching the *ROCK3T Web OS* & Personal Environment...', {
+    const keyboard = isGroup
+      ? new InlineKeyboard()
+          .url('🚀 Launch ROCK3T Mini App', directTelegramMiniApp)
+          .url('🌐 Group Web OS', webAppUrl)
+          .row()
+          .url('🦝 Life Engine Hub', `${cleanAppUrl}/raccoon/index.html?group_id=${ctx.chat.id}`)
+      : new InlineKeyboard()
+          .webApp('🚀 Launch ROCK3T OS', `${cleanAppUrl}/rock3t/index.html`)
+          .row()
+          .webApp('🦝 Open Life Engine Hub', `${cleanAppUrl}/raccoon/index.html`);
+
+    await safeReply(ctx, '🐾 *Launching ROCK3T Web OS & Mini App Environment...* 🚀', {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
@@ -457,20 +563,100 @@ export function registerRocketHandlers(bot) {
     }
   });
 
+  // Group member join handler — Rocket greets new members & self-initializes
+  bot.on(':new_chat_members', async (ctx) => {
+    const newMembers = ctx.message?.new_chat_members || [];
+    const botId = ctx.me?.id;
+    const botAdded = newMembers.some((m) => m.id === botId);
+
+    if (botAdded) {
+      trackGroupActivity(ctx.chat);
+      registerOrUpdateGroup(ctx.chat.id, ctx.chat.title, ctx.chat.type, 1);
+      if (!getConfig(`text_mode_${ctx.chat.id}`, null)) {
+        setConfig(`text_mode_${ctx.chat.id}`, 'on');
+      }
+      const state = rocketLifeEngine.getState(`group_${ctx.chat.id}`);
+      const welcomeMsg = renderRocketGroupControlMessage(ctx, state);
+      const keyboard = buildRocketGroupKeyboard(ctx);
+      return safeReply(ctx, welcomeMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+
+    // Greet joining members with cheeky raccoon style
+    const names = newMembers.map((m) => m.first_name).filter(Boolean).join(', ');
+    if (names) {
+      await safeReply(ctx, `🦝🐾 *YO!* Welcome to the crew, *${names}*! I'm Rocket, Sandy's partner-in-crime! Bring pizza 🍕 or tacos 🌮 and check our Mini App!`, {
+        parse_mode: 'Markdown',
+      });
+    }
+  });
+
   // Inline callback query handlers
   bot.on('callback_query:data', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const contextId = ctx.chat?.type === 'private' ? `user_${ctx.from.id}` : `group_${ctx.chat?.id}`;
 
+    // Group Chat Mode Toggle
+    if (data.startsWith('rocket_toggle_chat_')) {
+      const chatId = data.replace('rocket_toggle_chat_', '');
+      const current = getConfig(`text_mode_${chatId}`, 'on');
+      const next = current === 'on' || current === 'all' || current === 'true' ? 'off' : 'on';
+      setConfig(`text_mode_${chatId}`, next);
+      await ctx.answerCallbackQuery({ text: `Chat is now ${next === 'on' ? '🟢 ACTIVE' : '⚪ QUIET'}!` });
+
+      const state = rocketLifeEngine.getState(`group_${chatId}`);
+      const msg = renderRocketGroupControlMessage(ctx, state);
+      const kb = buildRocketGroupKeyboard(ctx);
+      await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: kb }).catch(() => {});
+      return;
+    }
+
+    // Group Shared Feeding
+    if (data.startsWith('rocket_group_feed_pizza_')) {
+      const chatId = data.replace('rocket_group_feed_pizza_', '');
+      const updated = rocketLifeEngine.feed(`group_${chatId}`, ctx.from.id, ctx.from.first_name, 'pizza', 1);
+      await ctx.answerCallbackQuery({ text: 'Fed 1 Pizza to group stash! 🍕' });
+      await safeReply(ctx, `🦝🍕 *NOM!* ${ctx.from.first_name} fed 1 Pizza to the group stash!\n• Pizza Stash: *${updated.pizza_inventory}* 🍕 | Hunger: *${updated.hunger_level}%* [${updated.hunger_state}]`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    if (data.startsWith('rocket_group_feed_taco_')) {
+      const chatId = data.replace('rocket_group_feed_taco_', '');
+      const updated = rocketLifeEngine.feed(`group_${chatId}`, ctx.from.id, ctx.from.first_name, 'taco', 1);
+      await ctx.answerCallbackQuery({ text: 'Fed 1 Taco to group stash! 🌮' });
+      await safeReply(ctx, `🦝🌮 *CRUNCH!* ${ctx.from.first_name} fed 1 Taco to the group stash!\n• Taco Stash: *${updated.taco_inventory}* 🌮 | Hunger: *${updated.hunger_level}%* [${updated.hunger_state}]`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // Group Status Card
+    if (data.startsWith('rocket_group_status_')) {
+      const chatId = data.replace('rocket_group_status_', '');
+      const state = rocketLifeEngine.getState(`group_${chatId}`);
+      await ctx.answerCallbackQuery();
+      await safeReply(ctx, formatRocketStatusCard(state), { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // Pin Hub in Group
+    if (data.startsWith('rocket_group_pin_')) {
+      try {
+        await ctx.pinChatMessage(ctx.callbackQuery.message.message_id);
+        await ctx.answerCallbackQuery({ text: '📌 Hub pinned to group!' });
+      } catch (err) {
+        await ctx.answerCallbackQuery({ text: 'Give Rocket admin permission to pin messages!', show_alert: true });
+      }
+      return;
+    }
+
+    // Private DM callbacks
     if (data === 'feed_pizza' || data === 'feed_taco') {
       const item = data === 'feed_pizza' ? 'pizza' : 'taco';
       const updated = rocketLifeEngine.feed(contextId, ctx.from.id, ctx.from.first_name, item, 1);
       await ctx.answerCallbackQuery({ text: `Fed 1 ${item}! 🍕 Yum!`, show_alert: false });
-      await ctx.reply(`🦝✨ *NOM!* Fed 1 ${item}! Hunger: ${updated.hunger_level}% [${updated.hunger_state}]`);
+      await safeReply(ctx, `🦝✨ *NOM!* Fed 1 ${item}! Hunger: ${updated.hunger_level}% [${updated.hunger_state}]`);
     } else if (data === 'view_status') {
       const state = rocketLifeEngine.getState(contextId);
       await ctx.answerCallbackQuery();
-      await ctx.reply(formatRocketStatusCard(state), { parse_mode: 'Markdown' });
+      await safeReply(ctx, formatRocketStatusCard(state), { parse_mode: 'Markdown' });
     }
   });
 
@@ -486,7 +672,18 @@ export function registerRocketHandlers(bot) {
     const botUsername = ctx.me?.username || 'R0CK3TAI';
     const botId = ctx.me?.id;
 
-    // Discern conversational address: Is the user talking to Rocket or someone else?
+    // In groups: Record message to database archive and track activity so Rocket is fully group-aware
+    if (isGroup) {
+      trackGroupActivity(ctx.chat);
+      if (ctx.message) {
+        messageArchiver.recordIncomingMessage(ctx).catch(() => {});
+      }
+    }
+
+    const textMode = isGroup ? getConfig(`text_mode_${ctx.chat.id}`, 'on') : 'on';
+    const isTextModeActive = textMode === 'on' || textMode === 'all' || textMode === 'true';
+
+    // Discern conversational address: Is the message intended for Rocket?
     const address = discernConversationalAddress({
       text,
       isGroup,
@@ -494,17 +691,18 @@ export function registerRocketHandlers(bot) {
       botId,
       replyToMessage: ctx.message.reply_to_message,
       isOwner,
+      isTextModeActive,
     });
 
-    // In group chats: Never interrupt if talking to another human or general chat!
+    // In group chats: Never interrupt if user is explicitly addressing another human
     if (isGroup && !address.isAddressedToRocket) {
-      return; // Silent observation, blends seamlessly with the group!
+      return; // Silent observation, blends seamlessly with the group
     }
 
     // In 1-on-1 private chat: Check if user is asking bot to wait or talking to someone else
     if (!isGroup && address.isTalkingToSomeoneElse) {
       if (/\b(?:don'?t\s+reply|shh|wait\s+bro|holding|on\s+call|busy\s+talking|call\s+pe\s+hu)\b/i.test(text)) {
-        return ctx.reply('🤐🐾 *zips lips and nods quietly* Stealth mode on! Take your time, boss!');
+        return safeReply(ctx, '🤐🐾 *zips lips and nods quietly* Stealth mode on! Take your time, boss!');
       }
     }
 
@@ -526,8 +724,8 @@ export function registerRocketHandlers(bot) {
           topic: topicToExplain,
           senderName: userName,
         });
-        rocketLifeEngine.consumeTokens(contextId, 250, 600, 'gpt-6-luna');
-        return ctx.reply(studyRes.formattedText, {
+        rocketLifeEngine.consumeTokens(contextId, 250, 450, 'deepseek-v4.1-flash');
+        return safeReply(ctx, studyRes.formattedText, {
           parse_mode: 'Markdown',
           reply_parameters: { message_id: ctx.message.message_id },
         });
@@ -539,43 +737,68 @@ export function registerRocketHandlers(bot) {
     // 1. Sandy Abuse Guard
     if (detectSandyAbuse(text)) {
       const defense = generateDefenseResponse(userName);
-      return ctx.reply(defense);
+      return safeReply(ctx, defense);
     }
 
     // 2. Sleep Guard (5 messages wake up)
     if (state.is_sleeping) {
       const sleepResult = rocketLifeEngine.registerSleepMessage(contextId, ctx.from.id);
-      return ctx.reply(sleepResult.message);
+      return safeReply(ctx, sleepResult.message);
     }
 
     // 3. Hunger / Starving Guard (0% fuel)
     if (state.hunger_state === 'starving' && state.fuel_tokens_remaining <= 0 && state.pizza_inventory <= 0 && state.taco_inventory <= 0) {
       if (!isOwner) {
         const starvingRefusal = generateStarvingResponse(userName, false);
-        return ctx.reply(starvingRefusal);
+        return safeReply(ctx, starvingRefusal);
       }
     }
 
-    // 4. Send typing chat action heartbeat to eliminate perceived latency
+    // 4. Send typing chat action heartbeat
     ctx.replyWithChatAction('typing').catch(() => {});
     const typingHeartbeat = setInterval(() => {
       ctx.replyWithChatAction('typing').catch(() => {});
     }, 3500);
 
-    // 5. Build dynamic persona directive & call ScaleMax via optimized adapter
-    const activeModel = getActiveModelId();
+    // 5. Gather recent group context if in group chat
+    let recentChatContext = null;
+    if (isGroup) {
+      try {
+        const rawMsgs = getLatestChatMessages(ctx.chat.id, 4);
+        if (rawMsgs && rawMsgs.length > 0) {
+          recentChatContext = rawMsgs
+            .filter((m) => m.platform_message_id !== ctx.message.message_id)
+            .map((m) => `${m.sender_name || 'Member'}: "${(m.raw_content || '').slice(0, 100)}"`)
+            .join('\n');
+        }
+      } catch {}
+    }
+
+    // 6. Build dynamic persona directive & call ScaleMax via ultra-fast model
+    const activeModel = getActiveModelId() || 'deepseek-v4.1-flash';
     const directive = buildRocketDirective({
       senderName: userName,
       isSandy: isOwner,
       userRole: isOwner ? 'owner' : 'member',
       lifeState: state,
       recipientType: address.recipientType,
+      isGroup,
+      groupTitle: ctx.chat.title || 'Community',
+      groupId: ctx.chat.id,
+      recentChat: recentChatContext,
     });
 
     const messages = [
       { role: 'system', content: directive },
       { role: 'user', content: text },
     ];
+
+    // High speed & minimal token consumption:
+    // Short greetings / check-ins cap to 100 tokens (~1.5s latency)
+    // Group banter caps to 160 tokens (~2s latency)
+    // Long DMs cap to 250 tokens
+    const isShortGreeting = /^(?:hi|hey|hello|yo|oi|sup|hlo|namaste|kese ho|how are you|kya haal|kya kar raha hai)\b/i.test(text);
+    const targetMaxTokens = isShortGreeting ? 100 : isGroup ? 160 : 250;
 
     let aiReply = '';
     let promptTokens = 30;
@@ -584,11 +807,11 @@ export function registerRocketHandlers(bot) {
     try {
       if (scaleMaxAdapter.isConfigured()) {
         const completion = await scaleMaxAdapter.createChatCompletion({
-          model: activeModel || 'gpt-6-luna',
+          model: activeModel,
           messages,
-          maxTokens: 650,
-          temperature: 0.75,
-          timeoutMs: 18000,
+          maxTokens: targetMaxTokens,
+          temperature: 0.7,
+          timeoutMs: 25000,
         });
 
         aiReply = completion?.text || '';
@@ -599,15 +822,17 @@ export function registerRocketHandlers(bot) {
       }
     } catch (err) {
       console.warn('[RocketBot Chat Error]:', err.message);
-      aiReply = `🦝🐾 *rubs whiskers* Whoops, had a little glitch reaching the server! But Rocket is right here! Remind me in a sec! 😈`;
+      aiReply = `🦝🐾 *rubs whiskers* Whoops, had a little hiccup reaching the server! But Rocket is right here! Remind me in a sec! 😈`;
     } finally {
       clearInterval(typingHeartbeat);
     }
 
     // Deduct fuel based on actual token usage
-    rocketLifeEngine.consumeTokens(contextId, promptTokens, completionTokens, activeModel || 'gpt-6-luna');
+    rocketLifeEngine.consumeTokens(contextId, promptTokens, completionTokens, activeModel);
 
-    await ctx.reply(scrubRestrictedBrandNames(aiReply));
+    await safeReply(ctx, scrubRestrictedBrandNames(aiReply), {
+      reply_parameters: { message_id: ctx.message.message_id },
+    });
   });
 
   // Document upload handler (Reading & Analyzing PDFs)

@@ -30,7 +30,7 @@ export const config = {
   // ScaleMax & Model Provider
   scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY),
   scaleMaxBaseUrl: (cleanEnv(process.env.SCALEMAX_BASE_URL, 'https://api.scalemax.pro/token/v1')).replace(/\/+$/, ''),
-  scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gpt-6-luna'),
+  scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'deepseek-v4.1-flash'),
   deepSeekApiKey: cleanEnv(process.env.DEEPSEEK_API_KEY),
 
   // Dashboard Security
@@ -53,7 +53,7 @@ export const config = {
 
   // Operational defaults
   latencyThresholdMs: 1000,
-  maxContextMessages: 20,
+  maxContextMessages: 8,
   maxRetryCount: 1,
   requestTimeoutMs: 30000,
 };

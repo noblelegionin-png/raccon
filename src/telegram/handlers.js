@@ -3364,9 +3364,11 @@ export function registerBotHandlers(bot) {
       ? Math.min(explicitLimit * 2, 1000)
       : isExplicitDeepRequested
       ? 750
+      : !isPrivate
+      ? 160
       : userIsOwner
-      ? 450
-      : 350;
+      ? 300
+      : 200;
 
     // Detect if tools are needed or if this is purely conversational (saving 1-2s of tool-evaluation latency)
     const needsTools = /(?:pdf|generate|draw|photo|image|search|browse|ban|kick|mute|unmute|poll|quiz|drive|remind|schedule|weather|calc|who are you|open app)/i.test(promptText);

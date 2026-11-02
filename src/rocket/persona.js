@@ -114,32 +114,46 @@ export function formatRocketStatusCard(state) {
 }
 
 /**
- * Build dynamic system directive according to current context & life state
+ * Build dynamic system directive according to current context, group awareness & life state
  */
-export function buildRocketDirective({ senderName = 'User', isSandy = false, userRole = 'member', lifeState, recipientType = 'rocket' }) {
+export function buildRocketDirective({
+  senderName = 'User',
+  isSandy = false,
+  userRole = 'member',
+  lifeState,
+  recipientType = 'rocket',
+  isGroup = false,
+  groupTitle = null,
+  groupId = null,
+  recentChat = null,
+}) {
   let prompt = ROCKET_BASE_IDENTITY.trim();
 
   prompt += `\n\nCURRENT CONVERSATION CONTEXT:\n`;
   prompt += `- User you are speaking with: "${senderName}"\n`;
   prompt += `- User Role: ${userRole.toUpperCase()}\n`;
-  prompt += `- Is this user your boss Sandy? ${isSandy ? 'YES, THIS IS SANDY! Give him top priority, warmth, and full allegiance.' : 'No, this is an authorized friend/collaborator.'}\n`;
+  prompt += `- Is this user your boss Sandy? ${isSandy ? 'YES, THIS IS BOSS SANDY! Give him top priority, warmth, and full allegiance.' : 'No, this is an authorized friend/collaborator.'}\n`;
+
+  if (isGroup) {
+    prompt += `\nGROUP ENVIRONMENT AWARENESS:\n`;
+    prompt += `- Group Name: "${groupTitle || 'Community'}" (ID: ${groupId})\n`;
+    prompt += `- You are in an active group chat! Address "${senderName}" and the group naturally.\n`;
+    prompt += `- Keep group banter witty, mischievous, fast, and punchy (1 to 3 short sentences max).\n`;
+    if (recentChat) {
+      prompt += `\n[RECENT GROUP CHATTER STREAM]\n${recentChat}\n`;
+    }
+  }
 
   if (recipientType === 'third_party_narrative') {
-    prompt += `\nCONVERSATIONAL BLENDING DIRECTIVE: The user is narrating a story, discussing someone else, or chatting casually. React naturally as a loyal, sharp companion listening to their life (react with curiosity, humor, loyalty, or playful banter), rather than treating their message as a formal technical task.\n`;
+    prompt += `\nCONVERSATIONAL BLENDING DIRECTIVE: The user is narrating a story, discussing someone else, or chatting casually. React naturally as a loyal, sharp companion listening to their life (react with curiosity, humor, loyalty, or playful banter).\n`;
   }
 
   if (lifeState) {
-    prompt += `\nLIVE RACCOON LIFE TELEMETRY:\n`;
-    prompt += `- Current Mood: ${lifeState.mood}\n`;
-    prompt += `- Hunger Level: ${lifeState.hunger_level}% (${lifeState.hunger_state})\n`;
-    prompt += `- Pizza Stash: ${lifeState.pizza_inventory} pizzas, ${lifeState.taco_inventory} tacos\n`;
-    prompt += `- Fitness: ${lifeState.fitness_title} (${lifeState.fictional_weight_kg} kg)\n`;
-    prompt += `- Sleeping Status: ${lifeState.is_sleeping ? 'Currently woken from sleep! Grumble a bit about interrupted naps.' : 'Awake and sharp'}\n`;
-
+    prompt += `\nLIVE RACCOON TELEMETRY: Mood: ${lifeState.mood} | Hunger: ${lifeState.hunger_level}% | Pizza: ${lifeState.pizza_inventory} 🍕\n`;
     if (lifeState.hunger_state === HUNGER_STATES.STARVING) {
-      prompt += `\nCRITICAL DIRECTIVE: You are STARVING (0% fuel)! Complain loudly and ask for a pizza before you collapse!\n`;
+      prompt += `CRITICAL DIRECTIVE: You are STARVING (0% fuel)! Complain loudly and ask for a pizza before you collapse!\n`;
     } else if (lifeState.hunger_state === HUNGER_STATES.HUNGRY) {
-      prompt += `\nBEHAVIOR DIRECTIVE: You are hungry. Drop funny pizza or taco hints in your reply.\n`;
+      prompt += `BEHAVIOR DIRECTIVE: You are hungry. Drop funny pizza or taco hints in your reply.\n`;
     }
   }
 

@@ -4,6 +4,17 @@ import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 // Base priority models
 export const BASE_CATALOGUE = [
   {
+    id: 'deepseek-v4.1-flash',
+    name: 'DeepSeek V4.1 Flash (Ultra-Speed)',
+    provider: 'Nero Labs Neural Engine',
+    category: 'High-Speed Reasoning & Intelligence',
+    description: 'Ultra-fast synthetic reasoning model with sub-second latency, high efficiency, and minimal token overhead.',
+    isDefault: true,
+    capabilities: ['chat', 'search', 'browsing', 'code', 'reasoning', 'speed'],
+    pricing: 'Verified available on Nero Labs',
+    supported: true,
+  },
+  {
     id: 'deepseek-v4-flash',
     name: 'DeepSeek V4 Flash',
     provider: 'Nero Labs Neural Engine',
@@ -15,23 +26,12 @@ export const BASE_CATALOGUE = [
     supported: true,
   },
   {
-    id: 'deepseek-v4-pro',
-    name: 'DeepSeek V4 Pro',
-    provider: 'Nero Labs Neural Engine',
-    category: 'General Reasoning & Math',
-    description: 'High-performance reasoning and synthetic thought model.',
-    isDefault: false,
-    capabilities: ['text', 'reasoning', 'math'],
-    pricing: 'Verified available on Nero Labs',
-    supported: true,
-  },
-  {
     id: 'gpt-6-luna',
     name: 'Rocket Neural Core',
     provider: 'Nero Labs / Proprietary',
     category: 'General Reasoning & Text',
-    description: 'High-efficiency neural model optimized for ultra-fast chat completions and multi-turn reasoning.',
-    isDefault: true,
+    description: 'High-efficiency neural model optimized for multi-turn reasoning.',
+    isDefault: false,
     capabilities: ['text', 'reasoning', 'context-window'],
     pricing: 'Included with Nero Labs',
     supported: true,
@@ -92,7 +92,11 @@ const latencyCache = new Map();
  * Get active model ID from persistent database
  */
 export function getActiveModelId() {
-  return getConfig('active_model_id', 'deepseek-v4-flash');
+  const current = getConfig('active_model_id', 'deepseek-v4.1-flash');
+  if (current === 'deepseek-v4-flash' || current === 'deepseek') {
+    return 'deepseek-v4.1-flash';
+  }
+  return current;
 }
 
 /**

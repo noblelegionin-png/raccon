@@ -65,9 +65,9 @@ export function buildGroupMemoryContext(chatId, latestUserPrompt, options = {}) 
     parts.push(`[REPLIED-TO MESSAGE CONTEXT]\nThe user is explicitly replying to this message by ${replyContext.sender || 'a group member'}:\n"${replyContext.text.slice(0, 250)}"`);
   }
 
-  // 3. Live Group Chat Stream (latest 15 messages from raw_messages)
+  // 3. Live Group Chat Stream (latest 5 messages from raw_messages)
   try {
-    const rawMsgs = getLatestChatMessages(chatId, 15);
+    const rawMsgs = getLatestChatMessages(chatId, 5);
     if (rawMsgs && rawMsgs.length > 0) {
       const chatLines = rawMsgs.map((m) => {
         const sender = m.sender_name || (m.sender_username ? `@${m.sender_username}` : 'Member');

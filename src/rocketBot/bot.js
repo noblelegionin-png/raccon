@@ -118,7 +118,8 @@ async function runPollingSupervisor() {
           try {
             await rocketBotInstance.api.setMyCommands([
               { command: 'start', description: '🦝 Meet Rocket & open Raccoon OS' },
-              { command: 'app', description: '📱 Launch Raccoon OS Mini App' },
+              { command: 'setup', description: '⚙️ Configure Rocket for group & chat controls' },
+              { command: 'app', description: '📱 Launch ROCK3T Mini App' },
               { command: 'status', description: '📊 Rocket Life Engine, mood & hunger status' },
               { command: 'feed', description: '🍕 Feed Rocket pizza or tacos' },
               { command: 'sleep', description: '🌙 Sleep schedule & rest cycle timer' },

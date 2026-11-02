@@ -40,7 +40,7 @@ async function main() {
   if (config.telegramEnabled && config.telegramBotToken) {
     await startBot();
   } else {
-    console.log('[TelegramBot] First Telegram bot is DISCONTINUED / RETIRED (TELEGRAM_ENABLED=false). Long-polling skipped.');
+    console.log('[TelegramBot] Nero Telegram bot is standing by (TELEGRAM_ENABLED=false).');
   }
 
   // 4b. Start WhatsApp 24/7 Live Bridge

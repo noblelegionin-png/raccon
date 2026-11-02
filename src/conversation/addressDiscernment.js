@@ -14,9 +14,9 @@ export const RECIPIENT_TYPES = {
   SELF_TALK: 'self_talk',
 };
 
-// Common direct address vocatives to Rocket
-const ROCKET_VOCATIVE_REGEX = /^(?:hey\s+|yo\s+|oi\s+|listen\s+|sun\s+|bhai\s+|arre\s+)?(?:rocket|rocky|rakoon|raccoon|r0ck3t)\b/i;
-const ROCKET_NAME_ANYWHERE = /\b(?:rocket|rocky|rakoon|raccoon|r0ck3t)\b/i;
+// Common direct address vocatives to Rocket & Nero
+const ROCKET_VOCATIVE_REGEX = /^(?:hey\s+|yo\s+|oi\s+|listen\s+|sun\s+|bhai\s+|arre\s+)?(?:rocket|rocky|rakoon|raccoon|r0ck3t|nero)\b/i;
+const ROCKET_NAME_ANYWHERE = /\b(?:rocket|rocky|rakoon|raccoon|r0ck3t|nero)\b/i;
 
 // Human-to-human address indicators
 const HUMAN_DIRECT_ADDRESS_REGEX = /^(?:@\w+|bhai\s+sun|bro\s+listen|dude|bro|yaar|bhaiya|sir|madam|guys|everyone|dosto)\b/i;
@@ -49,6 +49,7 @@ export function discernConversationalAddress({
   botId = null,
   replyToMessage = null,
   isOwner = false,
+  isTextModeActive = false,
 }) {
   const clean = text.trim();
   const lower = clean.toLowerCase();
@@ -137,7 +138,22 @@ export function discernConversationalAddress({
     };
   }
 
-  // 7. Detection of talking to someone else or third-party narrative (in both DM and Groups)
+  // 7. Owner (Sandy) Direct Presence in Group - Rocket is hyper-attentive to Sandy
+  if (isGroup && isOwner) {
+    const hasOtherReply = replyToMessage && replyToMessage.from?.id !== botId;
+    if (!hasOtherReply) {
+      return {
+        isAddressedToRocket: true,
+        recipientType: RECIPIENT_TYPES.ROCKET,
+        confidence: 0.95,
+        reason: 'OWNER_GROUP_PRESENCE',
+        isCommand: false,
+        isTalkingToSomeoneElse: false,
+      };
+    }
+  }
+
+  // 8. Detection of talking to someone else or third-party narrative (in both DM and Groups)
   if (TALKING_TO_ANOTHER_REGEX.test(lower)) {
     return {
       isAddressedToRocket: !isGroup, // In DMs, Rocket can listen and react as friend; in groups, stay silent
@@ -149,18 +165,33 @@ export function discernConversationalAddress({
     };
   }
 
-  // 8. In Groups: Casual chatter without addressing Rocket
+  // 9. In Groups: Casual chatter & active text mode
   if (isGroup) {
     // If name "rocket" appears inside the sentence, check context
     if (ROCKET_NAME_ANYWHERE.test(lower)) {
       return {
         isAddressedToRocket: true,
         recipientType: RECIPIENT_TYPES.ROCKET,
-        confidence: 0.80,
+        confidence: 0.85,
         reason: 'ROCKET_NAME_MENTIONED',
         isCommand: false,
         isTalkingToSomeoneElse: false,
       };
+    }
+
+    // If Group Chat / Text Mode is enabled: participate actively in group discussion
+    if (isTextModeActive) {
+      const hasOtherReply = replyToMessage && replyToMessage.from?.id !== botId;
+      if (!hasOtherReply) {
+        return {
+          isAddressedToRocket: true,
+          recipientType: RECIPIENT_TYPES.GROUP_GENERAL,
+          confidence: 0.80,
+          reason: 'GROUP_TEXT_MODE_ACTIVE',
+          isCommand: false,
+          isTalkingToSomeoneElse: false,
+        };
+      }
     }
 
     // Otherwise in groups, default to SILENCE so humans talk freely

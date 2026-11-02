@@ -351,7 +351,21 @@ const ROCK3T_GAMES = {
       return;
     }
 
+    // 1. Optimistic Human Drop (0ms perceived latency!)
+    let humanSlot = -1;
+    for (let r = 5; r >= 0; r--) {
+      const idx = r * 7 + col;
+      if (this.c4Board[idx] === null) {
+        humanSlot = idx;
+        break;
+      }
+    }
+    if (humanSlot === -1) return;
+
+    this.c4Board[humanSlot] = 'R';
+    this.renderC4Slot(humanSlot, 'R');
     this.isC4Waiting = true;
+
     const reactionBox = document.getElementById('c4Reaction');
     if (reactionBox) {
       reactionBox.innerHTML = '🦝🐾 <em>Rocket is sizing up the drop zone...</em>';
@@ -371,22 +385,20 @@ const ROCK3T_GAMES = {
       this.isC4Waiting = false;
 
       if (!data.ok) {
+        // Rollback optimistic placement on failure
+        this.c4Board[humanSlot] = null;
+        this.renderC4Slot(humanSlot, '');
         alert(data.error || 'Turn error');
         return;
       }
 
       this.c4Board = data.board;
 
-      // Render player chip
-      if (data.humanSlot !== -1 && data.humanSlot !== undefined) {
-        this.renderC4Slot(data.humanSlot, 'R');
-      }
-
       // Render Rocket chip
       if (data.rocketSlot !== -1 && data.rocketSlot !== undefined && data.rocketSlot !== null) {
         setTimeout(() => {
           this.renderC4Slot(data.rocketSlot, 'Y');
-        }, 150);
+        }, 100);
       }
 
       if (data.outcome) {

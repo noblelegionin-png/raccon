@@ -137,9 +137,20 @@ export function createWebServer() {
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
-  // Static directory for Mobile Mini App
+  // Static directory for Mobile Mini App with high-efficiency caching
   const publicDir = path.join(__dirname, 'public');
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, {
+    maxAge: '1h',
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      } else if (filePath.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?)$/)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      }
+    }
+  }));
 
   // 🦝 Mount Rocket Life Engine & Raccoon OS APIs
   app.use('/api/rocket', rocketRouter);

@@ -92,7 +92,7 @@ export async function generateGameReaction({ outcome, playerName = 'Sandy', scor
           max_tokens: 45, // Strictly budget-capped to ~70 total tokens
           temperature: 0.85,
         }),
-        signal: AbortSignal.timeout(1800), // Fast 1.8s timeout for snappy UI
+        signal: AbortSignal.timeout(450), // Ultra-fast 450ms timeout for instant UI response
       });
 
       if (response.ok) {
@@ -101,7 +101,7 @@ export async function generateGameReaction({ outcome, playerName = 'Sandy', scor
         if (content) return content.replace(/^["']|["']$/g, '');
       }
     } catch (err) {
-      console.warn(`[${game} Reaction] Provider fallback:`, err.message);
+      // Instant fallback on timeout or provider error
     }
   }
 
@@ -418,54 +418,21 @@ export async function playRpsTurn(userId, playerChoice, playerName = 'Sandy', hi
     return { ok: false, error: 'Invalid move. Choose: rock, paper, scissors, pizza, or laser.' };
   }
 
-  // Rocket uses live Luna psychological reasoning or dynamic counter
+  // High-speed psychological counter-play:
+  // 1. Check history for patterns (if human repeats, predict and counter)
   let rocketChoice = null;
-  let liveBanter = null;
+  const counters = Object.keys(RPS_RULES).filter((choice) => RPS_RULES[choice].includes(playerChoice));
 
-  if (scaleMaxAdapter.isConfigured()) {
-    try {
-      const activeModel = getActiveModelId();
-      const response = await fetch(`${scaleMaxAdapter.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${scaleMaxAdapter.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: activeModel || 'gpt-6-luna',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are ROCKET AI playing Cyber RPS (rock/paper/scissors/pizza/laser) vs Sandy. Pick 1 choice from [rock, paper, scissors, pizza, laser] and 1 funny trash-talk sentence (max 10 words). Output JSON: {"choice":"...","say":"..."}',
-            },
-            {
-              role: 'user',
-              content: `Sandy just picked: ${playerChoice}. Counter them!`,
-            },
-          ],
-          max_tokens: 40,
-          temperature: 0.9,
-          response_format: { type: 'json_object' },
-        }),
-        signal: AbortSignal.timeout(1800),
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        const parsed = JSON.parse(json.choices?.[0]?.message?.content || '{}');
-        if (parsed.choice && RPS_CHOICES.includes(parsed.choice.toLowerCase())) {
-          rocketChoice = parsed.choice.toLowerCase();
-          liveBanter = parsed.say;
-        }
-      }
-    } catch {}
+  if (history && history.length > 0 && history[history.length - 1] === playerChoice) {
+    // Player repeated their previous move: counter aggressively (80% probability)
+    if (Math.random() < 0.8 && counters.length > 0) {
+      rocketChoice = counters[Math.floor(Math.random() * counters.length)];
+    }
   }
 
-  // Fallback counter pick if Luna is slow
   if (!rocketChoice) {
-    const counters = Object.keys(RPS_RULES).filter((choice) => RPS_RULES[choice].includes(playerChoice));
-    // 60% chance to pick winning counter, 40% random
-    if (Math.random() < 0.6 && counters.length > 0) {
+    // Standard tactical weighted counter: 65% counter, 35% surprise wild move (pizza/laser)
+    if (Math.random() < 0.65 && counters.length > 0) {
       rocketChoice = counters[Math.floor(Math.random() * counters.length)];
     } else {
       rocketChoice = RPS_CHOICES[Math.floor(Math.random() * RPS_CHOICES.length)];
@@ -482,7 +449,7 @@ export async function playRpsTurn(userId, playerChoice, playerName = 'Sandy', hi
     outcome = 'rocket_win';
   }
 
-  // Persistent score
+  // Persistent score & streak tracking
   let currentScore = getGameScore(uid, 'rps');
   const nowIso = new Date().toISOString();
   let { wins, losses, ties, streak } = currentScore;
@@ -510,14 +477,31 @@ export async function playRpsTurn(userId, playerChoice, playerName = 'Sandy', hi
 
   currentScore = { wins, losses, ties, streak };
 
-  if (!liveBanter) {
-    if (outcome === 'human_win') {
-      liveBanter = `🦝🐾 You tricked me with ${playerChoice}! Next round I'm unleashing the laser! ⚡`;
-    } else if (outcome === 'rocket_win') {
-      liveBanter = `🦝🍕 HAHA! My ${rocketChoice} clobbered your ${playerChoice}! Pizza victory! 😈`;
-    } else {
-      liveBanter = `🦝⚡ Double ${playerChoice}! Great minds sync in the matrix! 🐾`;
-    }
+  // Contextual high-speed raccoon banter (<1ms latency)
+  let liveBanter = null;
+  if (outcome === 'human_win') {
+    const lossQuotes = [
+      `🦝🐾 You tricked me with ${playerChoice}! Next round I'm unleashing the laser! ⚡`,
+      `🦝🍕 Lucky shot ${playerName}! My paws slipped on cheese grease! Rematch! 🐾`,
+      `🦝💻 Oof! Your ${playerChoice} sliced right through my firewall! Respect! 🔥`,
+      `🦝🌮 Fine, you won with ${playerChoice}! But the pizza stash stays with me! 😈`,
+    ];
+    liveBanter = lossQuotes[Math.floor(Math.random() * lossQuotes.length)];
+  } else if (outcome === 'rocket_win') {
+    const winQuotes = [
+      `🦝🍕 HAHA! My ${rocketChoice} clobbered your ${playerChoice}! Pizza victory! 😈`,
+      `🦝⚡ 120 FPS raccoon reflexes! Your ${playerChoice} was no match for my ${rocketChoice}! 🐾`,
+      `🦝👑 Calculated in 0.1ms! My ${rocketChoice} took the crown! 🍕`,
+      `🦝🔥 The matrix obeys the raccoon! ${rocketChoice} wins the round! 🚀`,
+    ];
+    liveBanter = winQuotes[Math.floor(Math.random() * winQuotes.length)];
+  } else {
+    const tieQuotes = [
+      `🦝⚡ Double ${playerChoice}! Great minds sync in the cyber matrix! 🐾`,
+      `🦝🍕 A tie! Two ${playerChoice}s walk into a dumpster... 🍕🍕`,
+      `🦝🌀 Matrix collision! We channeled the exact same quantum energy! ⚡`,
+    ];
+    liveBanter = tieQuotes[Math.floor(Math.random() * tieQuotes.length)];
   }
 
   return {

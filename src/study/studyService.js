@@ -3,6 +3,9 @@ import { getActiveModelId } from '../models/catalogue.js';
 import { pdfService } from '../pdf/pdfService.js';
 import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
+// In-Memory Study Cache for ultra-fast sub-millisecond retrieval
+const STUDY_MEM_CACHE = new Map();
+
 export class RocketStudyService {
   /**
    * Explain any topic in an ultra-engaging, high-retention structured format.
@@ -20,6 +23,11 @@ export class RocketStudyService {
         ok: false,
         error: 'Topic is required for study breakdown.',
       };
+    }
+
+    const cacheKey = `explain:${cleanTopic.toLowerCase()}:${level}`;
+    if (STUDY_MEM_CACHE.has(cacheKey)) {
+      return STUDY_MEM_CACHE.get(cacheKey);
     }
 
     const systemPrompt = `You are ROCKET, the hyper-intelligent, witty, cheeky raccoon study wingman from Nero Labs!
@@ -64,9 +72,9 @@ Rule: Be cheeky, brilliant, and accurate. Sprinkle 🦝 🐾 🍕 💡 ⚡.`;
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Break down: "${cleanTopic}"` },
           ],
-          maxTokens: 1200,
+          maxTokens: 1000,
           temperature: 0.6,
-          timeoutMs: 8000,
+          timeoutMs: 3800,
         });
         explanation = completion?.text || '';
       } catch (err) {
@@ -78,11 +86,19 @@ Rule: Be cheeky, brilliant, and accurate. Sprinkle 🦝 🐾 🍕 💡 ⚡.`;
       explanation = this.generateLocalStudyExplainer(cleanTopic);
     }
 
-    return {
+    const result = {
       ok: true,
       topic: cleanTopic,
       formattedText: scrubRestrictedBrandNames(explanation.trim()),
     };
+
+    STUDY_MEM_CACHE.set(cacheKey, result);
+    if (STUDY_MEM_CACHE.size > 150) {
+      const oldestKey = STUDY_MEM_CACHE.keys().next().value;
+      STUDY_MEM_CACHE.delete(oldestKey);
+    }
+
+    return result;
   }
 
   /**
@@ -90,6 +106,10 @@ Rule: Be cheeky, brilliant, and accurate. Sprinkle 🦝 🐾 🍕 💡 ⚡.`;
    */
   async generateQuiz({ topic, count = 5 }) {
     const cleanTopic = (topic || '').trim();
+    const cacheKey = `quiz:${cleanTopic.toLowerCase()}:${count}`;
+    if (STUDY_MEM_CACHE.has(cacheKey)) {
+      return STUDY_MEM_CACHE.get(cacheKey);
+    }
     const systemPrompt = `You are Rocket AI Quiz Engine. Generate exactly ${count} high-yield multiple choice study questions for "${cleanTopic}".
 Output strictly valid JSON with no markdown wrapping:
 {
@@ -112,7 +132,7 @@ Output strictly valid JSON with no markdown wrapping:
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 1100,
           temperature: 0.3,
-          timeoutMs: 8000,
+          timeoutMs: 3800,
         });
 
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -124,7 +144,9 @@ Output strictly valid JSON with no markdown wrapping:
             options: (q.options || []).map((o) => scrubRestrictedBrandNames(o)),
             explanation: scrubRestrictedBrandNames(q.explanation),
           }));
-          return { ok: true, topic: cleanTopic, questions: sanitized };
+          const resObj = { ok: true, topic: cleanTopic, questions: sanitized };
+          STUDY_MEM_CACHE.set(cacheKey, resObj);
+          return resObj;
         }
       } catch (err) {
         console.warn('[StudyService Quiz Warning]:', err.message);
@@ -181,6 +203,10 @@ Output strictly valid JSON with no markdown wrapping:
    */
   async generateFlashcards({ topic, count = 6 }) {
     const cleanTopic = (topic || '').trim();
+    const cacheKey = `flashcards:${cleanTopic.toLowerCase()}:${count}`;
+    if (STUDY_MEM_CACHE.has(cacheKey)) {
+      return STUDY_MEM_CACHE.get(cacheKey);
+    }
     const systemPrompt = `You are Rocket AI Flashcard Engine. Generate exactly ${count} high-yield study flashcards for "${cleanTopic}".
 Output strictly valid JSON with no markdown wrapping:
 {
@@ -201,7 +227,7 @@ Output strictly valid JSON with no markdown wrapping:
           messages: [{ role: 'user', content: systemPrompt }],
           maxTokens: 800,
           temperature: 0.3,
-          timeoutMs: 8000,
+          timeoutMs: 3800,
         });
 
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -212,7 +238,9 @@ Output strictly valid JSON with no markdown wrapping:
             front: scrubRestrictedBrandNames(f.front),
             back: scrubRestrictedBrandNames(f.back),
           }));
-          return { ok: true, topic: cleanTopic, flashcards: sanitized };
+          const resObj = { ok: true, topic: cleanTopic, flashcards: sanitized };
+          STUDY_MEM_CACHE.set(cacheKey, resObj);
+          return resObj;
         }
       } catch (err) {
         console.warn('[StudyService Flashcard Warning]:', err.message);

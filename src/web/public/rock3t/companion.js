@@ -81,12 +81,19 @@ const ROCK3T_COMPANION = {
     logs.appendChild(userMsg);
     logs.scrollTop = logs.scrollHeight;
 
-    // Typing indicator
+    // Fast-path client actions (0ms)
+    const lower = text.trim().toLowerCase();
+    if (lower === 'clear' || lower === '/clear') {
+      logs.innerHTML = '';
+      return;
+    }
+
+    // Typing indicator (Snappy and clean)
     const typing = document.createElement('div');
     typing.className = 'chat-bubble-assistant';
     typing.style.opacity = '0.7';
     typing.style.fontStyle = 'italic';
-    typing.textContent = '🦝 Rocket is thinking with sharp paws...';
+    typing.textContent = '🦝 Rocket is typing...';
     logs.appendChild(typing);
     logs.scrollTop = logs.scrollHeight;
 

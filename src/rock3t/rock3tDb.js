@@ -219,6 +219,8 @@ export function initRock3tDb() {
       created_at TEXT NOT NULL
     );
 
+    CREATE INDEX IF NOT EXISTS idx_rock3t_canvas_usr ON rock3t_canvas_saves(user_id, created_at);
+
     CREATE TABLE IF NOT EXISTS rock3t_companion_memory (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,

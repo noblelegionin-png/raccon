@@ -83,6 +83,8 @@ export function initThoughtsDb() {
       is_luna_live INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_saved_thoughts_user ON rock3t_saved_thoughts(user_id);
   `);
 }
 

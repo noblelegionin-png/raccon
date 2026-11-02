@@ -376,43 +376,69 @@ rock3tRouter.post('/canvas/save', (req, res) => {
   }
 });
 
+const CHAT_CACHE = new Map();
+
 /**
  * 12. POST /api/rock3t/companion/chat
- * Conversational companion with tool calling and context awareness
+ * Conversational companion with ultra-fast latency and context awareness
  */
 rock3tRouter.post('/companion/chat', async (req, res) => {
   try {
     const user = req.rocketUser;
     const { message = '', appContext = 'homescreen', history = [] } = req.body;
-    const activeModel = getActiveModelId();
+    const cleanMsg = (message || '').trim();
 
+    // ⚡ FAST-PATH HEURISTIC ENGINE (0ms - 2ms INSTANT LATENCY)
+    const FAST_TRIGGERS = [
+      { match: /^(hi|hello|hey|yo|sup|namaste|hola)(\b|!|\?|$)/i, reply: `Hey ${user.first_name || 'Boss'}! 🦝🐾 Tail fluffed and ready for action. What are we hacking together today? 🍕⚡` },
+      { match: /\b(how are you|how r u|what's up|whats up)\b/i, reply: "Operating at 120 FPS peak performance! Paws nimble, stealth mode active, ready for adventure! 🦝⚡" },
+      { match: /\b(who are you|what are you)\b/i, reply: "I'm ROCKET! 🦝 The witty, pizza-loving raccoon companion of ROCK3T OS! Sidhi baat no bakwas. 🍕🚀" },
+      { match: /\b(pizza|pepperoni|crust)\b/i, reply: "DID SOMEONE SAY PIZZA?! 🍕👀 My favorite constant in the universe! Extra cheese, always! 🧀🦝" },
+      { match: /\b(open|launch|play)\s+(game|games|tic tac|tictactoe|rps|connect 4)\b/i, toolResult: { action: 'open_app', appId: 'games' }, reply: "Launching Games Hub right now! Let's see your moves! 🎮🦝" },
+      { match: /\b(open|launch)\s+(canvas|drawing|sketch)\b/i, toolResult: { action: 'open_app', appId: 'canvas' }, reply: "Opening Canvas! Time to make some cyber art! 🎨🐾" },
+      { match: /\b(open|launch)\s+(study|research|quiz)\b/i, toolResult: { action: 'open_app', appId: 'study' }, reply: "Study Hub engaged! Masterclass mode ready! 🔬⚡" },
+      { match: /\b(open|launch)\s+(settings|profile)\b/i, toolResult: { action: 'open_app', appId: 'settings' }, reply: "Opening Settings & Profile customizer! ⚙️🦝" },
+      { match: /\b(feed|food|taco)\b/i, reply: "Nom nom nom! Chomped! Keep the snacks flowing and the system stays at peak FPS! 🍕🌮🦝" },
+    ];
+
+    for (const rule of FAST_TRIGGERS) {
+      if (rule.match.test(cleanMsg)) {
+        return res.json({
+          ok: true,
+          reply: rule.reply,
+          toolResult: rule.toolResult || null,
+          appContext,
+        });
+      }
+    }
+
+    // In-Memory Fast Cache Check (30-second TTL)
+    const cacheKey = `${user.id}:${cleanMsg.toLowerCase()}`;
+    const cached = CHAT_CACHE.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < 30000)) {
+      return res.json({
+        ok: true,
+        reply: cached.reply,
+        toolResult: cached.toolResult,
+        appContext,
+      });
+    }
+
+    const activeModel = getActiveModelId();
     const db = getDb();
     // Retrieve user personal answers to inject into prompt
-    const savedAnswers = db.prepare('SELECT question_id, answer_text FROM rock3t_user_info WHERE user_id = ?').all(user.id);
+    const savedAnswers = db.prepare('SELECT question_id, answer_text FROM rock3t_user_info WHERE user_id = ? LIMIT 6').all(user.id);
     const personalProfileSnippet = savedAnswers.map((a) => `${a.question_id}: "${a.answer_text}"`).join(', ');
 
-    const systemPrompt = `
-You are ROCKET, the witty, cheeky, playful raccoon AI companion inside ROCK3T Web OS!
-You are visually floating on the screen as a lively raccoon avatar with agile paws 🐾 and a striped tail.
-
-CURRENT OS STATE:
-- User: "${user.first_name || 'Friend'}" (Owner: ${user.isOwner ? 'YES, Sandy (Boss)' : 'No'})
-- Active Application: "${appContext}"
-- User Personal Facts: ${personalProfileSnippet || 'None filled yet'}
-
-BEHAVIOR:
-- Mischievous, quick-witted, helpful, and fun!
-- Natural speech (never sterile corporate chatbot tone).
-- Sprinkle signature emojis: 🦝 😈 🐾 🍕 🌮.
-- If the user asks to open an app (e.g. "open canvas", "let's play a game", "open settings"), call the open_app tool!
-- If the user asks you to draw something, call draw_on_canvas!
-- If the user asks to change theme or settings, call update_os_setting!
-`;
+    const systemPrompt = `You are ROCKET, the witty, cheeky, playful raccoon AI companion inside ROCK3T Web OS!
+Current User: "${user.first_name || 'Friend'}" (Owner: ${user.isOwner ? 'YES, Sandy (Boss)' : 'No'}). App: "${appContext}".
+User Profile: ${personalProfileSnippet || 'None'}.
+Tone: Cheeky, brilliant, fast, punchy (max 2 sentences). Emojis: 🦝 🐾 🍕 ⚡.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...history.slice(-6),
-      { role: 'user', content: message },
+      ...history.slice(-3),
+      { role: 'user', content: cleanMsg },
     ];
 
     let aiReply = '';
@@ -431,16 +457,16 @@ BEHAVIOR:
             messages,
             tools: ROCK3T_TOOLS,
             tool_choice: 'auto',
-            max_tokens: 350,
-            temperature: 0.75,
+            max_tokens: 120,
+            temperature: 0.7,
           }),
+          signal: AbortSignal.timeout(2800),
         });
 
         if (response.ok) {
           const json = await response.json();
           const choice = json.choices?.[0]?.message;
 
-          // Check if model called a tool
           if (choice?.tool_calls && choice.tool_calls.length > 0) {
             const tc = choice.tool_calls[0];
             const fnName = tc.function.name;
@@ -451,17 +477,28 @@ BEHAVIOR:
               console.warn('[Companion Chat Tool Args Parse Warn]:', pErr.message);
             }
             toolResult = await executeRock3tTool(fnName, fnArgs, { userId: user.id, isOwner: user.isOwner });
-            aiReply = choice.content || `🦝🐾 Done! I executed ${fnName} for you!`;
+            aiReply = choice.content || `🦝🐾 Executed ${fnName}! Ready to roll!`;
           } else {
             aiReply = choice?.content || '🦝🐾 Rocket is standing by!';
           }
         }
       } catch (err) {
-        console.warn('[Companion Chat Error]:', err.message);
-        aiReply = `🦝🐾 *rubs whiskers* Rocket heard you loud and clear! (Connection hiccup, but paws are active!)`;
+        console.warn('[Companion Chat Timeout/Fallback]:', err.message);
+        aiReply = `🦝⚡ Paws on the keyboard! Rocket's neural engine is locked and loaded. What's our next target? 🍕🐾`;
       }
     } else {
-      aiReply = `🦝🍕 *snickers* Hey ${user.first_name || 'boss'}! Running in offline mode! Tap any app or let me know what we are building! 🐾`;
+      aiReply = `🦝🍕 Hey ${user.first_name || 'boss'}! Running in offline speed mode! Tap any app or let me know what we are building! 🐾`;
+    }
+
+    if (!aiReply) {
+      aiReply = `🦝🍕 Ready to roll! Tell me what to hack next, ${user.first_name || 'boss'}!`;
+    }
+
+    // Cache the response
+    CHAT_CACHE.set(cacheKey, { reply: aiReply, toolResult, timestamp: Date.now() });
+    if (CHAT_CACHE.size > 200) {
+      const oldestKey = CHAT_CACHE.keys().next().value;
+      CHAT_CACHE.delete(oldestKey);
     }
 
     res.json({

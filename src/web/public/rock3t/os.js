@@ -135,6 +135,18 @@ const ROCK3T_OS = {
 
   async feedRocket(itemType = 'pizza') {
     this.spawnFoodParticle(itemType === 'pizza' ? '🍕' : '🌮');
+    
+    // 0ms Optimistic UI feedback
+    const hungerEl = document.getElementById('lifeHungerVal');
+    const hungerBar = document.getElementById('lifeHungerBar');
+    if (hungerEl && hungerBar) {
+      let cur = parseInt(hungerEl.textContent, 10) || 0;
+      let next = Math.max(0, cur - 10);
+      hungerEl.textContent = `${next}%`;
+      hungerBar.style.width = `${next}%`;
+    }
+    ROCK3T_COMPANION?.say(itemType === 'pizza' ? 'Chomped a delicious slice of pizza! 🍕🦝 +10% energy!' : 'Crunchy taco devoured! 🌮🦝');
+
     try {
       const res = await fetch('/api/rocket/feed', {
         method: 'POST',
@@ -142,14 +154,11 @@ const ROCK3T_OS = {
         body: JSON.stringify({ itemType, amount: 1 }),
       });
       const data = await res.json();
-      if (data.ok) {
-        ROCK3T_COMPANION?.say(data.message || `Chomped a delicious ${itemType}! 🍕🦝`);
-        if (data.state) this.renderLifeEngineWidget(data.state);
-      } else {
-        alert(data.error || 'Feeding failed');
+      if (data.ok && data.state) {
+        this.renderLifeEngineWidget(data.state);
       }
     } catch (err) {
-      console.warn('Feed error:', err);
+      console.warn('Feed sync note:', err);
     }
   },
 
@@ -253,7 +262,7 @@ const ROCK3T_OS = {
 
   getContainerWidth() {
     const container = document.getElementById('pagerContainer');
-    return (container && container.clientWidth) || window.innerWidth || 360;
+    return (container && container.clientWidth) || window.innerWidth || document.documentElement.clientWidth || 360;
   },
 
   goToPage(pageIndex, animate = true) {
@@ -567,6 +576,11 @@ const ROCK3T_OS = {
   },
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => ROCK3T_OS.init());
+} else {
   ROCK3T_OS.init();
+}
+window.addEventListener('load', () => {
+  ROCK3T_OS.goToPage(ROCK3T_OS.currentPage, false);
 });

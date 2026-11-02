@@ -18,6 +18,7 @@
     "@distube/ytdl-core": "^5.2.0",
     "@whiskeysockets/baileys": "^6.7.24",
     "bedrock-protocol": "^3.60.1",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "dotenv": "^18.0.8",
     "express": "^5.3.0",

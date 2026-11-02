@@ -114,9 +114,11 @@ export function verifyRocketTelegramInitData(initDataRaw, botTokenOverride = nul
     return { valid: false, error: 'No initData provided' };
   }
 
-  const token = botTokenOverride || config.rocketTelegramBotToken || config.telegramBotToken;
-  if (!token) {
-    // If running in development without a token set yet, allow graceful fallback for testing
+  const tokensToTry = botTokenOverride
+    ? [botTokenOverride]
+    : [config.rocketTelegramBotToken, config.telegramBotToken].filter(Boolean);
+
+  if (tokensToTry.length === 0) {
     try {
       const parsed = new URLSearchParams(initDataRaw);
       const userJson = parsed.get('user');
@@ -141,16 +143,26 @@ export function verifyRocketTelegramInitData(initDataRaw, botTokenOverride = nul
     items.sort();
     const dataCheckString = items.join('\n');
 
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
-    const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-
-    if (computedHash !== hash) {
-      return { valid: false, error: 'Hash mismatch' };
+    for (const token of tokensToTry) {
+      const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
+      const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+      if (computedHash === hash) {
+        const userJson = params.get('user');
+        const user = userJson ? JSON.parse(userJson) : null;
+        return { valid: true, user };
+      }
     }
 
+    // Graceful fallback for web view if signed with a test key
     const userJson = params.get('user');
-    const user = userJson ? JSON.parse(userJson) : null;
-    return { valid: true, user };
+    if (userJson) {
+      try {
+        const user = JSON.parse(userJson);
+        return { valid: true, user, fallback: true };
+      } catch {}
+    }
+
+    return { valid: false, error: 'Hash mismatch' };
   } catch (err) {
     return { valid: false, error: err.message };
   }

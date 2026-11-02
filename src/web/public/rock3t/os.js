@@ -21,6 +21,24 @@ const ROCK3T_OS = {
         window.Telegram.WebApp.setHeaderColor('#ffffff');
         window.Telegram.WebApp.setBackgroundColor('#ffffff');
       } catch {}
+
+      // Handle Telegram Native Back Button
+      if (window.Telegram.WebApp.BackButton) {
+        window.Telegram.WebApp.BackButton.onClick(() => {
+          if (this.activeApp) {
+            this.closeApp();
+          }
+        });
+      }
+
+      // Handle Viewport changes
+      const updateViewportHeight = () => {
+        if (window.Telegram.WebApp.viewportHeight) {
+          document.documentElement.style.setProperty('--tg-viewport-height', `${window.Telegram.WebApp.viewportHeight}px`);
+        }
+      };
+      updateViewportHeight();
+      window.Telegram.WebApp.onEvent('viewportChanged', updateViewportHeight);
     }
 
     // 2. Start Clock & Status Bar
@@ -199,6 +217,11 @@ const ROCK3T_OS = {
     console.log(`[ROCK3T OS] Opening App: ${appId}`);
     this.activeApp = appId;
 
+    // Show native Telegram back button
+    if (window.Telegram?.WebApp?.BackButton) {
+      window.Telegram.WebApp.BackButton.show();
+    }
+
     // Capitalize app name for window ID (e.g. store -> appWindowStore)
     const windowId = `appWindow${appId.charAt(0).toUpperCase() + appId.slice(1)}`;
     const win = document.getElementById(windowId);
@@ -225,6 +248,11 @@ const ROCK3T_OS = {
     }
     this.activeApp = null;
     ROCK3T_COMPANION?.onAppContextChange('homescreen');
+
+    // Hide native Telegram back button
+    if (window.Telegram?.WebApp?.BackButton) {
+      window.Telegram.WebApp.BackButton.hide();
+    }
   },
 
   async fetchProfile() {

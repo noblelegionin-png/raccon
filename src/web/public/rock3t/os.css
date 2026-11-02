@@ -83,6 +83,7 @@ body {
 .os-viewport {
   width: 100vw;
   height: 100vh;
+  height: var(--tg-viewport-height, 100vh);
   max-width: 480px;
   max-height: 940px;
   background-color: var(--os-bg);
@@ -110,8 +111,8 @@ body {
 
 /* ANDROID STATUS BAR */
 .os-status-bar {
-  height: 36px;
-  padding: 0 20px;
+  height: calc(36px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 20px 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -284,7 +285,7 @@ body {
 .bottom-dock {
   height: 80px;
   padding: 0 18px;
-  margin: 0 16px 14px 16px;
+  margin: 0 16px calc(14px + env(safe-area-inset-bottom, 0px)) 16px;
   border-radius: var(--radius-lg);
   background: var(--os-water-surface);
   backdrop-filter: blur(20px);
@@ -340,8 +341,8 @@ body {
 }
 
 .app-window-header {
-  height: 56px;
-  padding: 0 16px;
+  height: calc(56px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 16px 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -370,6 +371,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   background: var(--os-bg);
 }
 

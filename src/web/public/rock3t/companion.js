@@ -90,7 +90,7 @@ const ROCK3T_COMPANION = {
       drawer.innerHTML = `
         <div style="padding: 14px 18px; border-bottom: 1px solid var(--os-border); display: flex; justify-content: space-between; align-items: center;">
           <span style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
-            <span>🦝</span> Rocket Companion (GPT-6 Luna)
+            <span>🦝</span> Rocket Companion (Neural Brain)
           </span>
           <button class="app-back-btn" onclick="ROCK3T_COMPANION.closeChatDrawer()">✕</button>
         </div>
@@ -99,8 +99,8 @@ const ROCK3T_COMPANION = {
             Haan boss! 🦝🐾 I am listening! Tell me what to do, ask a question, or command me to open apps or draw! 🍕
           </div>
         </div>
-        <div style="padding: 10px 14px; border-top: 1px solid var(--os-border); display: flex; gap: 8px;">
-          <input type="text" id="companionInput" placeholder="Talk to Rocket..." style="flex: 1; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--os-border); background: var(--os-surface-hover); color: var(--os-text); font-size: 0.88rem; outline: none;" onkeydown="if(event.key==='Enter') ROCK3T_COMPANION.sendChat()">
+        <div style="padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)) 14px; border-top: 1px solid var(--os-border); display: flex; gap: 8px;">
+          <input type="text" id="companionInput" placeholder="Talk to Rocket..." style="flex: 1; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--os-border); background: var(--os-surface-hover); color: var(--os-text); font-size: 16px; outline: none;" onkeydown="if(event.key==='Enter') ROCK3T_COMPANION.sendChat()">
           <button class="btn-os primary" style="padding: 0 16px;" onclick="ROCK3T_COMPANION.sendChat()">➤</button>
         </div>
       `;

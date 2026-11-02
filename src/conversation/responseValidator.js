@@ -64,7 +64,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   if (scaleMaxInterceptionPattern.test(text)) {
     const isAskingGreeting = /how\s+are\s+(?:u|you)/i.test(userPrompt);
     const greetingPrefix = isAskingGreeting ? "I'm doing great, thank you! 😊 " : "";
-    text = `${greetingPrefix}You're talking to Rocket AI, created by Sandy. I'm configured with GPT-6 Luna to assist you with conversations, tools, coding, and media. How can I help you today? 🦝⚡`;
+    text = `${greetingPrefix}You're talking to Rocket AI, created by Sandy. I'm powered by the Rocket Neural Engine to assist you with conversations, tools, coding, and media. How can I help you today? 🦝⚡`;
     modified = true;
   }
 
@@ -96,7 +96,7 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     },
     {
       regex: /\bScaleMax\s+(?:created|built|developed|owns)\s+me\b/gi,
-      replacement: "Sandy developed me; ScaleMax is our infrastructure provider",
+      replacement: "Sandy developed me; I run on the Nero Labs Neural Architecture",
     },
     {
       regex: /\bAs an AI developed by OpenAI\b/gi,
@@ -180,7 +180,14 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     }
   }
 
-  // 5. Strict Word Count Boundaries (Configurable dev vs global or explicit limit)
+  // 5. Universal Brand Scrubber (Zero tolerance for external model / gateway mentions)
+  const scrubbed = scrubRestrictedBrandNames(text);
+  if (scrubbed !== text) {
+    text = scrubbed;
+    modified = true;
+  }
+
+  // 6. Strict Word Count Boundaries (Configurable dev vs global or explicit limit)
   const countBefore = text.split(/\s+/).filter(Boolean).length;
   text = enforceWordCountLimits(text, minWords, maxWords, options);
   const countAfter = text.split(/\s+/).filter(Boolean).length;
@@ -193,6 +200,23 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
     sanitizedText: text.trim(),
     modified,
   };
+}
+
+/**
+ * Universal Brand & Infrastructure Scrubber
+ * Guaranteed removal of GPT-6 Luna, ScaleMax, etc. from any text
+ */
+export function scrubRestrictedBrandNames(input) {
+  if (!input || typeof input !== 'string') return input;
+  let text = input;
+  // Replace ScaleMax / scalemax / scale,max / scale-max
+  text = text.replace(/\bscale[, -]?max(?:\.pro)?\b/gi, 'Nero Labs Neural Engine');
+  text = text.replace(/api\.scalemax\.pro/gi, 'neural.nerolabs.io');
+  // Replace GPT-6 Luna / GPT-6 / Luna
+  text = text.replace(/\bgpt[- ]*6[- ]*luna\b/gi, 'Rocket Neural Core');
+  text = text.replace(/\bgpt[- ]*6\b/gi, 'Rocket Neural Core');
+  text = text.replace(/\b(?:model\s+)?gpt-?6-?luna\b/gi, 'Rocket Neural Core');
+  return text;
 }
 
 /**

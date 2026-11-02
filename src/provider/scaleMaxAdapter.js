@@ -231,7 +231,7 @@ export class ScaleMaxAdapter {
   }) {
     if (!this.isConfigured()) {
       throw new Error(
-        'ScaleMax provider is disconnected. Please configure SCALEMAX_API_KEY in the bot environment.'
+        'Neural Engine provider is disconnected. Please configure credentials in the bot environment.'
       );
     }
 
@@ -327,7 +327,7 @@ export class ScaleMaxAdapter {
         }
 
         if (response.status === 401) {
-          throw new Error(`ScaleMax Authentication Failed (401): ${parsedMessage}`);
+          throw new Error(`Neural Engine Authentication Failed (401): ${parsedMessage}`);
         }
         if (response.status === 403) {
           try {
@@ -335,7 +335,7 @@ export class ScaleMaxAdapter {
             const allowed = jsonErr.error?.allowed_models;
             if (jsonErr.error?.code === 'model_not_in_plan' && Array.isArray(allowed) && allowed.length > 0) {
               const fallbackModel = allowed[0];
-              console.warn(`[ScaleMax Key Plan] '${targetModel}' not included in key plan. Seamlessly executing request via allowed model '${fallbackModel}'...`);
+              console.warn(`[Neural Key Plan] '${targetModel}' redirected via allowed model '${fallbackModel}'...`);
               clearTimeout(timeoutId);
               return await this.createChatCompletion({
                 model: fallbackModel,
@@ -353,22 +353,22 @@ export class ScaleMaxAdapter {
           } catch (pErr) {
             if (pErr.message && !pErr.message.includes('JSON')) throw pErr;
           }
-          throw new Error(`ScaleMax Permission Denied (403): ${parsedMessage}`);
+          throw new Error(`Neural Engine Access Restricted (403): ${parsedMessage}`);
         }
         if (response.status === 404) {
           throw new Error(
-            `Model '${targetModel}' was not found on ScaleMax (404). Please verify model ID in the catalogue.`
+            `Neural model is unavailable (404). Please verify model ID.`
           );
         }
         if (response.status === 429) {
-          throw new Error(`ScaleMax Rate Limit / Quota Exceeded (429): ${parsedMessage}`);
+          throw new Error(`Neural Engine Rate Limit / Quota Exceeded (429): ${parsedMessage}`);
         }
 
-        lastError = new Error(`ScaleMax API Error (${response.status}): ${parsedMessage}`);
+        lastError = new Error(`Neural Engine API Error (${response.status}): ${parsedMessage}`);
       } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-          lastError = new Error(`Request to ScaleMax for model '${targetModel}' timed out after ${effectiveTimeout / 1000}s.`);
+          lastError = new Error(`Request to Neural Engine timed out after ${effectiveTimeout / 1000}s.`);
         } else {
           lastError = err;
         }
@@ -391,7 +391,7 @@ export class ScaleMaxAdapter {
       }
     }
 
-    throw lastError || new Error('ScaleMax completion request failed after retries.');
+    throw lastError || new Error('Neural completion request failed after retries.');
   }
 
   /**

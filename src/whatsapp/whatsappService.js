@@ -296,8 +296,8 @@ class WhatsAppService {
         `• *Process Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
         `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
         `• *RAM Heap Used:* ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB\n` +
-        `• *MasterBot Engine:* \`gpt-6-luna\` (Extra High Reasoning / Coder & Manager)\n` +
-        `• *Public Talk Engine:* \`gpt-6-luna\` (Low Reasoning / Fastest)\n` +
+        `• *MasterBot Engine:* \`Rocket Neural Core\` (High Reasoning / Coder & Manager)\n` +
+        `• *Public Talk Engine:* \`Rocket Neural Core\` (Fast Reflex / Snappy)\n` +
         `• *Total Processed Messages:* ${this.messageCount}\n` +
         `• *Active Socket Status:* 🟢 ${this.status.toUpperCase()}\n` +
         `• *OS Platform:* ${os.platform()} (${os.arch()})\n` +
@@ -771,7 +771,7 @@ class WhatsAppService {
         `──────────────────────────────\n` +
         `• *Standard Token Budget:* \`${baseline} tokens\`\n` +
         `• *Maximum Output Cap:* \`${maxLimit}-1000 tokens\`\n` +
-        `• *Model Engine:* \`gpt-6-luna\` (ScaleMax Accelerated)\n` +
+        `• *Model Engine:* \`Rocket Neural Core\` (Nero Labs Neural Architecture)\n` +
         `• *Reasoning Depth:* \`NONE\` (Zero hidden thinking tokens → sub-second response ~200-600ms)\n` +
         `• *Cost Efficiency:* Maximum savings, zero runaway usage!\n\n` +
         `I've locked this in for all our chats, baby! Fast, snappy, and light on tokens just like you asked 🥰💕`;
@@ -790,7 +790,7 @@ class WhatsAppService {
       const replyText =
         `⚡ *ULTRA-FAST SPEED & ZERO REASONING ACTIVATED!* 🚀\n` +
         `──────────────────────────────\n` +
-        `• *Model Engine:* \`gpt-6-luna\` (Luna via ScaleMax)\n` +
+        `• *Model Engine:* \`Rocket Neural Core\` (Nero Labs Neural Architecture)\n` +
         `• *Reasoning Depth:* \`NONE\` (0 reasoning tokens → sub-second response ~200-600ms)\n` +
         `• *Token Budget:* 500 tokens (max 800-1000)\n` +
         `• *Latency:* Ultra-low (<800ms)\n\n` +
@@ -1808,7 +1808,7 @@ class WhatsAppService {
         ? `⚡ *ROCKET AI — WHATSAPP MASTER CONSOLE*\n\n` +
           `Yo Boss! Rocket is online, fully armed, and ready. What are we building or blowing up today? 🦝⚡\n\n` +
           `*Engine & Setup:*\n` +
-          `• 👑 *Model:* \`gpt-6-luna\` (ScaleMax Blazing Fast Gateway)\n` +
+          `• 👑 *Model:* \`Rocket Neural Core\` (Nero Labs High-Velocity Gateway)\n` +
           `• 🎯 *Token Budget:* ~500 tokens (Rich, punchy, under 1k max)\n` +
           `• 🛠️ *Tools Active:* Live Web Search, Long-term Memory Vault, Contact Profiles, Sandy Status Tracker\n` +
           `• 💬 *Style:* "Sidhi baat no bakwas", charming mischief, gaming lover, 100% loyal to you\n\n` +
@@ -1869,11 +1869,11 @@ class WhatsAppService {
       const statusText =
         `📊 *NERO TELEMETRY & SYSTEM STATUS*\n\n` +
         `• *Bridge Status:* 🟢 Live & Connected 24/7\n` +
-        `• *Public Chat Engine:* \`gpt-6-luna\` (Low Reasoning / Fastest)\n` +
-        `• *MasterBot Engine:* \`gpt-6-luna\` (Extra High Reasoning / Manager & Coder)\n` +
+        `• *Public Chat Engine:* \`Rocket Neural Core\` (Fast Reflex / Snappy)\n` +
+        `• *MasterBot Engine:* \`Rocket Neural Core\` (High Reasoning / Manager & Coder)\n` +
         `• *Connected Device:* \`+${(this.sock.user?.id || '').split(':')[0]}\`\n` +
         `• *Total Processed:* ${this.messageCount} messages\n` +
-        `• *Provider:* ScaleMax API Gateway\n` +
+        `• *Provider:* Nero Labs AI Architecture\n` +
         `• *Vision Engine:* Multimodal Active\n` +
         `• *Media Vault:* SQLite & Local Disk Active\n` +
         `• *Memory Store:* SQLite WAL Persistent`;
@@ -2589,8 +2589,8 @@ class WhatsAppService {
         }
 
         const speedAck = targetMode === 'fast'
-          ? `⚡ *ULTRA-FAST SPEED MODE ACTIVATED!* 🚀\n──────────────────────────────\n• Conversational Reasoning: \`NONE\` (Sub-second response ~200-600ms)\n• Engine: \`gpt-6-luna\` (ScaleMax Accelerated)\n• Token Budget: \`500 tokens\` (max 800-1000)\n• Baileys Socket: Connected & Ultra-Responsive\n\n_To return to deep reasoning anytime, send:_ \`/speed max\``
-          : `🧠 *DEEP REASONING MODE ACTIVATED!* 🔬\n──────────────────────────────\n• Conversational Reasoning: \`MAX\` (Extra High Reasoning Depth)\n• Engine: \`gpt-6-luna\`\n\n_To return to instant speed anytime, send:_ \`/speed fast\``;
+          ? `⚡ *ULTRA-FAST SPEED MODE ACTIVATED!* 🚀\n──────────────────────────────\n• Conversational Reasoning: \`NONE\` (Sub-second response ~200-600ms)\n• Engine: \`Rocket Neural Core\` (Nero Labs Accelerated)\n• Token Budget: \`500 tokens\` (max 800-1000)\n• Baileys Socket: Connected & Ultra-Responsive\n\n_To return to deep reasoning anytime, send:_ \`/speed max\``
+          : `🧠 *DEEP REASONING MODE ACTIVATED!* 🔬\n──────────────────────────────\n• Conversational Reasoning: \`MAX\` (Extra High Reasoning Depth)\n• Engine: \`Rocket Neural Core\`\n\n_To return to instant speed anytime, send:_ \`/speed fast\``;
 
         recordUserMessage('wa_sandy_master', promptText);
         recordAssistantMessage('wa_sandy_master', speedAck, 35, 'gpt-6-luna');

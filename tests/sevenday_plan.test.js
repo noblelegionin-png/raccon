@@ -234,6 +234,8 @@ test('NERO 7-Day Testing Phase — Comprehensive Verification', async (suite) =>
   // DAY 5: Quiet Member Invocation Policy & Silence during Ordinary Banter
   // ==========================================
   await suite.test('Day 5 — Intelligent Group Invocation & Silence Policy', async (t) => {
+    setConfig('chat_manager_mode', 'false');
+    setConfig(`text_mode_${testChatId}`, null);
     // Ordinary member-to-member banter (MUST REMAIN SILENT)
     const ordinaryCtx1 = {
       chat: { id: testChatId, type: 'group', title: 'GRP 1' },

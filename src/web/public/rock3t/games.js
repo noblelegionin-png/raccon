@@ -38,7 +38,7 @@ const ROCK3T_GAMES = {
       name: 'Grandmaster Chess',
       status: 'upcoming',
       icon: '♟️',
-      description: 'Deep strategic tactical chess powered by GPT-6 Luna positional evaluation.',
+      description: 'Deep strategic tactical chess powered by Rocket Neural positional evaluation.',
       eta: 'Phase 3 Expansion',
       banter: "I'm calculating 20 moves ahead... and all 20 end with me taking your pizza Queen! 👑🐾",
     },

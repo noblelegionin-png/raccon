@@ -38,8 +38,8 @@ test('Advanced Ultra-Intelligence & Command Suite Verification', async (t) => {
   });
 
   await t.test('Ultra-Intelligence System Directive', () => {
-    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('MYRA AI'));
-    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('GPT-6 Luna'));
+    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('Rocket AI'));
+    assert.ok(NERO_SYSTEM_DIRECTIVE.includes('Rocket Neural Core'));
   });
 
   await t.test('Personal Notes API (CRUD)', () => {

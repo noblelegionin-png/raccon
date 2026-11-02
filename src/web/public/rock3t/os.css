@@ -1240,3 +1240,106 @@ body {
 .md-table tr:nth-child(even) {
   background: var(--os-surface-hover);
 }
+
+/* =====================================================================
+   MOBILE-FIRST & VIEWPORT RESPONSIVE ENHANCEMENTS
+   ===================================================================== */
+@media (max-width: 500px) {
+  body {
+    padding: 0;
+    margin: 0;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .os-viewport {
+    width: 100vw;
+    height: 100dvh;
+    height: var(--tg-viewport-height, 100dvh);
+    max-width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+  }
+
+  .home-page {
+    padding: 12px 14px calc(100px + env(safe-area-inset-bottom, 0px)) 14px;
+  }
+
+  .widget-clock {
+    font-size: 2.8rem;
+  }
+
+  .widget-date {
+    font-size: 0.9rem;
+  }
+
+  .bottom-dock {
+    height: 68px;
+    margin: 0 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px;
+    padding: 0 8px;
+  }
+
+  .dock-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 1.35rem;
+  }
+
+  .app-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px 6px;
+  }
+
+  .app-icon-badge {
+    width: 52px;
+    height: 52px;
+    font-size: 1.45rem;
+    border-radius: 16px;
+  }
+
+  .app-label {
+    font-size: 0.72rem;
+  }
+
+  .study-input {
+    font-size: 16px; /* Essential to prevent automatic zooming on iOS Safari */
+  }
+
+  .study-content-card {
+    max-height: calc(100dvh - 250px);
+    padding: 12px;
+  }
+
+  .flashcard-scene {
+    height: clamp(210px, 32vh, 260px);
+    margin: 8px 0 12px;
+  }
+
+  .flashcard-text {
+    font-size: 0.98rem;
+  }
+
+  .quiz-option-btn {
+    min-height: 44px;
+    padding: 10px;
+    touch-action: manipulation;
+  }
+
+  .floating-companion {
+    bottom: 90px;
+    right: 14px;
+  }
+
+  .companion-avatar-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 1.6rem;
+  }
+
+  .companion-bubble {
+    max-width: 190px;
+    font-size: 0.75rem;
+  }
+}

@@ -59,7 +59,7 @@ test('▶ WhatsApp Advanced Features Suite', async (t) => {
     assert.ok(formatted.includes('Message from Sandy'));
     assert.ok(formatted.includes('Hello Rahul,') || formatted.includes('Rahul'));
     assert.ok(formatted.includes('Please send over the project files by 5 PM.'));
-    assert.ok(formatted.includes('Nero'));
+    assert.ok(formatted.includes('Rocket'));
   });
 
   await t.test('5. SandyStatusService — Find Contact by Name or Number', () => {

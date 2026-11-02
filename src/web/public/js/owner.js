@@ -269,7 +269,7 @@ const OWNER_COMMANDS_LIST = [
 
   // --- 2. MODELS & REASONING (6) ---
   { id: 'cmd_model_flash_lite', cmd: 'model_select', cat: 'models', name: 'Gemini 3.5 Flash Lite', icon: '⚡', desc: 'Active flagship default model for fast reasoning & coding', btnText: 'Switch 3.5 Lite', defaultParams: { modelId: 'gemini-3.5-flash-lite' } },
-  { id: 'cmd_model_luna', cmd: 'model_select', cat: 'models', name: 'GPT-6 Luna', icon: '✨', desc: 'Ultra-low latency model for high-speed conversational chats', btnText: 'Switch Luna', defaultParams: { modelId: 'gpt-6-luna' } },
+  { id: 'cmd_model_luna', cmd: 'model_select', cat: 'models', name: 'Rocket Neural Core', icon: '✨', desc: 'Ultra-low latency model for high-speed conversational chats', btnText: 'Switch Core', defaultParams: { modelId: 'gpt-6-luna' } },
   { id: 'cmd_model_flash_38', cmd: 'model_select', cat: 'models', name: 'Gemini 3.8 Flash', icon: '🌟', desc: 'Deep vision, multimodal intelligence & heavy code analysis', btnText: 'Switch 3.8', defaultParams: { modelId: 'gemini-3.8-flash' } },
   { id: 'cmd_model_claude', cmd: 'model_select', cat: 'models', name: 'Claude 3.5 Sonnet', icon: '🧠', desc: 'High-capability analytical architecture model', btnText: 'Switch Sonnet', defaultParams: { modelId: 'claude-3-5-sonnet' } },
   { id: 'cmd_reasoning_depth', cmd: 'setreasoning', cat: 'models', name: 'Reasoning Effort', icon: '🎯', desc: 'Configure neural chain-of-thought depth (none, low, medium, high)', btnText: 'Set Effort', hasInput: true, inputPlaceholder: 'low | medium | high | none', inputKey: 'effort', defaultVal: 'medium' },
@@ -624,7 +624,7 @@ function setupModelSelector() {
   const latencyBox = document.getElementById('ownerModelLatencyBox');
   pingBtn?.addEventListener('click', async () => {
     haptic.impact('light');
-    if (latencyBox) latencyBox.textContent = 'Measuring roundtrip latency to ScaleMax...';
+    if (latencyBox) latencyBox.textContent = 'Measuring neural roundtrip latency...';
     const start = performance.now();
     try {
       const res = await fetch('/api/status', { headers: getAuthHeaders() });

@@ -34,6 +34,10 @@ test('🎛️ Chat Manager Mode — Telegram Invocation & Stop Feature Integrati
   setConfig(`text_mode_${fakeChatId}`, 'on');
   const decision3 = evaluateInvocationPolicy(mockCtx);
   assert.equal(decision3.shouldRespond, true);
+
+  // Clean up test config
+  setConfig('chat_manager_mode', 'false');
+  setConfig(`text_mode_${fakeChatId}`, null);
 });
 
 test('🎛️ Chat Manager Directive Verification across WhatsApp & Telegram', () => {

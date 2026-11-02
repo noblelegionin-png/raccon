@@ -1,6 +1,6 @@
 # Nero Labs — Telegram AI Bot & Mobile Mini App (Phase 1)
 
-Official production-grade Telegram AI chatbot and mobile-first Telegram Mini App control panel for **Nero Labs**, built for low-latency reasoning via **ScaleMax** (defaulting to **GPT-6 Luna**).
+Official production-grade Telegram AI chatbot and mobile-first Telegram Mini App control panel for **Nero Labs**, built for low-latency reasoning via **Nero Labs Neural Architecture** (defaulting to **Rocket Neural Core**).
 
 ---
 
@@ -13,9 +13,9 @@ Official production-grade Telegram AI chatbot and mobile-first Telegram Mini App
    - Built-in update deduplication to eliminate duplicate replies.
    - Comprehensive owner commands: `/start`, `/status`, `/help`, `/model`, `/setmodel`, `/master`, `/group`, `/clear`.
 
-2. **ScaleMax Provider Integration**:
-   - OpenAI-compatible adapter connecting to `https://api.scalemax.pro/v1` (or token gateway).
-   - Default foundation model: `gpt-6-luna`.
+2. **Nero Labs Neural Architecture Integration**:
+   - OpenAI-compatible adapter connecting to neural gateway.
+   - Default foundation model: `Rocket Neural Core`.
    - Real latency measurement (round-trip ping in milliseconds).
    - Live model discovery via `GET /v1/models` with automatic fallback to maintainable catalogue template.
    - Transparent reporting: if balance or token limits are not exposed via API, explicitly displays *"Unavailable from provider API"* rather than fabricating numbers.
@@ -91,7 +91,7 @@ d:/nero-labs-telegram-bot/
 ### 1. Prerequisites
 - **Node.js**: v20 or v24 (v24.19.0 recommended, utilizes native `node:sqlite`)
 - **Telegram Bot Token**: Created via [@BotFather](https://t.me/botfather)
-- **ScaleMax Account**: API key from [ScaleMax Dashboard](https://dashboard.scalemax.pro)
+- **Neural Gateway Account**: API key for neural completions
 
 ### 2. Quick Setup
 Open your terminal in `d:\nero-labs-telegram-bot`:
@@ -115,8 +115,8 @@ TELEGRAM_BOT_TOKEN="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ"
 # Get your numeric ID from @userinfobot or @raw_data_bot on Telegram
 TELEGRAM_OWNER_ID="123456789"
 
-# 3. ScaleMax API Credentials
-SCALEMAX_API_KEY="your_actual_scalemax_api_key"
+# 3. Neural Architecture Credentials
+SCALEMAX_API_KEY="your_actual_api_key"
 SCALEMAX_BASE_URL="https://api.scalemax.pro/v1"
 SCALEMAX_DEFAULT_MODEL="gpt-6-luna"
 
@@ -136,7 +136,7 @@ DATABASE_PATH="./data/nerolabs.db"
 
 ## 🧪 Running the Automated Verification Tests
 
-The test suite covers HMAC-SHA256 signatures, replay protection, numeric owner ID checks, brute-force defenses, database WAL operations, group management, and ScaleMax integration:
+The test suite covers HMAC-SHA256 signatures, replay protection, numeric owner ID checks, brute-force defenses, database WAL operations, group management, and neural adapter integration:
 
 ```bash
 npm test
@@ -148,7 +148,7 @@ Expected output:
 ✔ Access Control — Numeric Owner ID Verification
 ✔ Access Control — Dashboard Access Key & Brute Force Rate Limiting
 ✔ Database Layer — Persistent SQLite Operations
-✔ ScaleMax Provider Adapter
+✔ Neural Core Provider Adapter
 ✔ Model Catalogue & Classification
 ℹ tests 25, pass 25, fail 0
 ```
@@ -183,7 +183,7 @@ Upon starting:
 | `/master on` | **Owner Only** | Enables Master AI connection |
 | `/master off` | **Owner Only** | **Master Kill Switch**: Instantly halts all AI processing |
 | `/model` | **Owner Only** | Displays current active model and catalogue listing |
-| `/setmodel <id>` | **Owner Only** | Switches active AI model (e.g. `/setmodel gpt-6-luna`) |
+| `/setmodel <id>` | **Owner Only** | Switches active AI model (e.g. `/setmodel Rocket Neural Core`) |
 | `/group on` | **Owner Only** | Enables bot responses in the current group |
 | `/group off` | **Owner Only** | Disables bot responses in the current group |
 | `/globalgroup on` | **Owner Only** | Globally enables group participation |
@@ -196,7 +196,7 @@ Upon starting:
 ### 1. Bot does not reply to messages
 - **Check Master AI Switch**: Run `/status` or check the Mini App. If Master Switch is `OFF`, all AI replies are intentionally halted. Run `/master on`.
 - **Check Private Chat Switch**: If private chat is disabled, non-owner users will receive a polite notice.
-- **Check ScaleMax API Key**: Check the terminal logs or run `/status`. If ScaleMax returned 401, verify `SCALEMAX_API_KEY` in `.env`.
+- **Check Neural API Key**: Check the terminal logs or run `/status`. If gateway returned 401, verify `SCALEMAX_API_KEY` in `.env`.
 
 ### 2. Bot remains silent in Telegram Groups
 - By design, the bot favours silence over interruption.

@@ -1,6 +1,7 @@
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { pdfService } from '../pdf/pdfService.js';
+import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 export class RocketStudyService {
   /**
@@ -80,7 +81,7 @@ Rule: Be cheeky, brilliant, and accurate. Sprinkle 🦝 🐾 🍕 💡 ⚡.`;
     return {
       ok: true,
       topic: cleanTopic,
-      formattedText: explanation.trim(),
+      formattedText: scrubRestrictedBrandNames(explanation.trim()),
     };
   }
 
@@ -117,7 +118,13 @@ Output strictly valid JSON with no markdown wrapping:
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.questions) && parsed.questions.length > 0) {
-          return { ok: true, topic: cleanTopic, questions: parsed.questions };
+          const sanitized = parsed.questions.map((q) => ({
+            ...q,
+            question: scrubRestrictedBrandNames(q.question),
+            options: (q.options || []).map((o) => scrubRestrictedBrandNames(o)),
+            explanation: scrubRestrictedBrandNames(q.explanation),
+          }));
+          return { ok: true, topic: cleanTopic, questions: sanitized };
         }
       } catch (err) {
         console.warn('[StudyService Quiz Warning]:', err.message);
@@ -200,7 +207,12 @@ Output strictly valid JSON with no markdown wrapping:
         const raw = (completion?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.flashcards) && parsed.flashcards.length > 0) {
-          return { ok: true, topic: cleanTopic, flashcards: parsed.flashcards };
+          const sanitized = parsed.flashcards.map((f) => ({
+            ...f,
+            front: scrubRestrictedBrandNames(f.front),
+            back: scrubRestrictedBrandNames(f.back),
+          }));
+          return { ok: true, topic: cleanTopic, flashcards: sanitized };
         }
       } catch (err) {
         console.warn('[StudyService Flashcard Warning]:', err.message);
@@ -287,11 +299,12 @@ STRUCTURE:
       resultText = `# 🔬 EXECUTIVE RESEARCH DOSSIER: ${cleanTopic.toUpperCase()}\n\n### 📌 1. Abstract\nComprehensive research synthesis into ${cleanTopic} demonstrating fundamental advancements, architectural shifts, and high-efficiency paradigms.\n\n### ⚙️ 2. Key Findings\n• Empirical evaluations confirm significant performance scaling when redundant layers are pruned.\n• Current consensus recommends hybrid pipelines balancing latency with reasoning depth.\n\n### 🎯 3. Practical Implications\nImplement modular abstractions and test edge cases under high load.`;
     }
 
+    const sanitizedReport = scrubRestrictedBrandNames(resultText.trim());
     return {
       ok: true,
       topic: cleanTopic,
-      report: resultText.trim(),
-      formattedText: resultText.trim(),
+      report: sanitizedReport,
+      formattedText: sanitizedReport,
     };
   }
 

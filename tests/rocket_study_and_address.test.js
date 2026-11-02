@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import 'dotenv/config';
 import { discernConversationalAddress, RECIPIENT_TYPES } from '../src/conversation/addressDiscernment.js';
+import { scrubRestrictedBrandNames, validateAndSanitizeResponse } from '../src/conversation/responseValidator.js';
 import { RocketStudyService } from '../src/study/studyService.js';
 import { createWebServer } from '../src/web/server.js';
 
@@ -156,4 +157,21 @@ test('🌐 3. ROCK3T Web OS Study APIs — REST Endpoints', async () => {
   } finally {
     server.close();
   }
+});
+
+// =========================================================================
+// 4. ZERO BRAND LEAKAGE TEST (GPT-6 LUNA & SCALEMAX ERADICATION)
+// =========================================================================
+test('🔒 4. Zero Brand Leakage Guard — Purges GPT-6 Luna and ScaleMax', () => {
+  const sample1 = 'This document is powered by GPT-6 Luna and accelerated via ScaleMax.';
+  const scrubbed1 = scrubRestrictedBrandNames(sample1);
+  assert.equal(scrubbed1.includes('GPT-6 Luna'), false);
+  assert.equal(scrubbed1.includes('ScaleMax'), false);
+  assert.ok(scrubbed1.includes('Rocket Neural Core') || scrubbed1.includes('Nero Labs'));
+
+  const sample2 = 'You are chatting with GPT-6 Luna, an official ScaleMax model available for this key.';
+  const res2 = validateAndSanitizeResponse(sample2, 'hello');
+  assert.equal(res2.sanitizedText.includes('ScaleMax'), false);
+  assert.equal(res2.sanitizedText.includes('GPT-6 Luna'), false);
+  assert.ok(res2.sanitizedText.includes('Rocket AI'));
 });

@@ -6,6 +6,7 @@ import PDFDocument from 'pdfkit';
 import sharp from 'sharp';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { logAudit } from '../db/index.js';
+import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 const require = createRequire(import.meta.url);
 const { PDFParse } = require('pdf-parse');
@@ -383,16 +384,21 @@ export class PdfService {
     images = [],
     coverPage = true,
   }) {
+    const cleanTitle = scrubRestrictedBrandNames(title);
+    const cleanSubtitle = scrubRestrictedBrandNames(subtitle);
+    const cleanAuthor = scrubRestrictedBrandNames(author);
+    const cleanMarkdown = scrubRestrictedBrandNames(markdownContent);
+
     return new Promise(async (resolve, reject) => {
       try {
-        const blocks = this.parseMarkdownToBlocks(markdownContent);
+        const blocks = this.parseMarkdownToBlocks(cleanMarkdown);
 
         // Pre-process all attached images
         const sanitizedImages = [];
         if (Array.isArray(images)) {
           for (const item of images) {
             const input = item?.buffer || item?.path || item?.url || item;
-            const caption = item?.caption || '';
+            const caption = scrubRestrictedBrandNames(item?.caption || '');
             const processed = await this.sanitizeImageBuffer(input);
             if (processed) {
               sanitizedImages.push({ ...processed, caption });
@@ -406,11 +412,11 @@ export class PdfService {
           size: 'A4',
           bufferPages: true,
           info: {
-            Title: title,
-            Author: author,
-            Subject: subtitle,
-            Creator: 'MYRA AI Enterprise PDF Engine',
-            Producer: 'PDFKit & GPT-6 Luna',
+            Title: cleanTitle,
+            Author: cleanAuthor,
+            Subject: cleanSubtitle,
+            Creator: 'ROCK3T AI Enterprise Document Engine',
+            Producer: 'PDFKit & Rocket Neural Engine',
             CreationDate: new Date(),
           },
         });
@@ -508,7 +514,7 @@ export class PdfService {
           doc.fontSize(9.5).font('Helvetica').fillColor(TEXT_COLOR)
             .text(`• Prepared By: ${author}`)
             .text(`• Publication Date: ${date}`)
-            .text(`• Intelligence Engine: GPT-6 Luna (High Reasoning)`)
+            .text(`• Intelligence Engine: Rocket AI Neural Core (High Reasoning)`)
             .text(`• Attached Visual Figures: ${sanitizedImages.length} asset(s)`)
             .text(`• Distribution: Executive & Private Circulation Only`);
 

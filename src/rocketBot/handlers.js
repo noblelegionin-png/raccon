@@ -16,6 +16,7 @@ import { getActiveModelId } from '../models/catalogue.js';
 import { pdfService } from '../pdf/pdfService.js';
 import { discernConversationalAddress } from '../conversation/addressDiscernment.js';
 import { rocketStudyService } from '../study/studyService.js';
+import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 export function registerRocketHandlers(bot) {
   const miniAppUrl = config.rocketMiniAppUrl || config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app';
@@ -289,7 +290,7 @@ export function registerRocketHandlers(bot) {
         `Usage:\n` +
         `• \`/pdf <topic>\` — Generate an executive publication dossier\n` +
         `• \`/pdf 5 pages on AI Agents in 2026\` — Specify page count\n\n` +
-        `_Task Fee: 1 Pizza per dossier. Powered by GPT-6 Luna & PDFKit._ 🍕✨`,
+        `_Task Fee: 1 Pizza per dossier. Compiled by Rocket AI & PDF Engine._ 🍕✨`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -594,7 +595,7 @@ export function registerRocketHandlers(bot) {
         promptTokens = completion?.usage?.prompt_tokens || Math.round(text.length / 4);
         completionTokens = completion?.usage?.completion_tokens || Math.round(aiReply.length / 4);
       } else {
-        aiReply = `🦝🍕 *snickers playfully* Yo ${userName}! Rocket is standing by! (ScaleMax running in offline test mode). Bring pizza! 🐾`;
+        aiReply = `🦝🍕 *snickers playfully* Yo ${userName}! Rocket is standing by! (Rocket Neural Engine running in offline mode). Bring pizza! 🐾`;
       }
     } catch (err) {
       console.warn('[RocketBot Chat Error]:', err.message);
@@ -606,7 +607,7 @@ export function registerRocketHandlers(bot) {
     // Deduct fuel based on actual token usage
     rocketLifeEngine.consumeTokens(contextId, promptTokens, completionTokens, activeModel || 'gpt-6-luna');
 
-    await ctx.reply(aiReply);
+    await ctx.reply(scrubRestrictedBrandNames(aiReply));
   });
 
   // Document upload handler (Reading & Analyzing PDFs)

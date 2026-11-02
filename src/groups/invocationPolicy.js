@@ -129,7 +129,7 @@ export function evaluateInvocationPolicy(ctx) {
 
   // 7.5 Text Reply Mode & Chat Manager Mode
   const textMode = getConfig(`text_mode_${ctx.chat.id}`, null) || getConfig(`chatmode_${ctx.chat.id}`, null);
-  const chatManagerMode = getConfig('chat_manager_mode', 'true') === 'true';
+  const chatManagerMode = getConfig('chat_manager_mode', 'false') === 'true';
 
   // If text mode was explicitly turned off by owner or group admin (/text off or /chat stop or chup), honor stop!
   if (textMode === 'off' || textMode === 'false' || textMode === 'mention') {
@@ -140,8 +140,18 @@ export function evaluateInvocationPolicy(ctx) {
     };
   }
 
-  // If Chat Manager mode is active (or /text on is active): participate and blend into conversation!
-  if (chatManagerMode || textMode === 'on' || textMode === 'true' || textMode === 'all') {
+  // If /text on is active: participate and blend into conversation!
+  if (textMode === 'on' || textMode === 'true' || textMode === 'all') {
+    return {
+      shouldRespond: true,
+      reason: 'text_mode_on',
+      cleanText: text,
+      isPrivate: false,
+    };
+  }
+
+  // If Chat Manager mode is active: participate
+  if (chatManagerMode) {
     return {
       shouldRespond: true,
       reason: 'chat_manager_active',

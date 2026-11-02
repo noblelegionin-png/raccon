@@ -382,7 +382,7 @@ test('WhatsApp 24/7 Live Bridge — Comprehensive Suite', async (t) => {
     try {
       await whatsAppService.executeOwnerAction('2', 'wa_sandy_master');
       assert.match(sentDiagnostic, /SYSTEM DIAGNOSTICS/i);
-      assert.match(sentDiagnostic, /gpt-6-luna/i);
+      assert.match(sentDiagnostic, /Rocket Neural Core/i);
 
       // Test executeOwnerAction for routine
       await whatsAppService.executeOwnerAction('3', 'wa_sandy_master');

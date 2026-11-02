@@ -39,32 +39,63 @@
           <!-- ROCKET LIFE ENGINE TELEMETRY CARD -->
           <div class="life-engine-card">
             <div class="life-engine-header">
-              <span style="font-weight: 700; font-size: 0.95rem;">🦝 Rocket Life Engine</span>
-              <span class="life-badge" id="lifeMoodVal">Playful</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="pulse-dot"></span>
+                <span style="font-weight: 800; font-size: 0.95rem; letter-spacing: -0.01em;">🦝 Rocket Life Engine</span>
+              </div>
+              <span class="life-badge" id="lifeMoodVal">Playful 🐾</span>
             </div>
-            <div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--os-text-muted); margin-bottom: 4px;">
-                <span>Hunger</span>
-                <span id="lifeHungerVal">80%</span>
+            
+            <div style="margin: 8px 0;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.78rem; font-weight: 600; color: var(--os-text-muted); margin-bottom: 5px;">
+                <span>🍕 Hunger Satisfaction</span>
+                <span id="lifeHungerVal" style="color: var(--os-text); font-weight: 700;">80%</span>
               </div>
               <div class="life-meter-track">
                 <div class="life-meter-fill" id="lifeHungerBar" style="width: 80%;"></div>
               </div>
             </div>
+
             <div class="life-stats-row">
-              <span id="lifeStashVal">🍕 25 | 🌮 5</span>
-              <span id="lifeSleepVal">Active ⚡</span>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 0.8rem; color: var(--os-text-muted);">Pantry:</span>
+                <span id="lifeStashVal" style="font-weight: 700;">🍕 25 | 🌮 5</span>
+              </div>
+              <span id="lifeSleepVal" class="life-status-tag">Active ⚡</span>
             </div>
-            <div style="display: flex; gap: 6px; margin-top: 4px;">
-              <button class="btn-os" style="flex: 1; padding: 6px 8px; font-size: 0.75rem;" onclick="ROCK3T_OS.feedRocket('pizza')">🍕 Feed Pizza</button>
-              <button class="btn-os" style="flex: 1; padding: 6px 8px; font-size: 0.75rem;" onclick="ROCK3T_OS.feedRocket('taco')">🌮 Feed Taco</button>
-              <a href="/raccoon/index.html" class="btn-os primary" style="padding: 6px 10px; font-size: 0.75rem; text-decoration: none; display: flex; align-items: center;" target="_blank">🚀 Life App</a>
+
+            <div style="display: flex; gap: 6px; margin-top: 8px;" id="foodBtnRow">
+              <button class="btn-os food-feed-btn" onclick="ROCK3T_OS.feedRocket('pizza')" title="Give Rocket a slice of hot pepperoni pizza">
+                🍕 Feed Pizza
+              </button>
+              <button class="btn-os food-feed-btn" onclick="ROCK3T_OS.feedRocket('taco')" title="Give Rocket a crunchy beef taco">
+                🌮 Feed Taco
+              </button>
+              <a href="/raccoon/index.html" class="btn-os primary" style="padding: 7px 12px; font-size: 0.75rem; text-decoration: none; display: flex; align-items: center; gap: 4px;" target="_blank">
+                🚀 Life App
+              </a>
             </div>
           </div>
 
-          <div class="os-widget">
-            <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">🧠 Rocket Thoughts</h3>
-            <p style="color: var(--os-text-muted); font-size: 0.85rem;" id="widgetRaccoonNote">"Checked the perimeter. No intruders. Pizza safe."</p>
+          <!-- 50+ LIVE ROCKET THOUGHTS & MEMES VAULT -->
+          <div class="os-widget thoughts-widget">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                🧠 Rocket Thoughts & Memes
+              </h3>
+              <span class="thought-badge" id="thoughtLiveBadge">🔥 Live Vault</span>
+            </div>
+            <div class="thought-bubble-card" id="thoughtBubbleCard">
+              <p class="thought-text" id="widgetRaccoonNote">"There are two constants in the universe: gravity and cold leftover pizza at 3:15 AM. 🍕🌌"</p>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;">
+              <button class="btn-os" style="flex: 1; padding: 7px 10px; font-size: 0.75rem; font-weight: 700;" onclick="ROCK3T_OS.nextThought()">
+                🎲 Shuffle Thought
+              </button>
+              <button class="btn-os primary" style="flex: 1; padding: 7px 10px; font-size: 0.75rem; font-weight: 700;" onclick="ROCK3T_OS.generateLunaThought()">
+                ✨ Live Luna Thought
+              </button>
+            </div>
           </div>
         </section>
 
@@ -274,6 +305,8 @@
         <!-- GAME TABS SELECTOR -->
         <div class="games-tab-bar">
           <button class="games-tab-btn active" data-game="tictactoe" onclick="ROCK3T_GAMES.switchGame('tictactoe')">❌⭕ Tic-Tac-Toe</button>
+          <button class="games-tab-btn" data-game="connect4" onclick="ROCK3T_GAMES.switchGame('connect4')">🔴 Connect 4</button>
+          <button class="games-tab-btn" data-game="rps" onclick="ROCK3T_GAMES.switchGame('rps')">🍕 Cyber RPS</button>
           <button class="games-tab-btn" data-game="snakes" onclick="ROCK3T_GAMES.switchGame('snakes')">🎲 Snakes & Ladders</button>
           <button class="games-tab-btn" data-game="ludo" onclick="ROCK3T_GAMES.switchGame('ludo')">🏆 Ludo</button>
           <button class="games-tab-btn" data-game="chess" onclick="ROCK3T_GAMES.switchGame('chess')">♟️ Chess</button>
@@ -301,6 +334,81 @@
 
           <div class="ttt-reaction-bubble" id="tttReaction">
             🦝 Tap any square to place your X! Let's see your moves!
+          </div>
+        </div>
+
+        <!-- ACTIVE GAME AREA 2: CONNECT 4 (DROP 4) -->
+        <div class="c4-container" id="c4GameArea" style="display: none;">
+          <div class="ttt-scoreboard">
+            <div class="ttt-score-pill">You (🔴): <span id="scoreC4Human">0</span></div>
+            <div class="ttt-score-pill">Rocket (🟡): <span id="scoreC4Rocket">0</span></div>
+            <div class="ttt-score-pill">Draws: <span id="scoreC4Draws">0</span></div>
+          </div>
+
+          <!-- Column Drop Selectors -->
+          <div class="c4-drop-row">
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(0)" title="Drop in column 1">⬇</button>
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(1)" title="Drop in column 2">⬇</button>
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(2)" title="Drop in column 3">⬇</button>
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(3)" title="Drop in column 4">⬇</button>
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(4)" title="Drop in column 5">⬇</button>
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(5)" title="Drop in column 6">⬇</button>
+            <button class="c4-drop-btn" onclick="ROCK3T_GAMES.handleC4Drop(6)" title="Drop in column 7">⬇</button>
+          </div>
+
+          <!-- 7x6 Matrix Grid -->
+          <div class="c4-grid" id="c4Board"></div>
+
+          <div class="ttt-reaction-bubble" id="c4Reaction">
+            🦝 Tap any arrow above to drop your red chip! Connect 4 to win! 🔴
+          </div>
+        </div>
+
+        <!-- ACTIVE GAME AREA 3: CYBER RPS (ROCK, PAPER, SCISSORS, PIZZA, LASER) -->
+        <div class="rps-container" id="rpsGameArea" style="display: none;">
+          <div class="ttt-scoreboard">
+            <div class="ttt-score-pill">Wins: <span id="scoreRpsWins">0</span></div>
+            <div class="ttt-score-pill">Losses: <span id="scoreRpsLosses">0</span></div>
+            <div class="ttt-score-pill">Streak: <span id="scoreRpsStreak">0</span>🔥</div>
+          </div>
+
+          <div class="rps-battlefield">
+            <div class="rps-fighter-card">
+              <span class="rps-fighter-label">YOU</span>
+              <div class="rps-fighter-icon" id="rpsPlayerDisplay">❓</div>
+            </div>
+            <div class="rps-vs-badge">VS</div>
+            <div class="rps-fighter-card">
+              <span class="rps-fighter-label">ROCKET AI</span>
+              <div class="rps-fighter-icon" id="rpsRocketDisplay">🦝</div>
+            </div>
+          </div>
+
+          <div class="rps-buttons-grid">
+            <button class="rps-choice-btn" onclick="ROCK3T_GAMES.handleRpsChoice('rock')">
+              <span class="rps-btn-emoji">🪨</span>
+              <span class="rps-btn-text">Rock</span>
+            </button>
+            <button class="rps-choice-btn" onclick="ROCK3T_GAMES.handleRpsChoice('paper')">
+              <span class="rps-btn-emoji">📄</span>
+              <span class="rps-btn-text">Paper</span>
+            </button>
+            <button class="rps-choice-btn" onclick="ROCK3T_GAMES.handleRpsChoice('scissors')">
+              <span class="rps-btn-emoji">✂️</span>
+              <span class="rps-btn-text">Scissors</span>
+            </button>
+            <button class="rps-choice-btn special-pizza" onclick="ROCK3T_GAMES.handleRpsChoice('pizza')">
+              <span class="rps-btn-emoji">🍕</span>
+              <span class="rps-btn-text">Pizza</span>
+            </button>
+            <button class="rps-choice-btn special-laser" onclick="ROCK3T_GAMES.handleRpsChoice('laser')">
+              <span class="rps-btn-emoji">⚡</span>
+              <span class="rps-btn-text">Laser</span>
+            </button>
+          </div>
+
+          <div class="ttt-reaction-bubble" id="rpsReaction">
+            🦝 Pick your weapon! Pizza bribes Paper & Rock, Laser vaporizes Pizza & Scissors! 🍕⚡
           </div>
         </div>
 

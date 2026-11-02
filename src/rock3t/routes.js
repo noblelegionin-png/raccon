@@ -7,7 +7,13 @@ import {
   PERSONAL_QUESTIONS,
   DEFAULT_STORE_APPS,
 } from './rock3tDb.js';
-import { playTicTacToeTurn, getGameScore } from './gamesEngine.js';
+import {
+  playTicTacToeTurn,
+  playConnect4Turn,
+  playRpsTurn,
+  getGameScore
+} from './gamesEngine.js';
+import { getRandomThought, generateLiveLunaThought } from './thoughtsVault.js';
 import { executeRock3tTool, ROCK3T_TOOLS } from './smartTools.js';
 import { rocketAuthMiddleware } from '../rocket/rbac.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
@@ -220,6 +226,115 @@ rock3tRouter.post('/games/tictactoe/reset', (req, res) => {
       board: Array(9).fill(null),
       score,
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 9b. POST /api/rock3t/games/connect4/move
+ */
+rock3tRouter.post('/games/connect4/move', async (req, res) => {
+  try {
+    const user = req.rocketUser;
+    const { board = Array(42).fill(null), col } = req.body;
+
+    if (typeof col !== 'number' || col < 0 || col > 6) {
+      return res.status(400).json({ ok: false, error: 'Invalid column index (0-6).' });
+    }
+
+    const result = await playConnect4Turn(
+      user.id,
+      board,
+      col,
+      user.first_name || 'Sandy'
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 9c. POST /api/rock3t/games/connect4/reset
+ */
+rock3tRouter.post('/games/connect4/reset', (req, res) => {
+  try {
+    const user = req.rocketUser;
+    const score = getGameScore(user.id, 'connect4');
+    res.json({
+      ok: true,
+      board: Array(42).fill(null),
+      score,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 9d. POST /api/rock3t/games/rps/play
+ */
+rock3tRouter.post('/games/rps/play', async (req, res) => {
+  try {
+    const user = req.rocketUser;
+    const { choice, history = [] } = req.body;
+
+    if (!choice) {
+      return res.status(400).json({ ok: false, error: 'Choice is required.' });
+    }
+
+    const result = await playRpsTurn(
+      user.id,
+      choice.toLowerCase(),
+      user.first_name || 'Sandy',
+      history
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 9e. POST /api/rock3t/games/rps/reset
+ */
+rock3tRouter.post('/games/rps/reset', (req, res) => {
+  try {
+    const user = req.rocketUser;
+    const score = getGameScore(user.id, 'rps');
+    res.json({
+      ok: true,
+      score,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 9f. GET /api/rock3t/thoughts/random
+ */
+rock3tRouter.get('/thoughts/random', (req, res) => {
+  try {
+    const user = req.rocketUser;
+    const thought = getRandomThought(user.id);
+    res.json({ ok: true, thought });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * 9g. POST /api/rock3t/thoughts/generate
+ */
+rock3tRouter.post('/thoughts/generate', async (req, res) => {
+  try {
+    const user = req.rocketUser;
+    const thought = await generateLiveLunaThought(user.id, user.first_name || 'Sandy');
+    res.json({ ok: true, thought });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

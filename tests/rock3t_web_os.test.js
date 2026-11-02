@@ -241,3 +241,81 @@ test('🖼️ 8. Wallpaper Customization & Future Games Catalog Verification', a
   assert.ok(html.includes('wallpaperUrlInput'), 'Must contain wallpaper URL input');
   assert.ok(html.includes('wallpaperFileInput'), 'Must contain wallpaper upload input');
 });
+
+// 9. Connect 4 Engine & Drop Physics
+test('🔴 9. Connect 4 Engine: Drops, Gravity & Win Evaluation', async () => {
+  const { evaluateConnect4, calculateConnect4RocketMove, playConnect4Turn } = await import('../src/rock3t/gamesEngine.js');
+
+  // Test 1: Empty board drop (bottom row is row 5, index 38 for col 3)
+  const emptyBoard = Array(42).fill(null);
+  const turn = await playConnect4Turn('test_c4_user', emptyBoard, 3, 'Sandy');
+  assert.equal(turn.ok, true);
+  // Col 3 row 5 is 5 * 7 + 3 = 38
+  assert.equal(turn.board[38], 'R', 'Human red chip must fall to bottom of col 3');
+  assert.ok(turn.rocketCol >= 0 && turn.rocketCol <= 6);
+
+  // Test 2: Horizontal 4-in-a-row detection
+  const horizBoard = Array(42).fill(null);
+  horizBoard[35] = 'R'; horizBoard[36] = 'R'; horizBoard[37] = 'R'; horizBoard[38] = 'R';
+  const evalH = evaluateConnect4(horizBoard);
+  assert.equal(evalH.winner, 'R');
+  assert.deepEqual(evalH.line, [35, 36, 37, 38]);
+
+  // Test 3: AI blocking human vertical connect 4
+  // Human has 3 in col 2: rows 5, 4, 3 (indices 37, 30, 23). Rocket must block at row 2 (index 16)!
+  const vertBoard = Array(42).fill(null);
+  vertBoard[37] = 'R'; vertBoard[30] = 'R'; vertBoard[23] = 'R';
+  const blockCol = calculateConnect4RocketMove(vertBoard);
+  assert.equal(blockCol, 2, 'Rocket AI must block Human vertical win in col 2');
+});
+
+// 10. Cyber RPS Game Engine (5 Choices & Streaks)
+test('🍕 10. Cyber RPS Engine: Rock, Paper, Scissors, Pizza, Laser', async () => {
+  const { playRpsTurn } = await import('../src/rock3t/gamesEngine.js');
+
+  const userId = 'test_rps_user_' + Date.now();
+  // Turn 1: Play Pizza (Pizza bribes Paper and Rock)
+  const turn1 = await playRpsTurn(userId, 'pizza', 'Sandy');
+  assert.equal(turn1.ok, true);
+  assert.equal(turn1.playerChoice, 'pizza');
+  assert.ok(['rock', 'paper', 'scissors', 'pizza', 'laser'].includes(turn1.rocketChoice));
+  assert.ok(['human_win', 'rocket_win', 'draw'].includes(turn1.outcome));
+  assert.ok(turn1.score !== undefined);
+  assert.ok(turn1.reaction.length > 5);
+});
+
+// 11. 50+ Rocket Thoughts Vault & Live Luna Generation
+test('🧠 11. 50+ Rocket Thoughts Vault & Random / Live Thought APIs', async () => {
+  const { DEFAULT_ROCKET_THOUGHTS, getRandomThought, generateLiveLunaThought } = await import('../src/rock3t/thoughtsVault.js');
+  assert.ok(DEFAULT_ROCKET_THOUGHTS.length >= 50, 'Vault must contain at least 50 pre-crafted thoughts');
+
+  const randomThought = await getRandomThought();
+  assert.ok(randomThought.text.length > 5);
+  assert.ok(randomThought.category);
+
+  // Live Luna Thought generation
+  const liveLuna = await generateLiveLunaThought('Sandy', 'pizza');
+  assert.ok(liveLuna.text.length > 5);
+  assert.ok(liveLuna.isLive);
+});
+
+// 12. Strict 1-Page Full-Width Pager CSS & JS Geometry Verification
+test('📐 12. 1-Page Full-Width Pager Layout Verification (No Squished Side-by-Side Pages)', () => {
+  const cssPath = path.resolve(process.cwd(), 'src/web/public/rock3t/os.css');
+  const css = fs.readFileSync(cssPath, 'utf8');
+
+  // Verify .home-page is strictly 100% width, never 20%
+  assert.ok(css.includes('flex: 0 0 100% !important;'), 'Home page must be flex 100% width');
+  assert.ok(css.includes('min-width: 100% !important;'), 'Home page min-width must be 100%');
+  assert.ok(css.includes('max-width: 100% !important;'), 'Home page max-width must be 100%');
+  assert.ok(!css.includes('flex: 0 0 20% !important;'), 'Squished 20% flex must be completely eliminated');
+
+  const jsPath = path.resolve(process.cwd(), 'src/web/public/rock3t/os.js');
+  const js = fs.readFileSync(jsPath, 'utf8');
+
+  // Verify pixel-based displacement and 120fps motion blur in JS
+  assert.ok(js.includes('getContainerWidth()'), 'Must contain getContainerWidth helper');
+  assert.ok(js.includes('targetTranslatePx'), 'Must use pixel-based translation target');
+  assert.ok(js.includes('orientationchange'), 'Must listen to orientationchange');
+});
+

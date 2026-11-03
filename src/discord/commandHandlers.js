@@ -39,6 +39,7 @@ import {
   revokeUserPermission,
   listAuthorizedUsers,
   getUserPermission,
+  checkUserHasScope,
   saveGamingProfile,
   getUserGamingProfiles,
   getAllGamingProfiles,

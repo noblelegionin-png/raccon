@@ -28,7 +28,7 @@ export const config = {
   rocketMiniAppUrl: cleanEnv(process.env.ROCKET_MINIAPP_URL, cleanEnv(process.env.WEBAPP_PUBLIC_URL)),
 
   // ScaleMax & Model Provider
-  scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY),
+  scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY, 'sm_live_c8c0b3957660ecbda0af7e884d7695e7'),
   scaleMaxBaseUrl: (cleanEnv(process.env.SCALEMAX_BASE_URL, 'https://api.scalemax.pro/token/v1')).replace(/\/+$/, ''),
   scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gpt-6-luna'),
   deepSeekApiKey: cleanEnv(process.env.DEEPSEEK_API_KEY),

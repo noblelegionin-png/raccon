@@ -801,7 +801,7 @@ async function handleSlashCommand(interaction) {
 
         const systemPrompt = `${directive}\n\n${serverContext}`;
 
-        let answer = '🦝 *scratches ears* My raccoon brain is waiting for AI fuel! Please verify ScaleMax credentials.';
+        let answer = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
         if (scaleMaxAdapter.isConfigured()) {
           try {
             const completion = await scaleMaxAdapter.createChatCompletion({

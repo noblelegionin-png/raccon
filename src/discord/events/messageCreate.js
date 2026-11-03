@@ -339,7 +339,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     `${isConstantTalk ? '- CONSTANT TALK MODE IS ON: Converse naturally with the group on this message! Act like an active real friend/member in the chat.\n' : ''}` +
     `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.`;
 
-  let response = '🦝 *scratches whiskers* ScaleMax AI connection is warming up. Ask me again in a second!';
+  let response = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
   if (scaleMaxAdapter.isConfigured()) {
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
@@ -356,7 +356,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
       response = completion.choices?.[0]?.message?.content || response;
     } catch (err) {
       console.warn('[Rocket Discord AI Error]:', err.message);
-      response = `🦝🐾 *tail puffs* Oof, had a hiccup processing that: ${err.message}. Toss me a pizza slice and try again! 🍕`;
+      response = '🦝🐾 *tail puffs* Whoa, neural flux glitch! Toss me another pizza slice and hit me with that again! 🍕';
     }
   }
 

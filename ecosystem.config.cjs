@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'nero-labs-bot',
+      name: 'rocket-bot',
       script: 'src/index.js',
       cwd: 'd:\\nero-labs-telegram-bot',
       autorestart: true,
@@ -14,7 +14,7 @@ module.exports = {
       },
     },
     {
-      name: 'nero-labs-tunnel',
+      name: 'rocket-tunnel',
       script: 'd:\\nero-labs-telegram-bot\\cloudflared.exe',
       args: 'tunnel --url http://localhost:3001',
       cwd: 'd:\\nero-labs-telegram-bot',

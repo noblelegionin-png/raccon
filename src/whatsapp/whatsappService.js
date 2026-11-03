@@ -26,7 +26,6 @@ import {
 } from '../conversation/manager.js';
 import { logAudit, getRecentConversation, addNote, getUserNotes, isWhatsAppMessageProcessed, recordWhatsAppMessageProcessed, getConfig, setConfig } from '../db/index.js';
 import { getActiveModelId } from '../models/catalogue.js';
-import { getBotApi } from '../telegram/bot.js';
 import { getRocketBotApi } from '../rocketBot/bot.js';
 import { validateAndSanitizeResponse } from '../conversation/responseValidator.js';
 import { visionService } from '../vision/visionService.js';
@@ -3486,12 +3485,8 @@ class WhatsAppService {
       }
     }
 
-    // Optional Telegram notification for Sandy's private log
-    if (config.whatsAppNotifyTelegram && !isFromMe) {
-      this.notifyTelegramOwner(
-        `📲 *[WhatsApp Message]*\n*From:* ${senderName} (\`+${senderNumber}\`)\n*Chat:* ${isGroup ? 'Group' : 'Direct Message'}\n*Message:* "${promptText.slice(0, 250)}"\n\n_Reply with:_ \`/wa_send ${senderNumber} <reply>\``
-      );
-    }
+    // Platform Isolation Guard: Incoming WhatsApp messages are never forwarded to Telegram.
+    // The user has explicitly disabled cross-platform Telegram message mirroring.
 
     // AI Generation Pipeline:
     // Unified Architecture: ROCKET AI
@@ -4045,7 +4040,7 @@ class WhatsAppService {
     const ownerId = config.rocketOwnerId || config.telegramOwnerId;
     if (!config.whatsAppNotifyTelegram || !ownerId) return;
     try {
-      const api = getRocketBotApi() || getBotApi();
+      const api = getRocketBotApi();
       if (api) {
         await api.sendMessage(Number(ownerId), message, {
           parse_mode: 'Markdown',

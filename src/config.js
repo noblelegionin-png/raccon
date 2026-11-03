@@ -16,10 +16,10 @@ function cleanEnv(val, fallback = '') {
 }
 
 export const config = {
-  // Telegram (Legacy)
-  telegramEnabled: cleanEnv(process.env.TELEGRAM_ENABLED, 'false') === 'true',
-  telegramBotToken: cleanEnv(process.env.TELEGRAM_BOT_TOKEN),
-  telegramOwnerId: cleanEnv(process.env.TELEGRAM_OWNER_ID),
+  // Legacy Telegram (Completely Discontinued & Removed)
+  telegramEnabled: false,
+  telegramBotToken: '',
+  telegramOwnerId: cleanEnv(process.env.ROCKET_OWNER_ID, cleanEnv(process.env.TELEGRAM_OWNER_ID, '8685232094')),
 
   // 🦝 ROCKET NEW TELEGRAM BOT & RACCOON OS
   rocketTelegramEnabled: cleanEnv(process.env.ROCKET_TELEGRAM_ENABLED, 'true') === 'true',
@@ -41,7 +41,7 @@ export const config = {
   whatsAppOwnerNumber: cleanEnv(process.env.WHATSAPP_OWNER_NUMBER, ''),
   whatsAppAutoReply: cleanEnv(process.env.WHATSAPP_AUTO_REPLY, 'true') === 'true',
   whatsAppMode: cleanEnv(process.env.WHATSAPP_MODE, 'all'), // 'all' or 'owner_only'
-  whatsAppNotifyTelegram: cleanEnv(process.env.WHATSAPP_NOTIFY_TELEGRAM, 'true') === 'true',
+  whatsAppNotifyTelegram: cleanEnv(process.env.WHATSAPP_NOTIFY_TELEGRAM, 'false') === 'true',
 
   // Server
   port: parseInt(cleanEnv(process.env.PORT, '3001'), 10),
@@ -61,13 +61,8 @@ export const config = {
 // Validate critical configuration on startup
 export function validateConfig() {
   const issues = [];
-  if (config.telegramEnabled) {
-    if (!config.telegramBotToken) {
-      issues.push('TELEGRAM_BOT_TOKEN is not set. Telegram bot will remain offline.');
-    }
-    if (!config.telegramOwnerId) {
-      issues.push('TELEGRAM_OWNER_ID is not set. Telegram owner authentication cannot be verified.');
-    }
+  if (config.rocketTelegramEnabled && !config.rocketTelegramBotToken) {
+    issues.push('ROCKET_TELEGRAM_BOT_TOKEN is not set. Rocket bot will remain offline.');
   }
   if (!config.scaleMaxApiKey) {
     issues.push('SCALEMAX_API_KEY is not set. AI provider calls will report disconnected status.');

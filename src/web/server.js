@@ -48,7 +48,7 @@ import {
   getGroupModerationRules,
   updateGroupModerationRules,
 } from '../groups/moderation.js';
-import { getBotStatus, getBotApi } from '../telegram/bot.js';
+import { getRocketBotStatus as getBotStatus, getRocketBotApi as getBotApi } from '../rocketBot/bot.js';
 import { whatsAppService } from '../whatsapp/whatsappService.js';
 import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
 import {
@@ -143,6 +143,12 @@ export function createWebServer() {
 
   // Static directory for Mobile Mini App with high-efficiency caching
   const publicDir = path.join(__dirname, 'public');
+
+  // Primary Landing: Direct access to ROCK3T Web OS
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(publicDir, 'rock3t', 'index.html'));
+  });
+
   app.use(express.static(publicDir, {
     maxAge: '1h',
     etag: true,

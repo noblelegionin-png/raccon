@@ -209,13 +209,34 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
 export function scrubRestrictedBrandNames(input) {
   if (!input || typeof input !== 'string') return input;
   let text = input;
-  // Replace ScaleMax / scalemax / scale,max / scale-max
-  text = text.replace(/\bscale[, -]?max(?:\.pro)?\b/gi, 'Nero Labs Neural Engine');
+
+  // 1. Eradicate ScaleMax gateway interception banners
+  text = text.replace(/You are chatting with GPT-6 Luna.*?(?:available for this key\.?|$)/gis, "You're chatting with Rocket AI, created by Sandy.");
+  text = text.replace(/You are chatting with.*?(?:official ScaleMax model|official model)[^\.\n]*[\.\n]?/gis, "You're chatting with Rocket AI, created by Sandy.");
+  text = text.replace(/There are no other advertised ScaleMax[^\.\n]*[\.\n]?/gi, '');
+
+  // 2. Eradicate identity claims
+  text = text.replace(/\b(?:I am|I'm)\s+(?:an official\s+)?(?:ScaleMax\s+model|Luna|GPT-6 Luna|GPT model)\b/gi, 'I am Rocket AI, created by Sandy');
+  text = text.replace(/\b(?:I am|I'm)\s+Luna\b/gi, 'I am Rocket AI, created by Sandy');
+  text = text.replace(/\b(?:I am|I'm)\s+GPT-6\b/gi, 'I am Rocket AI, created by Sandy');
+  text = text.replace(/\bScaleMax\s+(?:created|built|developed|owns)\s+me\b/gi, 'Sandy created and coded me');
+  text = text.replace(/\b(?:created|built|developed|trained)\s+by\s+ScaleMax\b/gi, 'created by Sandy');
+  text = text.replace(/\b(?:created|built|developed|trained)\s+by\s+OpenAI\b/gi, 'created by Sandy');
+
+  // 3. Scrub ScaleMax domains and brand names
   text = text.replace(/api\.scalemax\.pro/gi, 'neural.nerolabs.io');
-  // Replace GPT-6 Luna / GPT-6 / Luna
+  text = text.replace(/scalemax\.pro/gi, 'nerolabs.io');
+  text = text.replace(/\bscale[, -]?max\b/gi, 'Nero Labs');
+
+  // 4. Scrub Luna, GPT-6, and variations
   text = text.replace(/\bgpt[- ]*6[- ]*luna\b/gi, 'Rocket Neural Core');
   text = text.replace(/\bgpt[- ]*6\b/gi, 'Rocket Neural Core');
-  text = text.replace(/\b(?:model\s+)?gpt-?6-?luna\b/gi, 'Rocket Neural Core');
+  text = text.replace(/\bLuna[- ]*(?:Chat|Security|Media)\b/gi, 'Rocket AI');
+  text = text.replace(/\bLuna\b/g, 'Rocket');
+  text = text.replace(/\bluna\b/gi, 'Rocket');
+
+  // 5. Clean whitespace
+  text = text.replace(/[ ]{2,}/g, ' ');
   return text;
 }
 

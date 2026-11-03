@@ -190,7 +190,7 @@ export class BudgetService {
       `• *Status:* ${s.isPaused ? '🛑 PAUSED' : '🟢 ACTIVE & GUARDED'}\n` +
       `• *Token Budget:* ${limits.tokenBudgetBaseline} tokens baseline (max ${limits.maxTokensPerRequest}-${limits.tokenBudgetMax})\n` +
       `• *Reasoning:* ${getConfig('reasoning_effort', 'none').toUpperCase()} (Sub-second speed)\n` +
-      `• *Model:* ${getConfig('myra_active_model', 'gpt-6-luna')}\n` +
+      `• *Model:* Rocket Neural Core (v5.0)\n` +
       `• *Today''s Spend:* $${s.daily.spentUsd.toFixed(4)} / $${s.daily.limitUsd.toFixed(2)} (${s.daily.percentUsed}%)\n` +
       `• *Today''s Tokens:* ${s.daily.tokens.toLocaleString()}\n` +
       `• *Monthly Spend:* $${s.monthly.spentUsd.toFixed(4)} / $${s.monthly.limitUsd.toFixed(2)} (${s.monthly.percentUsed}%)\n` +

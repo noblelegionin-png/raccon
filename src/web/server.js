@@ -1052,9 +1052,9 @@ export function createWebServer() {
           details: `Active model: ${getActiveModelId()}`,
         },
         {
-          name: 'ScaleMax AI Provider Connection',
+          name: 'Nero Labs Neural Engine Connection',
           passed: scaleMaxAdapter.isConfigured(),
-          details: scaleMaxAdapter.isConfigured() ? 'API key active' : 'API key missing',
+          details: scaleMaxAdapter.isConfigured() ? 'Neural core active' : 'Neural core credentials missing',
         },
         {
           name: 'Maintenance Mode Persistent Controller',
@@ -1774,7 +1774,7 @@ export function createWebServer() {
       if (!scaleMaxAdapter.isConfigured()) {
         return res.json({
           ok: false,
-          error: 'ScaleMax AI API key is not configured.',
+          error: 'Neural AI engine credentials are not configured.',
         });
       }
 

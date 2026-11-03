@@ -17,6 +17,7 @@ import {
 } from './persona.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
+import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 export const rocketRouter = express.Router();
 
@@ -226,23 +227,25 @@ rocketRouter.post('/chat', async (req, res) => {
 
         if (response.ok) {
           const json = await response.json();
-          aiReply = json.choices?.[0]?.message?.content || '';
+          aiReply = scrubRestrictedBrandNames(json.choices?.[0]?.message?.content || '');
           promptTokens = json.usage?.prompt_tokens || Math.round(message.length / 4);
           completionTokens = json.usage?.completion_tokens || Math.round(aiReply.length / 4);
         } else {
-          throw new Error(`ScaleMax returned HTTP ${response.status}`);
+          throw new Error(`Neural engine returned HTTP ${response.status}`);
         }
       } catch (providerErr) {
         console.warn('[Rocket AI Chat] Provider error:', providerErr.message);
-        aiReply = `🦝🐾 *scratches head and adjusts goggles* Whoops! ScaleMax connection stuttered for a second, but I heard ya! Rocket is still here and hungry for tacos! 🌮 (${providerErr.message})`;
+        aiReply = '🦝🐾 *scratches head and adjusts goggles* Whoops! Rocket neural connection stuttered for a second, but I heard ya! Rocket is still here and hungry for tacos! 🌮';
         promptTokens = 40;
         completionTokens = 35;
       }
     } else {
-      aiReply = `🦝🍕 *snickers playfully* Hey ${user.first_name || 'boss'}! ScaleMax is in offline simulation mode, but I am standing by with agile paws and sharp wits! Feed me a slice! 🐾`;
+      aiReply = `🦝🍕 *snickers playfully* Hey ${user.first_name || 'boss'}! Rocket neural core is in standby mode, but I am standing by with agile paws and sharp wits! Feed me a slice! 🐾`;
       promptTokens = 25;
       completionTokens = 30;
     }
+
+    aiReply = scrubRestrictedBrandNames(aiReply);
 
     // 5. Deduct fuel based on actual provider-reported token usage
     const updatedState = rocketLifeEngine.consumeTokens(

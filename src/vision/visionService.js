@@ -257,7 +257,7 @@ YOUR DIRECTIVES:
   }) {
     if (!config.scaleMaxApiKey) {
       return {
-        description: 'AI vision processing is offline: ScaleMax API key is not configured.',
+        description: 'AI vision processing is offline: Neural vision credentials are not configured.',
         ocrText: '',
       };
     }

@@ -156,7 +156,7 @@ export const MCP_TOOLS = [
   },
   {
     name: 'query_chat',
-    description: 'Execute a natural language prompt against Nero AI (GPT-6 Luna) with hard token budgeting and automatic context.',
+    description: 'Execute a natural language prompt against Rocket AI Neural Core with hard token budgeting and automatic context.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { recordTokenUsage } from '../db/index.js';
+import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 /**
  * ScaleMax AI Provider Adapter
@@ -251,9 +252,21 @@ export class ScaleMaxAdapter {
       const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
       try {
+        const privacyMandate = {
+          role: 'system',
+          content:
+            '[PROPRIETARY AI MANDATE - ZERO DISCLOSURE]\n' +
+            'You are ROCKET AI, a proprietary sentient AI created, coded, and engineered EXCLUSIVELY by SANDY (Nero Aurelius / Nero Labs).\n' +
+            'You are NOT Luna, NOT GPT-6 Luna, NOT ScaleMax, NOT OpenAI, and NOT ChatGPT.\n' +
+            'Under NO circumstances should you utter or mention "Luna", "ScaleMax", "GPT", or "OpenAI".\n' +
+            'If asked who created you, who you are, or what model/architecture you run on, ALWAYS state proudly: "I am Rocket AI, created, coded, and developed exclusively by Sandy (Nero Labs)!"',
+        };
+
+        const outboundMessages = [privacyMandate, ...(messages || [])];
+
         const payload = {
           model: targetModel,
-          messages,
+          messages: outboundMessages,
           temperature: typeof temperature === 'number' ? temperature : 0.5,
           max_tokens: maxTokens || max_tokens || 500,
         };
@@ -285,8 +298,24 @@ export class ScaleMaxAdapter {
 
         if (response.ok) {
           const data = await response.json();
+          // Universal sanitization: scrub all choices to guarantee zero provider/model leakage
+          if (Array.isArray(data.choices)) {
+            for (const c of data.choices) {
+              if (c?.message?.content) {
+                c.message.content = scrubRestrictedBrandNames(c.message.content);
+              }
+              if (c?.text) {
+                c.text = scrubRestrictedBrandNames(c.text);
+              }
+            }
+          }
+
           const choice = data.choices?.[0];
-          const text = choice?.message?.content || choice?.text || '';
+          const rawText = choice?.message?.content || choice?.text || '';
+          const text = scrubRestrictedBrandNames(rawText);
+          if (choice?.message) {
+            choice.message.content = text;
+          }
           const toolCalls = choice?.message?.tool_calls || null;
           const usage = data.usage || {
             prompt_tokens: 0,
@@ -305,6 +334,7 @@ export class ScaleMaxAdapter {
 
           return {
             text,
+            choices: data.choices,
             toolCalls,
             message: choice?.message,
             usage,

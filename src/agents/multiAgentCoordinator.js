@@ -6,9 +6,9 @@ import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { logAudit } from '../db/index.js';
 
 export const AGENT_ROLES = {
-  CHAT: 'Luna-Chat',
-  SECURITY: 'Luna-Security',
-  MEDIA: 'Luna-Media',
+  CHAT: 'Rocket-Chat',
+  SECURITY: 'Rocket-Security',
+  MEDIA: 'Rocket-Media',
 };
 
 export class MultiAgentCoordinator {
@@ -80,7 +80,7 @@ export class MultiAgentCoordinator {
   }
 
   /**
-   * Execution for Luna-Security
+   * Execution for Rocket-Security
    */
   async _runSecurityAgent(taskPayload, correlationId, depth, trail) {
     const { action, description } = taskPayload;
@@ -106,7 +106,7 @@ export class MultiAgentCoordinator {
   }
 
   /**
-   * Execution for Luna-Media
+   * Execution for Rocket-Media
    */
   async _runMediaAgent(taskPayload, correlationId, depth, trail) {
     const { buffer, mimeType, prompt, chatId } = taskPayload;
@@ -134,7 +134,7 @@ export class MultiAgentCoordinator {
   }
 
   /**
-   * Execution for Luna-Chat
+   * Execution for Rocket-Chat
    */
   async _runChatAgent(taskPayload, correlationId, depth, trail) {
     const { messages, chatId } = taskPayload;

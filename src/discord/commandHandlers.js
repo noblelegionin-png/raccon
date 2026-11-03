@@ -75,6 +75,7 @@ import { rocketLifeEngine } from '../rocket/lifeEngine.js';
 import { isSandy } from '../rocket/rbac.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { buildRocketDirective } from '../rocket/persona.js';
+import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 const BRAND_COLOR = 0xff6b35; // Rocket raccoon fiery orange
 const SUCCESS_COLOR = 0x2ecc71; // Emerald green
@@ -816,9 +817,11 @@ async function handleSlashCommand(interaction) {
             });
             answer = completion.choices?.[0]?.message?.content || answer;
           } catch (aiErr) {
-            answer = `🦝 *puffs tail* Got a hiccup talking to AI brain: ${aiErr.message}`;
+            answer = '🦝🐾 *puffs tail* Neural flux glitch! Hit me with that question one more time! 🍕';
           }
         }
+
+        answer = scrubRestrictedBrandNames(answer);
 
         const embed = new EmbedBuilder()
           .setColor(BRAND_COLOR)

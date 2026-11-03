@@ -27,6 +27,7 @@ import { isSandy } from '../../rocket/rbac.js';
 import { scaleMaxAdapter } from '../../provider/scaleMaxAdapter.js';
 import { isDiscordOwner } from '../commandHandlers.js';
 import { trackIncomingMessage } from '../evidenceArchive.js';
+import { scrubRestrictedBrandNames, validateAndSanitizeResponse } from '../../conversation/responseValidator.js';
 
 // Anti-spam sliding window cache: userId -> Array of timestamps
 const messageRateMap = new Map();
@@ -360,6 +361,11 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     }
   }
 
+  // Universal sanitization & zero provider leakage guarantee
+  const scrubbed = scrubRestrictedBrandNames(response);
+  const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner });
+  response = validated.sanitizedText || scrubbed;
+
   try {
     if (response.length > 2000) {
       // Split into Discord-friendly chunks
@@ -417,9 +423,14 @@ async function handleDirectMessage(message) {
       });
       response = completion.choices?.[0]?.message?.content || response;
     } catch (err) {
-      response = `🦝 *scratches head* AI glitch: ${err.message}`;
+      response = '🦝 *scratches head* Neural core glitch! Ask me again in a sec, Boss! 🍕';
     }
   }
+
+  // Universal sanitization
+  const scrubbedDm = scrubRestrictedBrandNames(response);
+  const validatedDm = validateAndSanitizeResponse(scrubbedDm, content, { isOwner: true });
+  response = validatedDm.sanitizedText || scrubbedDm;
 
   await message.reply(response.slice(0, 2000)).catch(() => {});
 }

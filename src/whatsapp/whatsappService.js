@@ -3149,8 +3149,8 @@ class WhatsAppService {
           `• *Process Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
           `• *RAM RSS:* ${Math.round(memoryUsage.rss / 1024 / 1024)} MB\n` +
           `• *RAM Heap Used:* ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB\n` +
-          `• *MasterBot Engine:* \`gpt-6-luna\` (High Reasoning / Coder & Manager)\n` +
-          `• *Public Talk Engine:* \`gpt-6-luna\` (Fastest / Low Latency)\n` +
+          `• *MasterBot Engine:* \`Rocket Neural Core (v5.0)\` (High Reasoning / Coder & Manager)\n` +
+          `• *Public Talk Engine:* \`Rocket Neural Core (v5.0)\` (Fastest / Low Latency)\n` +
           `• *Total Processed Messages:* ${this.messageCount}\n` +
           `• *Active Socket Status:* 🟢 ${this.status.toUpperCase()}\n` +
           `• *OS Platform:* ${os.platform()} (${os.arch()})\n` +

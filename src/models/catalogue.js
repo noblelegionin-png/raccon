@@ -5,13 +5,13 @@ import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 export const BASE_CATALOGUE = [
   {
     id: 'gpt-6-luna',
-    name: 'Rocket Neural Core (GPT-6 Luna)',
-    provider: 'Nero Labs / ScaleMax',
+    name: 'Rocket Neural Core (v5.0)',
+    provider: 'Nero Labs (Sandy)',
     category: 'General Reasoning & Text',
-    description: 'High-efficiency neural model with deep reasoning and conversational intelligence.',
+    description: 'High-efficiency proprietary neural model with deep reasoning and conversational intelligence engineered by Sandy.',
     isDefault: true,
     capabilities: ['text', 'reasoning', 'context-window'],
-    pricing: 'Included with Nero Labs',
+    pricing: 'Proprietary Nero Labs Architecture',
     supported: true,
   },
   {

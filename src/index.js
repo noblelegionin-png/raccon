@@ -1,6 +1,7 @@
 import { config, validateConfig } from './config.js';
 import { initDatabase, getDb } from './db/index.js';
 import { startRocketBot, stopRocketBot } from './rocketBot/bot.js';
+import { startDiscordBot, stopDiscordBot } from './discord/discordBot.js';
 import { createWebServer } from './web/server.js';
 import { whatsAppService } from './whatsapp/whatsappService.js';
 import { applyLogNoiseFilter } from './utils/noiseFilter.js';
@@ -53,10 +54,23 @@ async function main() {
     }
   }
 
-  // 6. Graceful Shutdown
+  // 6. Start Rocket Discord Bot
+  if (config.discordEnabled) {
+    if (config.discordBotToken) {
+      console.log('[RocketBot] 🎮 Initializing Rocket Discord bot...');
+      startDiscordBot().catch((err) => {
+        console.warn('[RocketBot] Discord startup warning:', err.message);
+      });
+    } else {
+      console.log('[RocketBot] ⏳ DISCORD_BOT_TOKEN is waiting to be configured.');
+    }
+  }
+
+  // 7. Graceful Shutdown
   const shutdown = async (signal) => {
     console.log(`\n[System] Received ${signal}. Shutting down gracefully...`);
     await stopRocketBot();
+    await stopDiscordBot();
     try {
       if (whatsAppService.sock) {
         whatsAppService.sock.end();

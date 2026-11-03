@@ -43,6 +43,12 @@ export const config = {
   whatsAppMode: cleanEnv(process.env.WHATSAPP_MODE, 'all'), // 'all' or 'owner_only'
   whatsAppNotifyTelegram: cleanEnv(process.env.WHATSAPP_NOTIFY_TELEGRAM, 'false') === 'true',
 
+  // 🎮 Discord Bot Configuration (R0CK3T)
+  discordEnabled: cleanEnv(process.env.DISCORD_ENABLED, 'true') === 'true',
+  discordBotToken: cleanEnv(process.env.DISCORD_BOT_TOKEN),
+  discordClientId: cleanEnv(process.env.DISCORD_CLIENT_ID, '1567226191864402003'),
+  discordOwnerId: cleanEnv(process.env.DISCORD_OWNER_ID),
+
   // Server
   port: parseInt(cleanEnv(process.env.PORT, '3001'), 10),
   nodeEnv: cleanEnv(process.env.NODE_ENV, 'development'),
@@ -63,6 +69,9 @@ export function validateConfig() {
   const issues = [];
   if (config.rocketTelegramEnabled && !config.rocketTelegramBotToken) {
     issues.push('ROCKET_TELEGRAM_BOT_TOKEN is not set. Rocket bot will remain offline.');
+  }
+  if (config.discordEnabled && !config.discordBotToken) {
+    issues.push('DISCORD_BOT_TOKEN is not set. Rocket Discord bot will remain offline.');
   }
   if (!config.scaleMaxApiKey) {
     issues.push('SCALEMAX_API_KEY is not set. AI provider calls will report disconnected status.');

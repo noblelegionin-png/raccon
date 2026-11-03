@@ -180,6 +180,64 @@ export function createWebServer() {
     res.sendFile(path.join(publicDir, 'rock3t', 'index.html'));
   });
 
+  // 🎮 Authenticated Discord User Dashboard Gateway
+  app.get('/dashboard', (req, res) => {
+    const token = req.query.token;
+    if (!token) {
+      return res.status(401).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Rocket AI — Unauthorized</title><style>body{background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}div{text-align:center;padding:2rem;background:#1a1a1a;border-radius:12px;border:1px solid #333;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:400px;}</style></head>
+        <body>
+          <div>
+            <h2>🦝 Missing Session Token</h2>
+            <p>Please open Discord, go to <b>#control-panel</b>, and click <b>[ 🛠️ Open My Control Panel ]</b> to generate your private personal link.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    import('../discord/discordDb.js').then(({ getUserSession }) => {
+      const session = getUserSession(token);
+      if (!session) {
+        return res.status(401).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Rocket AI — Session Expired</title><style>body{background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}div{text-align:center;padding:2rem;background:#1a1a1a;border-radius:12px;border:1px solid #333;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:400px;}</style></head>
+          <body>
+            <div>
+              <h2>🦝 Invalid or Expired Dashboard Link</h2>
+              <p>Your session has expired. Return to Discord <b>#control-panel</b> and click <b>[ 🛠️ Open My Control Panel ]</b> for a fresh link.</p>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+
+      if (session.role === 'owner') {
+        return res.sendFile(path.join(publicDir, 'owner.html'));
+      }
+
+      return res.sendFile(path.join(publicDir, 'rock3t', 'index.html'));
+    }).catch((err) => {
+      res.status(500).send(`Server Error: ${err.message}`);
+    });
+  });
+
+  // API to validate a Discord session token
+  app.get('/api/discord/session/validate', (req, res) => {
+    const token = req.query.token || req.headers['x-discord-session-token'];
+    if (!token) return res.status(400).json({ ok: false, error: 'No token provided' });
+    import('../discord/discordDb.js').then(({ getUserSession }) => {
+      const session = getUserSession(token);
+      if (!session) return res.status(401).json({ ok: false, error: 'Invalid or expired session' });
+      res.json({ ok: true, session: { userId: session.user_id, username: session.username, role: session.role, guildId: session.guild_id } });
+    }).catch((err) => {
+      res.status(500).json({ ok: false, error: err.message });
+    });
+  });
+
   // Health probe
   app.get('/healthz', (req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() });

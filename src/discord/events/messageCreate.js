@@ -224,36 +224,50 @@ export async function handleMessageCreate(message) {
   }
 
   // -------------------------------------------------------------------------
-  // 3. Channel-Aware Conversational AI with Rocket Persona & Registry
+  // 3. Channel-Aware Conversational AI (Strict Channels, 2 Modes & Mute)
   // -------------------------------------------------------------------------
+
+  // 3.0 Mute Check: If bot is muted, remain completely silent!
+  if (settings.is_muted) {
+    return;
+  }
+
+  // 3.1 Strict Permitted Channels: Rocket only talks in #help and #chat!
+  const channelNameClean = channel.name.toLowerCase();
+  const isPermittedChannel = channelNameClean === 'chat' ||
+                             channelNameClean === 'help' ||
+                             (settings.chat_channel_id && settings.chat_channel_id === channel.id);
+
   const isDirectMention = message.mentions.has(message.client.user.id);
   const isReplyToRocket = message.reference && message.reference.messageId
     ? (await channel.messages.fetch(message.reference.messageId).catch(() => null))?.author.id === message.client.user.id
     : false;
-  const isRocketCalledByName = /\b(rocket|rocky|rakoon|raccoon)\b/i.test(content);
-  const isChatChannel = /^(chat|general|general-ai|chit-chat|lounge|bot|ai)/i.test(channel.name);
 
-  // Dedicated Intelligence Center channels (Research, Study, Study-Mode, Media, Downloading)
-  const isSpecialistChannel = channelConfig && ['research', 'study', 'study_mode', 'media', 'downloading'].includes(channelConfig.ai_behavior_profile);
+  // In all other channels (like #rules, #welcome, #general, #introductions, etc.):
+  // Rocket remains 100% silent UNLESS directly @mentioned or replied to by Owner Sandy!
+  if (!isPermittedChannel) {
+    if (isOwner && (isDirectMention || isReplyToRocket)) {
+      await handleRocketChat(message, { isOwner, isConstantTalk: false, channelConfig });
+    }
+    return;
+  }
 
-  // ALWAYS ACTIVE: Constant talk in #chat, #general, bot channels, and specialist channels!
-  const isConstantTalk = settings.chat_mode === 'constant' || isChatChannel || (settings.chat_channel_id && settings.chat_channel_id === channel.id);
+  // 3.2 Inside Permitted Channels (#chat, #help):
+  // 2 Modes: 'mention_only' (default) vs 'constant'
+  const activeChatMode = settings.chat_mode || 'mention_only';
 
   let shouldRespond = false;
   if (isDirectMention || isReplyToRocket) {
     shouldRespond = true;
   } else if (!content.startsWith('!') && !content.startsWith('/')) {
-    if (settings.chat_mode !== 'dimension_only') {
-      if (isChatChannel || isConstantTalk || isRocketCalledByName) {
-        shouldRespond = true;
-      } else if (isSpecialistChannel && content.length > 3) {
-        shouldRespond = true;
-      }
+    if (activeChatMode === 'constant') {
+      shouldRespond = true;
     }
+    // If activeChatMode === 'mention_only', shouldRespond remains FALSE!
   }
 
   if (shouldRespond) {
-    await handleRocketChat(message, { isOwner, isConstantTalk, channelConfig });
+    await handleRocketChat(message, { isOwner, isConstantTalk: activeChatMode === 'constant', channelConfig });
   }
 }
 
@@ -262,13 +276,17 @@ export async function handleMessageCreate(message) {
  */
 async function handleRocketChat(message, { isOwner, isConstantTalk = false, channelConfig = null }) {
   const { guild, channel, author, member, content } = message;
+  const senderDisplayName = member?.displayName || author.username;
 
   // Clean prompt text
   let cleanedText = content.replace(/<@!?\d+>/g, '').trim();
   cleanedText = cleanedText.replace(/^(rocket|rocky|hey rocket|yo rocket)[,\s:]*/i, '').trim();
 
   if (!cleanedText && !isConstantTalk) {
-    return message.reply('🦝 *peeks out from behind a pizza box with bright eyes* Haan Boss / Friend! You rang? What do you need? 🍕🐾');
+    const greeting = isOwner
+      ? '🦝 *peeks out from behind a pizza box* Haan Boss Sandy! You rang? What do you need? 🍕🐾'
+      : `🦝 *peeks out from behind a pizza box* Hey ${senderDisplayName}! You rang? What do you need? 🍕🐾`;
+    return message.reply(greeting);
   }
 
   try {
@@ -278,7 +296,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   // Fetch recent conversation history so Rocket understands context
   let recentChatStream = '';
   try {
-    const history = await channel.messages.fetch({ limit: 6 });
+    const history = await channel.messages.fetch({ limit: 8 });
     const reversed = Array.from(history.values()).reverse();
     recentChatStream = reversed
       .filter((m) => m.id !== message.id)
@@ -292,13 +310,15 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   const lifeState = rocketLifeEngine.getState('discord');
 
   const directive = buildRocketDirective({
-    senderName: member?.displayName || author.username,
+    senderName: senderDisplayName,
     isSandy: isOwner,
     userRole: userTier,
+    userProfile: profile,
     lifeState,
     isGroup: true,
     groupTitle: guild.name,
     groupId: guild.id,
+    channelName: channel.name,
     recentChat: recentChatStream || null,
   });
 
@@ -313,13 +333,13 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
 
   if (channelProfileKey === 'research') {
     routingCategory = 'research';
-    maxOutputTokens = 1500; // Deep analysis allowance
+    maxOutputTokens = 1500;
     reasoningEffort = 'high';
   } else if (channelProfileKey === 'media') {
     routingCategory = 'media';
     maxOutputTokens = 600;
   } else if (channelProfileKey === 'study') {
-    maxOutputTokens = 450; // Optimized for fast response & low token usage
+    maxOutputTokens = 450;
   } else if (channelProfileKey === 'study_mode') {
     maxOutputTokens = 500;
   }
@@ -331,9 +351,10 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     `${directive}\n\n` +
     `CHANNEL CONTEXT & DIRECTIVES:\n` +
     `${channelPrompt}\n\n` +
-    `MEMBER STANDING:\n` +
-    `- Sender: "${member?.displayName || author.username}"\n` +
-    `- Designated Tier: ${userTier.toUpperCase()} (Note: family gets warmth, friends get banter, team/employees get high-productivity coordination, Sandy/Nero is supreme Boss!)\n\n` +
+    `MEMBER STANDING & CRITICAL ADDRESSING RULES:\n` +
+    `- Sender: "${senderDisplayName}"\n` +
+    `- Designated Tier: ${userTier.toUpperCase()}\n` +
+    `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with full allegiance.' : `This user is ${senderDisplayName}. NEVER CALL THEM BOSS! Address them as "${senderDisplayName}".`}\n\n` +
     `${serverContext}\n` +
     `DISCORD INSTRUCTIONS:\n` +
     `- You are chatting on Discord in #${channel.name}!\n` +

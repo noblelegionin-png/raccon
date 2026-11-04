@@ -29,8 +29,9 @@ export function initDiscordDb() {
       anti_spam INTEGER DEFAULT 1,
       anti_invite INTEGER DEFAULT 1,
       anti_mass_mention INTEGER DEFAULT 1,
-      chat_mode TEXT DEFAULT 'active',
+      chat_mode TEXT DEFAULT 'mention_only',
       chat_channel_id TEXT,
+      is_muted INTEGER DEFAULT 0,
       server_rules TEXT,
       server_overview TEXT,
       created_at TEXT NOT NULL,
@@ -288,6 +289,10 @@ export function initDiscordDb() {
   } catch {}
 
   try {
+    db.exec('ALTER TABLE discord_guild_settings ADD COLUMN is_muted INTEGER DEFAULT 0;');
+  } catch {}
+
+  try {
     db.exec('ALTER TABLE discord_member_activity ADD COLUMN voice_notes_count INTEGER DEFAULT 0;');
   } catch {}
 
@@ -346,6 +351,7 @@ export function updateGuildSettings(guildId, updates = {}) {
     anti_mass_mention: updates.anti_mass_mention !== undefined ? (updates.anti_mass_mention ? 1 : 0) : current.anti_mass_mention,
     chat_mode: updates.chat_mode ?? current.chat_mode,
     chat_channel_id: updates.chat_channel_id !== undefined ? updates.chat_channel_id : current.chat_channel_id,
+    is_muted: updates.is_muted !== undefined ? (updates.is_muted ? 1 : 0) : (current.is_muted ? 1 : 0),
     server_rules: updates.server_rules !== undefined ? updates.server_rules : current.server_rules,
     server_overview: updates.server_overview !== undefined ? updates.server_overview : current.server_overview,
   };
@@ -362,6 +368,7 @@ export function updateGuildSettings(guildId, updates = {}) {
       anti_mass_mention = ?,
       chat_mode = ?,
       chat_channel_id = ?,
+      is_muted = ?,
       server_rules = ?,
       server_overview = ?,
       updated_at = ?
@@ -377,6 +384,7 @@ export function updateGuildSettings(guildId, updates = {}) {
     merged.anti_mass_mention,
     merged.chat_mode,
     merged.chat_channel_id,
+    merged.is_muted,
     merged.server_rules,
     merged.server_overview,
     now,

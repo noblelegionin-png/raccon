@@ -349,26 +349,28 @@ export async function executeServerSetup(interaction) {
       rules_channel_id: rulesCh ? rulesCh.id : (announcementsCh ? announcementsCh.id : undefined),
       mod_log_channel_id: auditLogsCh ? auditLogsCh.id : undefined,
       chat_channel_id: chatCh ? chatCh.id : undefined,
+      chat_mode: 'mention_only',
+      is_muted: 0,
     });
 
     const completionEmbed = new EmbedBuilder()
       .setColor(SUCCESS_COLOR)
-      .setTitle('🚀 ROCKET AI — PRIVATE SERVER INFRASTRUCTURE DEPLOYED')
+      .setTitle('🚀 ROCKET AI — SERVER INFRASTRUCTURE DEPLOYED & CLEANED')
       .setDescription(
-        `Welcome Boss **Sandy**! The complete 12-category private server infrastructure is online.\n\n` +
-        `**Infrastructure Summary:**\n` +
-        `• **Roles:** ${summary.rolesCreated} created, ${summary.rolesReused} reused (@Verified, @Brother, @Sandy's Girlfriend, @Friend, @Staff, etc.)\n` +
-        `• **Categories:** 12 Categories configured (Start Here, Community, Verification, Control Center, Applications, Information, Intelligence, Support, System, Owner Private, Security & Support, Live & Voice)\n` +
-        `• **Channels:** ${summary.channelsCreated} created, ${summary.channelsReused} verified\n` +
+        `Welcome Boss **Sandy**! The complete server infrastructure has been purged of old clutter and cleanly redeployed.\n\n` +
+        `**Infrastructure & Clean Setup Summary:**\n` +
+        `• **Server Cleaned:** Old messages and duplicate cards purged across all channels 🧹✨\n` +
+        `• **Chat Mode Active:** ⚪ **Mention-Only Mode** (Rocket ONLY talks when @mentioned or asked in commands!)\n` +
+        `• **Mute Control:** 🔊 **Unmuted** (Mute anytime with \`/mute\`, restore with \`/unmute\`)\n` +
+        `• **Talking Channels:** Strictly restricted to <#${chatCh?.id || 'chat'}> & <#${guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}> 💬\n` +
+        `• **Roles Configured:** @Verified, @Brother, @Sandy's Girlfriend, @Friend, @Staff, etc. 🎭\n` +
         `• **Voice Rooms:** General Voice, Gaming Room 1 & 2, Watch Together, Rocket Voice, Private Voice 🔊\n` +
-        `• **Interactive Cards:** ${summary.interfacesDeployed} interface stations deployed\n` +
-        `• **Owner & Staff Security:** Private permission overwrites active 🔒\n` +
-        `• **Content Safety:** Zero user messages deleted; fully idempotent!\n\n` +
-        `**Key Navigation:**\n` +
-        `👉 <#${guild.channels.cache.find((c) => c.name === 'verify')?.id}> — Verification Gateway\n` +
-        `👉 <#${guild.channels.cache.find((c) => c.name === 'help')?.id}> — Support Ticket Station\n` +
-        `👉 <#${guild.channels.cache.find((c) => c.name === 'live-notifications')?.id}> — Live Voice & Stream Alerts\n` +
-        `👉 <#${guild.channels.cache.find((c) => c.name === 'control-panel-owner')?.id}> — Owner Command Deck`
+        `• **Minecraft Gaming Bridge:** Native Bedrock link ready via \`/connect localhost:19135/ws/minecraft\` 🎮\n\n` +
+        `**Key Channel Hubs:**\n` +
+        `👉 <#${rulesCh?.id || 'rules'}> — Server Guidelines & Guidelines 📜\n` +
+        `👉 <#${guild.channels.cache.find((c) => c.name === 'verify')?.id}> — Member Verification 🛡️\n` +
+        `👉 <#${chatCh?.id || 'chat'}> — Community Chat 💬\n` +
+        `👉 <#${guild.channels.cache.find((c) => c.name === 'help')?.id}> — Support Ticket Station 🎫`
       )
       .setFooter({ text: 'Rocket AI • Built exclusively for Sandy & Friends 👑' })
       .setTimestamp();
@@ -383,15 +385,33 @@ export async function executeServerSetup(interaction) {
 }
 
 /**
+ * Helper to clean all old messages from a channel before posting fresh interface
+ */
+async function cleanChannelCompletely(channel) {
+  try {
+    let fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+    if (fetched && fetched.size > 0) {
+      try {
+        await channel.bulkDelete(fetched, true);
+      } catch {}
+      // Delete any older messages individually
+      const remaining = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+      if (remaining && remaining.size > 0) {
+        for (const msg of remaining.values()) {
+          await msg.delete().catch(() => null);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[Setup] Note cleaning #${channel.name}:`, err.message);
+  }
+}
+
+/**
  * Helper to deploy or update interactive cards and buttons in designated channels
  */
 async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, ownerId) {
   try {
-    const recentMessages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-    const existingBotMsg = recentMessages?.find(
-      (m) => m.author.id === channel.client.user.id && m.embeds.length > 0 && m.components.length > 0
-    );
-
     let embed = null;
     let components = [];
 
@@ -401,13 +421,13 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
           .setColor(BRAND_COLOR)
           .setTitle('👋 WELCOME TO SANDY & FRIENDS PRIVATE SERVER')
           .setDescription(
-            `Welcome to the private sanctuary of **Sandy** and invited friends!\n\n` +
+            `Welcome to the private sanctuary of **Sandy** and invited friends! 🍕✨\n\n` +
             `This server is a private space for close friends, gaming squads, AI development, and collaborative projects.\n\n` +
             `**Getting Started:**\n` +
-            `1. Review guidelines in <#${channel.guild.channels.cache.find((c) => c.name === 'rules')?.id || 'rules'}>\n` +
-            `2. Complete verification in <#${channel.guild.channels.cache.find((c) => c.name === 'verify')?.id || 'verify'}>\n` +
-            `3. Pick your interest roles in <#${channel.guild.channels.cache.find((c) => c.name === 'choose-roles')?.id || 'choose-roles'}>\n` +
-            `4. Say hello in <#${channel.guild.channels.cache.find((c) => c.name === 'introductions')?.id || 'introductions'}>`
+            `1. 📜 Review guidelines in <#${channel.guild.channels.cache.find((c) => c.name === 'rules')?.id || 'rules'}>\n` +
+            `2. 🛡️ Complete verification in <#${channel.guild.channels.cache.find((c) => c.name === 'verify')?.id || 'verify'}>\n` +
+            `3. 🎭 Pick your interest roles in <#${channel.guild.channels.cache.find((c) => c.name === 'choose-roles')?.id || 'choose-roles'}>\n` +
+            `4. 💬 Say hello in <#${channel.guild.channels.cache.find((c) => c.name === 'chat')?.id || 'chat'}>`
           )
           .setFooter({ text: 'Private Server • Guarded by Rocket AI 🐾' });
         break;
@@ -418,13 +438,15 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
           .setColor(BRAND_COLOR)
           .setTitle('📜 PRIVATE SERVER RULES & GUIDELINES')
           .setDescription(
-            `**1. Respect & Loyalty:** Treat friends with kindness. Harassment, toxicity, and unauthorized leaks will result in immediate removal.\n\n` +
-            `**2. Sandy Defense:** Hostility or toxicity toward Sandy will trigger an instant security lockdown.\n\n` +
-            `**3. Anti-Spam:** Repeated duplicate message bursts (7 in 30s) trigger an automated 30-minute timeout. You can apologize via DM to unlock.\n\n` +
-            `**4. Privacy & Confidentiality:** What happens in the server stays in the server. No unauthorized screenshots or sharing without consent.\n\n` +
-            `**5. Ticket Support:** Need help or want to report an issue? Use <#${channel.guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}>.`
+            `Welcome to our private community! Please follow these guidelines to keep the server safe, clean, and fun for everyone:\n\n` +
+            `🤝 **1. Respect & Loyalty:** Treat friends with kindness and respect. Harassment, toxicity, hate speech, or bad vibes will result in immediate removal.\n\n` +
+            `🛡️ **2. Boss Protection:** Hostility or toxicity toward Sandy (Nero) will trigger an instant security lockdown and defense protocol.\n\n` +
+            `🛑 **3. Anti-Spam Policy:** Rapid message flooding (7 duplicate messages in 30s) triggers an automated 30-minute timeout. Keep chats clean and readable!\n\n` +
+            `🔒 **4. Absolute Privacy:** Everything discussed in this server stays in this server. No unauthorized screenshots or leaks without consent.\n\n` +
+            `🎫 **5. Ticket & Support:** Need help, have questions, or want to report an issue? Use <#${channel.guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}>.\n\n` +
+            `🦝 **6. Rocket AI Manners:** Rocket operates in ⚪ **Mention-Only Mode** by default. It only talks in <#${channel.guild.channels.cache.find((c) => c.name === 'chat')?.id || 'chat'}> and <#${channel.guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}> when you explicitly tag <@${channel.client.user.id}>!`
           )
-          .setFooter({ text: 'Monitored by Rocket Security Guard 🛡️' });
+          .setFooter({ text: 'Monitored 24/7 by Rocket Security Guard 🛡️🐾' });
         break;
       }
 
@@ -856,6 +878,23 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
         break;
       }
 
+      case 'chat': {
+        embed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('💬 COMMUNITY CHAT & ROCKET AI')
+          .setDescription(
+            `Welcome to **#chat**! This is the main discussion lounge for Sandy and friends. 🍕✨\n\n` +
+            `🦝 **Rocket AI Chat Modes:**\n` +
+            `• ⚪ **Mention-Only Mode (ACTIVE):** Rocket will **ONLY** speak when directly tagged (<@${channel.client.user.id}>) or replied to! It will never interrupt normal human conversations.\n` +
+            `• 🔥 **Constant Chat Mode:** Want Rocket to actively banter on every message? Sandy or admins can run \`/chatmode mode:constant\`!\n` +
+            `• 🔇 **Mute Control:** Sandy or staff can mute Rocket anytime with \`/mute\`.\n` +
+            `• 🎮 **Minecraft Bedrock Integration:** In Minecraft, connect live using \`/connect localhost:19135/ws/minecraft\` to talk and receive in-game items!\n\n` +
+            `*Enjoy the server, keep it friendly, and have fun!* 🐾🚀`
+          )
+          .setFooter({ text: 'Rocket AI • Tag @Rocket to chat 👑' });
+        break;
+      }
+
       case 'rocket-status': {
         embed = new EmbedBuilder()
           .setColor(BRAND_COLOR)
@@ -873,11 +912,9 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
 
     if (!embed) return;
 
-    if (existingBotMsg) {
-      await existingBotMsg.edit({ embeds: [embed], components }).catch(() => null);
-    } else {
-      await channel.send({ embeds: [embed], components }).catch(() => null);
-    }
+    // Purge all old messages and clutter so the channel is completely clean
+    await cleanChannelCompletely(channel);
+    await channel.send({ embeds: [embed], components }).catch(() => null);
   } catch (cardErr) {
     console.warn(`[Setup] Note deploying card to #${channel.name}:`, cardErr.message);
   }

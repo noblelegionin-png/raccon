@@ -951,7 +951,7 @@ async function handleSlashCommand(interaction) {
         const hasAdminScope = checkUserHasScope(guild.id, user.id, 'admin');
         if (!isOwner && !hasAdminScope) {
           return interaction.reply({
-            content: '⛔ **Access Denied:** Only Nero or authorized administrators can configure chat mode.',
+            content: '⛔ **Access Denied:** Only Sandy or authorized administrators can configure chat mode.',
             ephemeral: true,
           });
         }
@@ -959,11 +959,60 @@ async function handleSlashCommand(interaction) {
         const mode = interaction.options.getString('mode');
         updateGuildSettings(guild.id, { chat_mode: mode });
         const descriptions = {
-          constant: '🔥 **Constant Talk Mode:** Rocket participates on **EVERY MESSAGE** in chat!',
-          active: '🟢 **Active Banter Mode:** Rocket speaks when called by name, mentioned, or replied to.',
-          mention_only: '⚪ **Mention-Only Mode:** Rocket speaks only when explicitly @mentioned.',
+          mention_only: '⚪ **Mention-Only Mode Active:** Rocket will ONLY speak when explicitly @mentioned or asked via commands! (Clean & Quiet in #chat & #help)',
+          constant: '🔥 **Constant Chat Mode Active:** Rocket freely participates on messages in #chat and #help!',
         };
-        return interaction.reply({ embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setTitle('💬 Chat Mode Updated').setDescription(descriptions[mode] || mode)] });
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(SUCCESS_COLOR)
+              .setTitle('💬 Chat Mode Updated')
+              .setDescription(descriptions[mode] || `Chat mode set to **${mode}**`)
+              .setFooter({ text: 'Rocket AI • Strictly restricted to #chat & #help 🐾' })
+          ],
+        });
+      }
+
+      case 'mute': {
+        const isOwner = isDiscordOwner(user, guild);
+        const hasAdminScope = checkUserHasScope(guild.id, user.id, 'admin');
+        if (!isOwner && !hasAdminScope) {
+          return interaction.reply({
+            content: '⛔ **Access Denied:** Only Sandy or authorized administrators can mute Rocket.',
+            ephemeral: true,
+          });
+        }
+
+        updateGuildSettings(guild.id, { is_muted: 1 });
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xe74c3c)
+              .setTitle('🔇 Rocket AI Muted')
+              .setDescription('Rocket is now **MUTED** across all server channels! I will stay completely silent in chat until Sandy or staff runs `/unmute`. 🐾🤐')
+          ],
+        });
+      }
+
+      case 'unmute': {
+        const isOwner = isDiscordOwner(user, guild);
+        const hasAdminScope = checkUserHasScope(guild.id, user.id, 'admin');
+        if (!isOwner && !hasAdminScope) {
+          return interaction.reply({
+            content: '⛔ **Access Denied:** Only Sandy or authorized administrators can unmute Rocket.',
+            ephemeral: true,
+          });
+        }
+
+        updateGuildSettings(guild.id, { is_muted: 0 });
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(SUCCESS_COLOR)
+              .setTitle('🔊 Rocket AI Unmuted')
+              .setDescription('Rocket is now **UNMUTED**! Back on duty and ready to converse according to the configured `/chatmode`. 🦝🍕')
+          ],
+        });
       }
 
       default:

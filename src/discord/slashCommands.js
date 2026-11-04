@@ -434,7 +434,7 @@ export const slashCommands = [
 
   new SlashCommandBuilder()
     .setName('chatmode')
-    .setDescription('💬 Configure how Rocket talks in chat (Constant Talk vs Active Banter vs Mention Only).')
+    .setDescription('💬 Configure Rocket\'s chat mode (Mention-Only vs Constant Chat).')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
       opt
@@ -442,11 +442,20 @@ export const slashCommands = [
         .setDescription('Select chat behavior')
         .setRequired(true)
         .addChoices(
-          { name: '🔥 Constant Talk Mode (Rocket converses on EVERY message like a real member!)', value: 'constant' },
-          { name: '🟢 Active Banter (Speaks when called by name, mentioned, or replied to)', value: 'active' },
-          { name: '⚪ Mention Only (Only speaks when explicitly @mentioned or replied to)', value: 'mention_only' }
+          { name: '⚪ Mention Only (Only speaks when @mentioned or asked via commands — Clean & Quiet)', value: 'mention_only' },
+          { name: '🔥 Constant Chat (Rocket talks freely on messages in #chat and #help)', value: 'constant' }
         )
     ),
+
+  new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('🔇 Mute Rocket AI (Rocket stops talking in chat completely until unmuted).')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+
+  new SlashCommandBuilder()
+    .setName('unmute')
+    .setDescription('🔊 Unmute Rocket AI (Rocket resumes talking according to current chatmode).')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   new SlashCommandBuilder()
     .setName('setchatchannel')

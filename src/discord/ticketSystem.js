@@ -39,25 +39,40 @@ const OWNER_COLOR = 0x9b59b6;
 const INFO_COLOR = 0x3498db;
 
 /**
- * Handle "Open Support Ticket" button click -> shows modal
+ * Handle "Open Support / Work Order Ticket" button click -> shows modal
  */
-export async function handleOpenTicketButton(interaction) {
+export async function handleOpenTicketButton(interaction, categoryKey = 'general') {
+  let section = categoryKey;
+  if (interaction.customId && interaction.customId.startsWith('btn_open_ticket_')) {
+    section = interaction.customId.replace('btn_open_ticket_', '');
+  } else if (interaction.customId === 'btn_open_create_ticket') {
+    section = 'general';
+  }
+
+  const sectionTitles = {
+    coding: '💻 Coding Work Order',
+    web: '🌐 Web Dev Work Order',
+    gaming: '🎮 Gaming Work Order',
+    ai: '🤖 AI Automation Order',
+    general: '🎫 Support Ticket',
+  };
+
   const modal = new ModalBuilder()
-    .setCustomId('modal_create_ticket')
-    .setTitle('🎫 Open Private Support Ticket');
+    .setCustomId(`modal_create_ticket_${section}`)
+    .setTitle((sectionTitles[section] || '🎫 Open Private Ticket').slice(0, 45));
 
   const subjectInput = new TextInputBuilder()
     .setCustomId('input_ticket_subject')
-    .setLabel('Subject / Reason for Ticket:')
-    .setPlaceholder('e.g. Account issue, question for Sandy, bug report')
+    .setLabel('Project Summary / What do you need?')
+    .setPlaceholder('e.g. Discord bot, Portfolio web app, Roblox script')
     .setStyle(TextInputStyle.Short)
     .setMaxLength(100)
     .setRequired(true);
 
   const detailsInput = new TextInputBuilder()
     .setCustomId('input_ticket_details')
-    .setLabel('Explain your issue or request in detail:')
-    .setPlaceholder('Provide any relevant details, usernames, or questions...')
+    .setLabel('Project details / timeline / budget:')
+    .setPlaceholder('Explain your requirements, features needed, or budget...')
     .setStyle(TextInputStyle.Paragraph)
     .setMaxLength(1000)
     .setRequired(true);
@@ -74,7 +89,11 @@ export async function handleOpenTicketButton(interaction) {
  * Handle Modal Submission -> Provisions Private Ticket Channel
  */
 export async function handleTicketModalSubmit(interaction) {
-  const { guild, user, fields } = interaction;
+  const { guild, user, fields, customId } = interaction;
+  const section = customId.startsWith('modal_create_ticket_')
+    ? customId.replace('modal_create_ticket_', '')
+    : 'general';
+
   const subject = fields.getTextInputValue('input_ticket_subject');
   const details = fields.getTextInputValue('input_ticket_details');
 
@@ -84,18 +103,36 @@ export async function handleTicketModalSubmit(interaction) {
     // 1. Create ticket entry in SQLite to obtain ticket ID
     const ticket = createTicket(guild.id, user.id, {
       username: user.tag || user.username,
-      subject,
+      subject: `[${section.toUpperCase()}] ${subject}`,
     });
 
     const ticketNumber = String(ticket.id).padStart(4, '0');
-    const channelName = `ticket-${ticketNumber}-${user.username.toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+    const safeUsername = user.username.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 15) || 'client';
+    const channelName = `ticket-${section}-${safeUsername}`;
 
-    // 2. Locate or create parent category (SECURITY & SUPPORT or SUPPORT)
+    // 2. Locate or create parent category (ACTIVE TICKETS or SUPPORT & AUDIT)
     let parentCategory = guild.channels.cache.find(
-      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'security & support'
+      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('ticket')
     ) || guild.channels.cache.find(
-      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'support'
+      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'support & audit'
     );
+
+    if (!parentCategory) {
+      parentCategory = await guild.channels.create({
+        name: '📂 ACTIVE TICKETS',
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel],
+          },
+          {
+            id: guild.client.user.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels],
+          },
+        ],
+      }).catch(() => null);
+    }
 
     // 3. Configure STRICT PRIVACY permission overwrites
     // ZERO OTHER MEMBERS CAN VIEW THIS CHANNEL!
@@ -120,7 +157,7 @@ export async function handleTicketModalSubmit(interaction) {
         ],
       },
       {
-        id: user.id, // The reporting member
+        id: user.id, // The client
         allow: [
           PermissionFlagsBits.ViewChannel,
           PermissionFlagsBits.SendMessages,
@@ -132,8 +169,8 @@ export async function handleTicketModalSubmit(interaction) {
     ];
 
     // Allow Sandy (Owner)
-    const ownerId = config.discordOwnerId || guild.ownerId;
-    if (ownerId && ownerId !== user.id) {
+    const ownerId = config.discordOwnerId || '1477589102110183477';
+    if (ownerId) {
       permissionOverwrites.push({
         id: ownerId,
         allow: [
@@ -141,6 +178,7 @@ export async function handleTicketModalSubmit(interaction) {
           PermissionFlagsBits.SendMessages,
           PermissionFlagsBits.EmbedLinks,
           PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.ManageChannels,
           PermissionFlagsBits.ReadMessageHistory,
         ],
       });
@@ -161,79 +199,94 @@ export async function handleTicketModalSubmit(interaction) {
       });
     }
 
+    // Allow Rocket Access Role
+    const rocketAccessRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'rocket access');
+    if (rocketAccessRole) {
+      permissionOverwrites.push({
+        id: rocketAccessRole.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.EmbedLinks,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.ReadMessageHistory,
+        ],
+      });
+    }
+
     // 4. Create the private channel
     const ticketChannel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
       parent: parentCategory?.id,
-      topic: `🔒 Private Ticket #${ticketNumber} for ${user.tag} • Subject: ${subject}`,
+      topic: `🔒 Private ${section.toUpperCase()} Work Order for ${user.tag} with Sandy`,
       permissionOverwrites,
     });
 
     // Update SQLite with the created channel ID
     updateTicketChannel(ticket.id, ticketChannel.id);
 
-    // 5. Post Welcome & Instructions Card in the Ticket Channel
+    // 5. Post Welcome & Workstation Controls in the Ticket Channel
     const ticketEmbed = new EmbedBuilder()
-      .setColor(BRAND_COLOR)
-      .setTitle(`🎫 SUPPORT TICKET #${ticketNumber} — ${subject.toUpperCase()}`)
+      .setColor(0x00e5ff)
+      .setTitle(`🎫 ${section.toUpperCase()} WORK ORDER #${ticketNumber} — ${user.username.toUpperCase()}`)
       .setDescription(
-        `Hey <@${user.id}>! 🦝🐾 I am **Rocket**, and I have logged your private ticket.\n\n` +
-        `**Issue Description:**\n\`\`\`\n${details}\n\`\`\`\n` +
-        `🔒 **Privacy Guarantee:** Only you, Sandy, authorized staff, and Rocket can see this room.\n\n` +
-        `**Next Steps:**\n` +
-        `• Please reply here with any additional details, screenshots, or questions.\n` +
-        `• Rocket will assist you, and staff have been alerted.\n` +
-        `• When your issue is resolved, click **Close Ticket** below.`
+        `👋 Welcome <@${user.id}>! This is your private workstation with Boss Sandy <@${ownerId}>.\n\n` +
+        `• **Project / Need:** ${subject}\n` +
+        `• **Details & Scope:** ${details}\n\n` +
+        `👑 **Boss Sandy** will discuss the details, timeline, and pricing directly with you right here!\n\n` +
+        `🔒 *This channel is 100% private between you, Sandy, and staff.*`
       )
-      .setFooter({ text: 'Rocket Confidential Support System 🛡️' })
+      .setFooter({ text: 'Rocket AI • Secure Client Workstation 🦝' })
       .setTimestamp();
 
-    const controlRow = new ActionRowBuilder().addComponents(
+    const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`btn_close_ticket_${ticket.id}`)
-        .setLabel('🔒 Close Ticket')
+        .setLabel('🔒 Close & Archive Ticket')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(`btn_escalate_ticket_${ticket.id}`)
-        .setLabel('⚡ Escalate to Sandy')
+        .setLabel('👑 Ping Sandy (Boss)')
         .setStyle(ButtonStyle.Primary)
     );
 
     await ticketChannel.send({
-      content: `<@${user.id}>, welcome to your private ticket chamber! Staff have been notified.`,
+      content: `<@${user.id}> <@${ownerId}>, your private workstation has been opened!`,
       embeds: [ticketEmbed],
-      components: [controlRow],
+      components: [row],
     });
 
-    // 6. Alert Staff in #help-admin (Staff & Sandy only room)
-    await notifyHelpAdmin(guild, ticket.id, user, subject, details, ticketChannel.id);
+    // 6. Direct alert to Sandy in DMs
+    try {
+      const ownerUser = await guild.client.users.fetch(ownerId).catch(() => null);
+      if (ownerUser) {
+        const ownerDmEmbed = new EmbedBuilder()
+          .setColor(OWNER_COLOR)
+          .setTitle(`👑 [NEW ${section.toUpperCase()} TICKET #${ticketNumber}]`)
+          .setDescription(
+            `A client has opened a new work ticket in **${guild.name}**!\n\n` +
+            `• **Client:** <@${user.id}> (${user.tag})\n` +
+            `• **Section:** ${section.toUpperCase()}\n` +
+            `• **Subject:** ${subject}\n` +
+            `• **Details:** ${details}\n\n` +
+            `👉 **Go directly to the ticket:** <#${ticketChannel.id}>`
+          );
+        await ownerUser.send({ embeds: [ownerDmEmbed] }).catch(() => null);
+      }
+    } catch {}
 
-    // 7. Ephemeral confirmation for the user with direct link
-    const confirmEmbed = new EmbedBuilder()
+    // 7. Ephemeral confirmation to the client
+    const successEmbed = new EmbedBuilder()
       .setColor(SUCCESS_COLOR)
-      .setTitle('🎫 Ticket Created Successfully!')
+      .setTitle('✅ Private Work Ticket Created!')
       .setDescription(
         `Your private ticket has been provisioned:\n\n` +
         `👉 **Go to your ticket channel:** <#${ticketChannel.id}>\n\n` +
         `🔒 *Your ticket is completely private and invisible to all other members.*`
       );
 
-    await interaction.editReply({ embeds: [confirmEmbed] });
-
-    // 8. DM the user a direct link as well
-    try {
-      const dmEmbed = new EmbedBuilder()
-        .setColor(INFO_COLOR)
-        .setTitle(`🎫 Ticket #${ticketNumber} Created in ${guild.name}`)
-        .setDescription(
-          `Your private support ticket for **"${subject}"** is ready!\n\n` +
-          `🔗 **Direct Link:** https://discord.com/channels/${guild.id}/${ticketChannel.id}\n\n` +
-          `Rocket and staff are standing by in your ticket room.`
-        );
-      await user.send({ embeds: [dmEmbed] }).catch(() => null);
-    } catch {}
-
+    return interaction.editReply({ embeds: [successEmbed] });
   } catch (err) {
     console.error('[Ticket Creation Error]:', err);
     return interaction.editReply({

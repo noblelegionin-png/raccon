@@ -685,6 +685,94 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
+      case 'coding-chat': {
+        embed = new EmbedBuilder()
+          .setColor(INFO_COLOR)
+          .setTitle('💻 CODING COMMISSIONS & WORK ORDERS')
+          .setDescription(
+            `Welcome to the **Coding Section**! Software engineering, Discord bots, backend APIs, and automation scripts.\n\n` +
+            `👉 **Need a custom build, script, or bug fix?**\n` +
+            `Click **Open Coding Ticket** below to start a private 1-on-1 work order with **Sandy**. You can discuss project requirements, pricing, and timeline directly with Sandy!`
+          )
+          .setFooter({ text: 'Sandy Coding Studio • Private Work Order 💻' });
+
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_open_ticket_coding')
+              .setLabel('💻 Open Coding Ticket')
+              .setStyle(ButtonStyle.Primary)
+          ),
+        ];
+        break;
+      }
+
+      case 'web-dev': {
+        embed = new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle('🌐 WEB DEVELOPMENT COMMISSIONS & WORK ORDERS')
+          .setDescription(
+            `Welcome to the **Web Development Section**! Modern landing pages, full-stack web applications, UI/UX, and cloud deployments.\n\n` +
+            `👉 **Need a website or web app built?**\n` +
+            `Click **Open Web Dev Ticket** below to start a private work order with **Sandy**. Discuss features, pricing, and live deployment directly with Sandy!`
+          )
+          .setFooter({ text: 'Sandy Web Studio • Private Work Order 🌐' });
+
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_open_ticket_web')
+              .setLabel('🌐 Open Web Dev Ticket')
+              .setStyle(ButtonStyle.Primary)
+          ),
+        ];
+        break;
+      }
+
+      case 'gaming-hub': {
+        embed = new EmbedBuilder()
+          .setColor(0x2ecc71)
+          .setTitle('🎮 GAMING SERVICES, ASSETS & WORK ORDERS')
+          .setDescription(
+            `Welcome to the **Gaming Section**! Roblox builds, custom scripts, game server setups, configs, and assets.\n\n` +
+            `👉 **Need game assets, scripts, or server setups?**\n` +
+            `Click **Open Gaming Ticket** below to start a private work order with **Sandy**!`
+          )
+          .setFooter({ text: 'Sandy Gaming Studio • Private Work Order 🎮' });
+
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_open_ticket_gaming')
+              .setLabel('🎮 Open Gaming Ticket')
+              .setStyle(ButtonStyle.Primary)
+          ),
+        ];
+        break;
+      }
+
+      case 'ai-tools': {
+        embed = new EmbedBuilder()
+          .setColor(0xe67e22)
+          .setTitle('🤖 AI & NEURAL AUTOMATION WORK ORDERS')
+          .setDescription(
+            `Welcome to the **AI & Technology Section**! Autonomous agents, custom AI tools, and workflow automation.\n\n` +
+            `👉 **Need an AI bot or smart automation built?**\n` +
+            `Click **Open AI Ticket** below to discuss your project directly with **Sandy**!`
+          )
+          .setFooter({ text: 'Sandy AI Labs • Private Work Order 🤖' });
+
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_open_ticket_ai')
+              .setLabel('🤖 Open AI Ticket')
+              .setStyle(ButtonStyle.Primary)
+          ),
+        ];
+        break;
+      }
+
       case 'audit-logs': {
         embed = new EmbedBuilder()
           .setColor(DANGER_COLOR)

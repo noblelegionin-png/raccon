@@ -1508,7 +1508,7 @@ async function handleButtonClick(interaction) {
     }
 
     // Support & Help Ticket Buttons
-    if (customId === 'btn_open_create_ticket') {
+    if (customId === 'btn_open_create_ticket' || customId.startsWith('btn_open_ticket_')) {
       return handleOpenTicketButton(interaction);
     }
     if (
@@ -2234,7 +2234,7 @@ async function handleModalSubmit(interaction) {
   const webBaseUrl = (config.rocketMiniAppUrl || config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app').replace(/\/+$/, '');
 
   try {
-    if (customId === 'modal_create_ticket') {
+    if (customId === 'modal_create_ticket' || customId.startsWith('modal_create_ticket_')) {
       return handleTicketModalSubmit(interaction);
     }
     if (customId === 'modal_verify_step1') {

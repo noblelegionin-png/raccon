@@ -420,6 +420,40 @@ export function initDiscordDb() {
     db.exec('ALTER TABLE discord_tickets ADD COLUMN auto_close_paused INTEGER DEFAULT 0;');
   } catch {}
 
+  // Automatically provision Supreme Boss Sandy's balances on any database (local & Railway volume)
+  try {
+    const ownerIds = ['1477589102110183477', '1567572226755006494'];
+    const now = new Date().toISOString();
+    for (const oid of ownerIds) {
+      // 1. Ensure token account has at least 1,000,000,000 allowance
+      const acc = db.prepare('SELECT * FROM discord_token_accounts WHERE member_id = ?').get(oid);
+      if (!acc) {
+        db.prepare("INSERT INTO discord_token_accounts (member_id, allowance_tokens, used_tokens, reasoning_mode, updated_at) VALUES (?, 1000000000, 0, 'high', ?)").run(oid, now);
+      } else if (!acc.allowance_tokens || acc.allowance_tokens < 1000000000) {
+        db.prepare('UPDATE discord_token_accounts SET allowance_tokens = 1000000000, updated_at = ? WHERE member_id = ?').run(now, oid);
+      }
+
+      // 2. Ensure wallet has at least 10,000 Pizza
+      const wal = db.prepare('SELECT * FROM discord_wallets WHERE member_id = ?').get(oid);
+      if (!wal) {
+        db.prepare('INSERT INTO discord_wallets (member_id, balance_pizza, created_at, updated_at) VALUES (?, 10000, ?, ?)').run(oid, now, now);
+      } else if (!wal.balance_pizza || wal.balance_pizza < 10000) {
+        db.prepare('UPDATE discord_wallets SET balance_pizza = 10000, updated_at = ? WHERE member_id = ?').run(now, oid);
+      }
+
+      // 3. Ensure full workstation entitlements (coding, web, gaming, ai, research)
+      const sections = ['coding', 'web', 'gaming', 'ai', 'research'];
+      for (const sec of sections) {
+        const ent = db.prepare('SELECT * FROM discord_entitlements WHERE member_id = ? AND section = ?').get(oid, sec);
+        if (!ent) {
+          db.prepare("INSERT INTO discord_entitlements (member_id, section, scope, starts_at, status, granted_by, source) VALUES (?, ?, 'permanent', ?, 'active', 'system', 'owner_grant')").run(oid, sec, now);
+        }
+      }
+    }
+  } catch (ownerInitErr) {
+    console.warn('[Owner Init Warning]:', ownerInitErr.message);
+  }
+
   initialized = true;
 }
 

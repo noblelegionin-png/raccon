@@ -27,6 +27,7 @@ import {
   verifyPayment,
   listMemberEntitlements,
   getOrCreateTokenAccount,
+  addTokensToAccount,
   recordAuditEvent,
 } from './discordDb.js';
 import { isDiscordOwner } from './commandHandlers.js';
@@ -46,6 +47,18 @@ const UPI_NAME = 'Nero Labs';
  * Build the Interactive Wallet Dashboard Embed & Components
  */
 export function buildWalletDashboard(user) {
+  const isOwner = isDiscordOwner(user) || user.id === '1477589102110183477' || user.id === '1567572226755006494';
+  if (isOwner) {
+    const acc = getOrCreateTokenAccount(user.id);
+    if (!acc.allowance_tokens || acc.allowance_tokens < 1000000000) {
+      addTokensToAccount(user.id, 1000000000, user.id, 'Supreme Boss Provisioning');
+    }
+    const wal = getOrCreateWallet(user.id);
+    if (!wal.balance_pizza || wal.balance_pizza < 10000) {
+      creditWallet(user.id, 10000, 'Supreme Boss Provisioning', user.id);
+    }
+  }
+
   const wallet = getOrCreateWallet(user.id);
   const tokenAcc = getOrCreateTokenAccount(user.id);
   const entitlements = listMemberEntitlements(user.id);
@@ -53,12 +66,12 @@ export function buildWalletDashboard(user) {
 
   const activeSections = entitlements.length > 0
     ? entitlements.map((e) => `• **${e.section.toUpperCase()}** (\`${e.scope}\` - exp: ${e.expires_at ? new Date(e.expires_at).toLocaleDateString() : 'Permanent'})`).join('\n')
-    : '• *No active paid workstation entitlements.*';
+    : (isOwner ? '• **ALL WORKSTATIONS UNLOCKED** (`Permanent` - Supreme Creator Access)' : '• *No active paid workstation entitlements.*');
 
   const txHistory = transactions.length > 0
     ? transactions.map((t) => {
         const sign = t.direction === 'credit' ? '➕' : '➖';
-        return `\`${new Date(t.timestamp).toLocaleDateString()}\` ${sign} **${t.amount_pizza} Pizza** — *${t.reason}*`;
+        return `\`${new Date(t.timestamp).toLocaleDateString()}\` ${sign} **${Number(t.amount_pizza).toLocaleString()} Pizza** — *${t.reason}*`;
       }).join('\n')
     : '• *No transaction records yet.*';
 
@@ -67,7 +80,8 @@ export function buildWalletDashboard(user) {
     .setTitle(`🍕 NERO LABS WALLET — ${user.username.toUpperCase()}`)
     .setDescription(
       `Welcome to your private virtual wallet. Pizza is Nero Labs' internal credit system used for workstation access, custom development, and AI token refills.\n\n` +
-      `💰 **Current Balance:** \`${wallet.balance_pizza} Pizza\` *(1 Pizza = ₹1 INR)*\n` +
+      (isOwner ? `👑 **Account Tier:** \`SUPREME CREATOR & OWNER\`\n` : '') +
+      `💰 **Current Balance:** \`${wallet.balance_pizza.toLocaleString()} Pizza\` *(1 Pizza = ₹1 INR)*\n` +
       `🤖 **AI Token Quota:** \`${tokenAcc.allowance_tokens.toLocaleString()} Tokens\` *(₹1 = 1,000 tokens)*\n` +
       `⚡ **Active Reasoning Mode:** \`${(tokenAcc.reasoning_mode || 'high').toUpperCase()}\`\n\n` +
       `### 🛡️ **Active Workstation Entitlements**\n${activeSections}\n\n` +

@@ -84,11 +84,12 @@ export async function uploadCustomEmojisFromDir(guild, dirPath) {
   if (!guild || !fs.existsSync(dirPath)) return [];
   await syncGuildEmojis(guild);
 
-  const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.png'));
+  const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.png') || f.endsWith('.gif'));
   const uploaded = [];
 
   for (const file of files) {
-    const emojiName = path.basename(file, '.png').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const ext = path.extname(file);
+    const emojiName = path.basename(file, ext).toLowerCase().replace(/[^a-z0-9_]/g, '_');
     if (emojiCache.has(emojiName)) {
       uploaded.push({ name: emojiName, status: 'already_exists', tag: emojiCache.get(emojiName) });
       continue;
@@ -183,6 +184,13 @@ export function injectServerCustomEmojis(text) {
     { from: /🛠️/g, to: getEmoji('dev_terminal', '🛠️') },
     { from: /⚡/g, to: getEmoji('rocket_hype', '⚡') },
     { from: /💜/g, to: getEmoji('rocket_love', '💜') },
+    { from: /💀/g, to: getEmoji('skull_real', '💀') },
+    { from: /🚀/g, to: getEmoji('stonks_rocket', '🚀') },
+    { from: /🚨/g, to: getEmoji('siren_police', '🚨') },
+    { from: /🤡/g, to: getEmoji('clown_honk', '🤡') },
+    { from: /🧠/g, to: getEmoji('galaxy_brain', '🧠') },
+    { from: /🎶/g, to: getEmoji('cat_jam', '🎶') },
+    { from: /🤑/g, to: getEmoji('money_rain', '🤑') },
   ];
 
   for (const { from, to } of replacements) {

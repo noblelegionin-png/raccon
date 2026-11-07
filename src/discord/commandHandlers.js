@@ -91,6 +91,14 @@ import {
   buildAnalyticsDeck,
 } from './buttonDashboard.js';
 import { forceManualPurge, runPurgeSweep } from './autoPurge.js';
+import {
+  handleOpenAnnouncementStudio,
+  handleAnnouncementButton,
+  handleAiAnnouncementSubmit,
+  handleCustomAnnouncementSubmit,
+  directBroadcastAnnouncement,
+  generateAiAnnouncement,
+} from './announcementSystem.js';
 
 const BRAND_COLOR = 0xff6b35; // Rocket raccoon fiery orange
 const SUCCESS_COLOR = 0x2ecc71; // Emerald green
@@ -302,11 +310,7 @@ async function handleSelectMenu(interaction) {
         return interaction.reply({ content: `🟢 **LOCKDOWN LIFTED:** Restored talking permissions to ${count} channels! 🍕✨`, ephemeral: true });
       }
       case 'boss_sel_broadcast_announcements': {
-        const annCh = guild.channels.cache.find((c) => c.name === 'announcements');
-        return interaction.reply({
-          content: annCh ? `📢 Type your announcement directly into <#${annCh.id}> or tell Rocket in DMs: \`broadcast <message>\`!` : 'Channel #announcements not found.',
-          ephemeral: true,
-        });
+        return handleOpenAnnouncementStudio(interaction);
       }
       case 'boss_sel_backup_sqlite':
         return interaction.reply({ content: '💾 **SQLite DB Snapshot:** Database is running in persistent WAL mode with automatic journal checkpoints. Safe and synced! 🛡️', ephemeral: true });
@@ -1471,6 +1475,74 @@ async function handleSlashCommand(interaction) {
         });
       }
 
+      case 'announce': {
+        const isOwner = isDiscordOwner(user, guild);
+        const hasRocketRole = member?.roles?.cache?.some((r) => {
+          const n = r.name.toLowerCase();
+          return n === 'rocket access' || n === 'rocket owner' || n === 'rocket';
+        });
+        if (!isOwner && !hasRocketRole) {
+          return interaction.reply({
+            content: '⛔ **Access Denied:** Only Supreme Boss (**Sandy**) and verified **@Rocket Access** owners can dispatch server announcements!',
+            ephemeral: true,
+          });
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        if (subcommand === 'hub') {
+          return handleOpenAnnouncementStudio(interaction);
+        }
+
+        if (subcommand === 'custom') {
+          await interaction.deferReply({ ephemeral: true });
+          const title = interaction.options.getString('title');
+          const content = interaction.options.getString('content');
+          const rawPing = interaction.options.getString('ping') || 'none';
+          const ping = rawPing === 'none' ? 'none' : `@${rawPing}`;
+
+          const { channel, message: broadcastMsg } = await directBroadcastAnnouncement({
+            guild,
+            client: interaction.client,
+            title,
+            body: content,
+            ping,
+            authorUser: user,
+          });
+
+          return interaction.editReply({
+            content: `📢 **Custom Announcement Dispatched!** Live in <#${channel.id}>!\n🔗 **Jump to message:** ${broadcastMsg.url}`,
+          });
+        }
+
+        if (subcommand === 'ai') {
+          await interaction.deferReply({ ephemeral: true });
+          const topic = interaction.options.getString('topic');
+          const details = interaction.options.getString('details') || '';
+          const rawPing = interaction.options.getString('ping') || 'none';
+          const ping = rawPing === 'none' ? 'none' : `@${rawPing}`;
+
+          const { title, body } = await generateAiAnnouncement({
+            topic,
+            notes: details,
+            ping,
+          });
+
+          const { channel, message: broadcastMsg } = await directBroadcastAnnouncement({
+            guild,
+            client: interaction.client,
+            title,
+            body,
+            ping,
+            authorUser: user,
+          });
+
+          return interaction.editReply({
+            content: `🤖 **AI-Powered Announcement Dispatched!** Live in <#${channel.id}>!\n🔗 **Jump to message:** ${broadcastMsg.url}`,
+          });
+        }
+        break;
+      }
+
       default:
         return interaction.reply({ content: '🦝 Unknown command.', ephemeral: true });
     }
@@ -1523,6 +1595,22 @@ async function handleButtonClick(interaction) {
     // Live Voice & Gaming Notification Buttons
     if (customId.startsWith('btn_notify_')) {
       return handleNotificationButton(interaction);
+    }
+
+    // 📢 Rocket Announcement Dispatch Studio & Actions
+    if (
+      customId === 'btn_open_announcement_hub' ||
+      customId === 'boss_action_broadcast_prompt'
+    ) {
+      return handleOpenAnnouncementStudio(interaction);
+    }
+    if (
+      customId.startsWith('btn_announce_') ||
+      customId.startsWith('btn_confirm_broadcast_') ||
+      customId.startsWith('btn_regen_broadcast_') ||
+      customId.startsWith('btn_cancel_broadcast_')
+    ) {
+      return handleAnnouncementButton(interaction);
     }
 
     // ---------------------------------------------------------------------
@@ -2240,6 +2328,12 @@ async function handleModalSubmit(interaction) {
     }
     if (customId === 'modal_verify_step1') {
       return handleVerifyModalSubmit(interaction);
+    }
+    if (customId === 'modal_announce_ai') {
+      return handleAiAnnouncementSubmit(interaction);
+    }
+    if (customId === 'modal_announce_custom') {
+      return handleCustomAnnouncementSubmit(interaction);
     }
     if (customId === 'modal_user_control_panel') {
       const customUsername = interaction.fields.getTextInputValue('input_username') || user.username;

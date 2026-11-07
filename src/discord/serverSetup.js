@@ -819,6 +819,16 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
             `• Only Sandy and authorized staff may broadcast to this channel.`
           )
           .setFooter({ text: 'Rocket Broadcast Station 📡' });
+
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_open_announcement_hub')
+              .setLabel('📢 Dispatch Announcement (Rocket Owners)')
+              .setEmoji('📢')
+              .setStyle(ButtonStyle.Success)
+          ),
+        ];
         break;
       }
 

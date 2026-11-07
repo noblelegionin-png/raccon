@@ -7,7 +7,12 @@
  * 3. Conversational AI with Raccoon Persona & Server Knowledge
  */
 
-import { ChannelType, PermissionsBitField, EmbedBuilder } from 'discord.js';
+import { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  directBroadcastAnnouncement,
+  generateAiAnnouncement,
+  buildAnnouncementStudioPayload,
+} from '../announcementSystem.js';
 import {
   getGuildSettings,
   getMemberProfile,
@@ -646,6 +651,116 @@ async function executeAdminActionFromChat(message, text) {
     const targetId = banMatch[1];
     await guild.members.ban(targetId, { reason: 'Banned by Boss Sandy via chat' }).catch(() => null);
     await message.reply(`🔨 *swings the ban hammer* <@${targetId}> has been permanently banned, Boss! 🐾🚨`);
+    return true;
+  }
+
+  // 8. AI-Powered Announcement Directive: "rocket announce ai: [topic]" or "announce ai: [topic]"
+  const aiAnnounceMatch = text.match(/^(?:announce\s+ai|ai\s+announcement|broadcast\s+ai)[:\s]+([\s\S]+)/i);
+  if (aiAnnounceMatch) {
+    const rawInput = aiAnnounceMatch[1].trim();
+    if (!rawInput) {
+      await message.reply('🦝 Please provide a topic for the AI announcement! Example: `rocket announce ai: New bot features coming tomorrow!`');
+      return true;
+    }
+
+    let ping = 'none';
+    let cleanPrompt = rawInput;
+    if (/@everyone\b/i.test(rawInput)) {
+      ping = '@everyone';
+      cleanPrompt = cleanPrompt.replace(/@everyone\b/gi, '').trim();
+    } else if (/@here\b/i.test(rawInput)) {
+      ping = '@here';
+      cleanPrompt = cleanPrompt.replace(/@here\b/gi, '').trim();
+    }
+
+    const typingMsg = await message.reply('🤖 *whirs excitedly* Rocket neural core generating high-impact AI announcement... 🐾🍕');
+    try {
+      const { title, body } = await generateAiAnnouncement({
+        topic: cleanPrompt,
+        ping,
+      });
+
+      const { channel: annCh, message: sentMsg } = await directBroadcastAnnouncement({
+        guild,
+        client: message.client,
+        title,
+        body,
+        ping,
+        authorUser: message.author,
+      });
+
+      await typingMsg.edit(`📢 *salutes with raccoon paw* **BOOM! AI Announcement Dispatched!** Live in <#${annCh.id}>! 🚀🦝\n\n**Title:** ${title}\n🔗 **Link:** ${sentMsg.url}`);
+    } catch (err) {
+      await typingMsg.edit(`⚠️ Failed to broadcast announcement: ${err.message}`);
+    }
+    return true;
+  }
+
+  // 9. Custom Announcement Directive: "rocket announce: [message]" or "broadcast: [message]"
+  const customAnnounceMatch = text.match(/^(?:announce|broadcast|send\s+announcement)[:\s]+([\s\S]+)/i);
+  if (customAnnounceMatch) {
+    const rawContent = customAnnounceMatch[1].trim();
+    if (!rawContent) {
+      await message.reply('🦝 Please provide the announcement text! Example: `rocket announce: Server update live in 10 minutes!`');
+      return true;
+    }
+
+    let ping = 'none';
+    let cleanContent = rawContent;
+    if (/@everyone\b/i.test(rawContent)) {
+      ping = '@everyone';
+      cleanContent = cleanContent.replace(/@everyone\b/gi, '').trim();
+    } else if (/@here\b/i.test(rawContent)) {
+      ping = '@here';
+      cleanContent = cleanContent.replace(/@here\b/gi, '').trim();
+    }
+
+    let title = '🚀 OFFICIAL SERVER ANNOUNCEMENT';
+    let body = cleanContent;
+    const lines = cleanContent.split('\n');
+    if (lines.length > 1 && lines[0].length < 100) {
+      title = lines[0].replace(/^#+\s*/, '').trim();
+      body = lines.slice(1).join('\n').trim();
+    }
+
+    try {
+      const { channel: annCh, message: sentMsg } = await directBroadcastAnnouncement({
+        guild,
+        client: message.client,
+        title,
+        body,
+        ping,
+        authorUser: message.author,
+      });
+
+      await message.reply(`📢 *tail wags* **Done Boss! Custom Announcement Dispatched!** Live in <#${annCh.id}>! 🐾🚀\n🔗 **Link:** ${sentMsg.url}`);
+    } catch (err) {
+      await message.reply(`⚠️ Failed to broadcast announcement: ${err.message}`);
+    }
+    return true;
+  }
+
+  // 10. Open Announcement Hub: "rocket send announcement" or "tell rocket to send an announcement"
+  if (/^(?:tell\s+rocket\s+to\s+)?(?:send\s+an?|dispatch\s+an?|make\s+an?|open)?\s*announcements?\s*(?:hub|studio|launcher)?$/i.test(lower)) {
+    if (isDm) {
+      const payload = buildAnnouncementStudioPayload();
+      await message.reply({
+        embeds: payload.embeds,
+        components: payload.components,
+      });
+    } else {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('btn_open_announcement_hub')
+          .setLabel('📢 Dispatch Announcement (Rocket Owners)')
+          .setEmoji('📢')
+          .setStyle(ButtonStyle.Success)
+      );
+      await message.reply({
+        content: '📢 **Rocket Announcement Studio:** Click the button below to launch your private announcement creator *(Only visible to you)*:',
+        components: [row],
+      });
+    }
     return true;
   }
 

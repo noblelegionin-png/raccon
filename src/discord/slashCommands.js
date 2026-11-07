@@ -464,4 +464,50 @@ export const slashCommands = [
     .addChannelOption((opt) =>
       opt.setName('channel').setDescription('Channel where Rocket constantly chats on every message').setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName('announce')
+    .setDescription('📢 Dispatch official server announcements (Sandy & Rocket Owners).')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((sub) =>
+      sub
+        .setName('hub')
+        .setDescription('Open the interactive Announcement Studio (Only visible to you).')
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('custom')
+        .setDescription('Directly dispatch a custom announcement to #announcements.')
+        .addStringOption((opt) => opt.setName('title').setDescription('Announcement Title').setRequired(true))
+        .addStringOption((opt) => opt.setName('content').setDescription('Announcement Content (Markdown supported)').setRequired(true))
+        .addStringOption((opt) =>
+          opt
+            .setName('ping')
+            .setDescription('Mention Target')
+            .setRequired(false)
+            .addChoices(
+              { name: 'None (Clean broadcast)', value: 'none' },
+              { name: '@everyone (Global ping)', value: 'everyone' },
+              { name: '@here (Online ping)', value: 'here' }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('ai')
+        .setDescription('Ask Rocket AI to generate and dispatch an announcement.')
+        .addStringOption((opt) => opt.setName('topic').setDescription('Announcement Topic / Subject').setRequired(true))
+        .addStringOption((opt) => opt.setName('details').setDescription('Key details, perks, links, or instructions').setRequired(false))
+        .addStringOption((opt) =>
+          opt
+            .setName('ping')
+            .setDescription('Mention Target')
+            .setRequired(false)
+            .addChoices(
+              { name: 'None (Clean broadcast)', value: 'none' },
+              { name: '@everyone (Global ping)', value: 'everyone' },
+              { name: '@here (Online ping)', value: 'here' }
+            )
+        )
+    ),
 ];

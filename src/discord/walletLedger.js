@@ -44,6 +44,51 @@ const UPI_ID = '9317741936@upi';
 const UPI_NAME = 'Nero Labs';
 
 /**
+ * Build Community Wallet & Token Hub Public Portal Embed & Action Row
+ */
+export function buildWalletHubPortal() {
+  const embed = new EmbedBuilder()
+    .setColor(GOLD_COLOR)
+    .setTitle('🍕 NERO LABS VIRTUAL WALLET & TOKEN PORTAL 🛡️')
+    .setDescription(
+      `Welcome to the official Nero Labs Virtual Economy & AI Token Hub!\n\n` +
+      `### 💰 **The Pizza Economy**\n` +
+      `• **Pizza Credits:** 1 Pizza = ₹1 INR internal credit for dev commissions & workstation access.\n` +
+      `• **AI Token Quota:** ₹1 INR = 1,000 AI Tokens (Min ₹50 top-up gives 50,000 tokens).\n` +
+      `• **Neural Reasoning:** Choose from Fast, Low, High, or Max thinking depth in workstations.\n\n` +
+      `### 🔒 **Private & Secure Account Access**\n` +
+      `Click **Open My Personal Wallet** below to view your real-time private balances, token quota, workstation access passes, and ledger history.\n\n` +
+      `*(Your wallet card is 100% ephemeral and only visible to you.)*`
+    )
+    .setFooter({ text: 'Nero Labs Virtual Economy • Private Virtual Account 🛡️' });
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_wallet_open_private')
+      .setLabel('Open My Personal Wallet')
+      .setEmoji('🍕')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('btn_wallet_deposit')
+      .setLabel('Add Funds (UPI / GPay)')
+      .setEmoji('➕')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('btn_wallet_ticket')
+      .setLabel('Wallet Ticket')
+      .setEmoji('🎫')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('btn_wallet_help')
+      .setLabel('Wallet Rules & FAQ')
+      .setEmoji('❓')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [row1] };
+}
+
+/**
  * Build the Interactive Wallet Dashboard Embed & Components
  */
 export function buildWalletDashboard(user) {
@@ -333,6 +378,10 @@ export async function handleRefundModalSubmit(interaction) {
  */
 export async function handleWalletButton(interaction) {
   const { customId, user, guild } = interaction;
+
+  if (customId === 'btn_wallet_open_private') {
+    return interaction.reply(buildWalletDashboard(user));
+  }
 
   if (customId === 'btn_wallet_refresh' || customId === 'btn_wallet_view_balance') {
     return interaction.update(buildWalletDashboard(user));

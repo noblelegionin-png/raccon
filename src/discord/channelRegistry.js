@@ -133,7 +133,137 @@ export const SERVER_CATEGORIES = [
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 04 — SUPPORT & AUDIT
+  // CATEGORY 04 — CODING SECTION (Locked to @Coding)
+  // -------------------------------------------------------------------------
+  {
+    name: '💻 CODING SECTION',
+    targetRoleName: 'Coding',
+    channels: [
+      {
+        name: 'coding-chat',
+        type: ChannelType.GuildText,
+        topic: '💻 Discussion on software engineering, algorithms, Discord bots & backend.',
+        purpose: 'Technical programming discussions & architecture.',
+        profile: 'chat',
+        reasoning: 'medium',
+        speed: 'fast',
+        tokenOptimization: 'standard',
+      },
+      {
+        name: 'code-runner',
+        type: ChannelType.GuildText,
+        topic: '⚡ Run & test multi-language code snippets with Rocket.',
+        purpose: 'Code snippet execution & debugging.',
+        profile: 'chat',
+        reasoning: 'high',
+        speed: 'fast',
+        tokenOptimization: 'standard',
+      },
+      {
+        name: 'bot-showcase',
+        type: ChannelType.GuildText,
+        topic: '🤖 Showcase of active bots, automation scripts and tools.',
+        purpose: 'Bot and project showcase.',
+        profile: 'general',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
+  // CATEGORY 05 — WEB SECTION (Locked to @Web Dev)
+  // -------------------------------------------------------------------------
+  {
+    name: '🌐 WEB SECTION',
+    targetRoleName: 'Web Dev',
+    channels: [
+      {
+        name: 'web-dev',
+        type: ChannelType.GuildText,
+        topic: '🌐 Frontend, full-stack, Next.js, and web application architecture.',
+        purpose: 'Web engineering and design.',
+        profile: 'chat',
+        reasoning: 'medium',
+        speed: 'fast',
+        tokenOptimization: 'standard',
+      },
+      {
+        name: 'live-previews',
+        type: ChannelType.GuildText,
+        topic: '🚀 Live demo staging, client previews, and web deploy inspection.',
+        purpose: 'Live URL testing and site review.',
+        profile: 'general',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+      },
+      {
+        name: 'design-lab',
+        type: ChannelType.GuildText,
+        topic: '🎨 UI/UX mockups, CSS styles, and design systems.',
+        purpose: 'UI design and creative mockups.',
+        profile: 'general',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
+  // CATEGORY 06 — GAMING SECTION (Locked to @Gaming)
+  // -------------------------------------------------------------------------
+  {
+    name: '🎮 GAMING SECTION',
+    targetRoleName: 'Gaming',
+    channels: [
+      {
+        name: 'gaming-hub',
+        type: ChannelType.GuildText,
+        topic: '🎮 Squad matchmaking, Roblox, competitive esports & game talk.',
+        purpose: 'Gaming matchmaking and community talk.',
+        profile: 'chat',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'standard',
+      },
+      {
+        name: 'game-assets',
+        type: ChannelType.GuildText,
+        topic: '📦 Custom maps, game configs, scripts and 3D assets.',
+        purpose: 'Game asset exchange and configurations.',
+        profile: 'general',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
+  // CATEGORY 07 — AI & TECH (Locked to @AI & Technology)
+  // -------------------------------------------------------------------------
+  {
+    name: '🤖 AI & TECH',
+    targetRoleName: 'AI & Technology',
+    channels: [
+      {
+        name: 'ai-tools',
+        type: ChannelType.GuildText,
+        topic: '🤖 AI tools, LLMs, prompting, and neural agent development.',
+        purpose: 'AI and neural technology discussions.',
+        profile: 'chat',
+        reasoning: 'high',
+        speed: 'fast',
+        tokenOptimization: 'full_power',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
+  // CATEGORY 08 — SUPPORT & AUDIT
   // -------------------------------------------------------------------------
   {
     name: 'SUPPORT & AUDIT',
@@ -163,7 +293,7 @@ export const SERVER_CATEGORIES = [
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 05 — VOICE LOUNGE
+  // CATEGORY 09 — VOICE LOUNGE
   // -------------------------------------------------------------------------
   {
     name: 'VOICE LOUNGE',
@@ -181,7 +311,7 @@ export const SERVER_CATEGORIES = [
         purpose: 'Squad gaming and tactical coms.',
       },
       {
-        name: 'Rocket Lounge',
+        name: 'Rocket Voice',
         type: ChannelType.GuildVoice,
         topic: '🦝 Dedicated voice lounge with Rocket AI.',
         purpose: 'Voice conversations and music/soundboard.',

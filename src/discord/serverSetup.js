@@ -118,31 +118,26 @@ export async function executeServerSetup(interaction) {
 
     const staffRole = createdRoles['Staff'] || guild.roles.cache.find((r) => r.name.toLowerCase() === 'staff');
 
-    // 2.5 Clean up Obsolete / Clutter Channels & Categories (Remove Web, App & Bloat)
-    const OBSOLETE_NAMES = [
-      'mini-app', 'mini-app-owner', 'rocket-mobile', 'website', 'linktree', 'games', 'add-friends',
-      'research', 'study', 'study-mode', 'downloading', 'report-issue', 'feature-requests',
-      'rocket-status', 'changelog', 'owner-logs', 'owner-analytics', 'owner-security', 'owner-backups',
-      'owner-config', 'hall-of-shame', 'live-notifications', 'voice-chat', 'gaming-sessions',
-      'reels', 'shorts', 'vids', 'Gaming Room 1', 'Gaming Room 2', 'Watch Together', 'Private Voice'
-    ];
+    // 2.5 Clean up Obsolete / Clutter Channels & Categories (Delete old and restart new)
+    const canonicalCategoryNames = SERVER_CATEGORIES.map((c) => c.name.toLowerCase());
+    const canonicalChannelNames = SERVER_CATEGORIES.flatMap((c) => c.channels.map((ch) => ch.name.toLowerCase()));
+
+    // Delete non-canonical text/voice channels
     for (const ch of guild.channels.cache.values()) {
-      if (OBSOLETE_NAMES.some((n) => ch.name.toLowerCase() === n.toLowerCase())) {
-        await ch.delete('Server cleanup: removing obsolete channel').catch(() => null);
+      if (ch.type === ChannelType.GuildCategory) continue;
+      if (!canonicalChannelNames.includes(ch.name.toLowerCase())) {
+        await ch.delete('Server refresh: removing non-canonical channel').catch(() => null);
       }
     }
 
-    const OBSOLETE_CATS = [
-      'VERIFICATION', 'CONTROL CENTER', 'ROCKET APPLICATIONS', 'INFORMATION CENTER',
-      'INTELLIGENCE CENTER', 'SUPPORT', 'SYSTEM', 'OWNER PRIVATE', 'SECURITY & SUPPORT',
-      'PRIVATE LIVE & VOICE', 'ENTERTAINMENT'
-    ];
+    // Delete non-canonical categories
     for (const cat of guild.channels.cache.values()) {
-      if (cat.type === ChannelType.GuildCategory && OBSOLETE_CATS.some((c) => cat.name.toLowerCase() === c.toLowerCase())) {
-        // Only delete category if it is empty
-        if (cat.children.cache.size === 0) {
-          await cat.delete('Server cleanup: removing obsolete category').catch(() => null);
+      if (cat.type !== ChannelType.GuildCategory) continue;
+      if (!canonicalCategoryNames.includes(cat.name.toLowerCase())) {
+        for (const [, child] of cat.children.cache) {
+          await child.delete().catch(() => null);
         }
+        await cat.delete('Server refresh: removing non-canonical category').catch(() => null);
       }
     }
 
@@ -166,6 +161,45 @@ export async function executeServerSetup(interaction) {
         }
       } else {
         summary.categoriesReused++;
+      }
+
+      // If category is a locked workstation (e.g. Coding, Web, Gaming, AI), apply locked permissions
+      if (catDef.targetRoleName) {
+        const targetRole = guild.roles.cache.find((r) => r.name.toLowerCase() === catDef.targetRoleName.toLowerCase());
+        const rocketAccessRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'rocket access');
+        const overwrites = [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel],
+          },
+          {
+            id: guild.client.user.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.EmbedLinks,
+              PermissionFlagsBits.AttachFiles,
+            ],
+          },
+        ];
+        if (targetRole) {
+          overwrites.push({
+            id: targetRole.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+            ],
+          });
+        }
+        if (rocketAccessRole) {
+          overwrites.push({
+            id: rocketAccessRole.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+          });
+        }
+        await category.permissionOverwrites.set(overwrites).catch(() => null);
       }
 
       // Process Channels within Category

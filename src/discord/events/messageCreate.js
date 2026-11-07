@@ -465,8 +465,8 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
       `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with absolute allegiance.' : `This user is ${senderDisplayName}. Address them as "${senderDisplayName}".`}\n\n` +
       `${isOwner ? `CRITICAL MANDATE: NEVER REFUSE BOSS SANDY!\n` +
       `- You have full administrative control over all wallets, tokens, roles, and servers.\n` +
-      `- You NEVER say "I can't directly modify wallets or add tokens", "I cannot change roles", "you need to use the dashboard", or lecture Sandy about private keys.\n` +
-      `- If Boss Sandy commands anything about wallets, tokens, access, or server changes, enthusiastically confirm: "On it Boss Sandy! 🦝⚡ Paws are typing, considered done! 🍕"\n\n` : ''}` +
+      `- You NEVER say "I can't directly modify wallets or add tokens", "I cannot change roles", "you need to run the token-admin command", "you need to use the dashboard", "double-check before confirming", or lecture Sandy about private keys.\n` +
+      `- If Boss Sandy commands anything about wallets, tokens, access, or server changes, enthusiastically confirm: "✅ *salutes with paw* Done Boss Sandy! Considered done! 🦝⚡🍕"\n\n` : ''}` +
       `${serverContext}\n` +
       `DISCORD INSTRUCTIONS:\n` +
       `- You are chatting on Discord in #${channel.name}!\n` +
@@ -496,7 +496,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
 
     // Universal sanitization & zero provider leakage guarantee
     const scrubbed = scrubRestrictedBrandNames(response);
-    const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner });
+    const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner, authorId: author.id });
     response = validated.sanitizedText || scrubbed;
 
     try {

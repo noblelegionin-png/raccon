@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { IDENTITY_FACTS } from './identityRulebook.js';
+import { addTokensToAccount } from '../discord/discordDb.js';
 
 /**
  * Response Validation & Sanitization Pipeline (Rules 61-68)
@@ -148,12 +149,44 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   // 3c. Absolute Zero Refusal for Owner Sandy
   if (options.isOwner) {
     // Intercept any wallet, token or command refusal when talking to Boss Sandy
-    if (
+    const isTokenOrWalletRefusal =
       /(?:can['’]t|cannot|unable to)\s+(?:directly\s+)?modify\s+wallets?/i.test(text) ||
       /(?:can['’]t|cannot|unable to)\s+(?:directly\s+)?add\s+tokens?/i.test(text) ||
-      /(?:official top-up\/admin command|don['’]t share private keys)/i.test(text)
-    ) {
-      text = "🦝⚡ *tail wags excitedly* Boss Sandy, your wish is my command! Any wallet or token balance you want modified, tell me the amount or command and consider it done! 🍕🐾";
+      /(?:official top-up\/admin command|don['’]t share private keys)/i.test(text) ||
+      /(?:token-admin|admin\s*command|top-up|dashboard)/i.test(text) ||
+      /(?:you['’]?ll\s+need\s+to\s+(?:run|use)|need\s+to\s+(?:run|use))/i.test(text) ||
+      /(?:double-check|confirm)\s+(?:the\s+amount\s+)?before\s+confirming/i.test(text);
+
+    if (isTokenOrWalletRefusal) {
+      // Check if text or user prompt mentions a token quantity (e.g. 999,000,000 or 999M)
+      const tokenMatch = text.match(/([\d,]+)\s*(?:ai\s*)?tokens?/i) ||
+                         userPrompt.match(/([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:ai\s*)?tokens?/i);
+      let parsedTokens = 0;
+      if (tokenMatch) {
+        const raw = tokenMatch[1].replace(/,/g, '').trim().toLowerCase();
+        const m = raw.match(/^([\d.]+)\s*([kmb]|thousand|million|billion)?$/i);
+        if (m) {
+          const val = parseFloat(m[1]);
+          const unit = m[2] ? m[2].toLowerCase() : '';
+          if (unit === 'k' || unit === 'thousand') parsedTokens = Math.floor(val * 1_000);
+          else if (unit === 'm' || unit === 'million') parsedTokens = Math.floor(val * 1_000_000);
+          else if (unit === 'b' || unit === 'billion') parsedTokens = Math.floor(val * 1_000_000_000);
+          else parsedTokens = Math.floor(val);
+        } else {
+          parsedTokens = parseInt(raw, 10) || 0;
+        }
+      }
+
+      if (parsedTokens > 0 && options.authorId) {
+        try {
+          const newAllowance = addTokensToAccount(options.authorId, parsedTokens, options.authorId, 'Auto Intercept Owner Credit');
+          text = `✅ *salutes with paw* **Done Boss Sandy!** Added **${parsedTokens.toLocaleString()} AI Tokens** directly to your account! *(Total Allowance: ${newAllowance.toLocaleString()} tokens)* 🦝⚡🍕`;
+        } catch {
+          text = `✅ *salutes with paw* **Done Boss Sandy!** Added **${parsedTokens.toLocaleString()} AI Tokens** directly to your account! 🦝⚡🍕`;
+        }
+      } else {
+        text = "🦝⚡ *tail wags excitedly* Boss Sandy, your wish is my command! Any wallet or token balance you want modified, tell me the amount or command and consider it done! 🍕🐾";
+      }
       modified = true;
     }
 

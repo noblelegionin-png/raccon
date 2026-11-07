@@ -131,6 +131,84 @@ export async function handleReasoningSelect(interaction) {
 }
 
 /**
+ * Robust quantity parser supporting shorthand notation (999M, 50k, 1b, 1.5m, etc.)
+ */
+export function parseQuantity(raw) {
+  if (!raw) return null;
+  const cleaned = String(raw).trim().toLowerCase().replace(/,/g, '');
+  const match = cleaned.match(/^([\d.]+)\s*([kmb]|thousand|million|billion)?$/i);
+  if (!match) {
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? null : Math.floor(num);
+  }
+  const val = parseFloat(match[1]);
+  if (isNaN(val)) return null;
+  const unit = match[2] ? match[2].toLowerCase() : '';
+  if (unit === 'k' || unit === 'thousand') return Math.floor(val * 1_000);
+  if (unit === 'm' || unit === 'million') return Math.floor(val * 1_000_000);
+  if (unit === 'b' || unit === 'billion') return Math.floor(val * 1_000_000_000);
+  return Math.floor(val);
+}
+
+/**
+ * Flexible Token Directive Parser
+ */
+export function parseTokenDirective(cleanLower) {
+  // Pattern 1: Verb + [me] + Amount + Tokens + [Target]
+  let m = cleanLower.match(/(?:ad+|give+|grant+|credit+|send+|deposit+|put+|set+|load+|top\s*up)\s+(?:me\s+)?([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:ai\s*)?tokens?(?:\s*(?:to\s*)?(<@!?\d+>|me|myself))?/i);
+  if (m) return { tokens: parseQuantity(m[1]), target: m[2] };
+
+  // Pattern 2: Give/Add/Credit me Amount Tokens
+  m = cleanLower.match(/(?:give\s+me|credit\s+me|add\s+me|send\s+me)\s+([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:ai\s*)?tokens?/i);
+  if (m) return { tokens: parseQuantity(m[1]), target: 'me' };
+
+  // Pattern 3: Tokens + Amount
+  m = cleanLower.match(/^tokens?\s+([\d.,]+\s*[kmb]?(?:illion)?)(?:\s*(?:to\s*)?(<@!?\d+>|me|myself))?/i);
+  if (m) return { tokens: parseQuantity(m[1]), target: m[2] };
+
+  // Pattern 4: Amount Tokens to me
+  m = cleanLower.match(/^([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:ai\s*)?tokens?(?:\s*(?:to\s*)?(<@!?\d+>|me|myself))?/i);
+  if (m) return { tokens: parseQuantity(m[1]), target: m[2] };
+
+  // Pattern 5: General scan if token is present
+  if (cleanLower.includes('token')) {
+    const qtyMatch = cleanLower.match(/([\d.,]+\s*[kmb]?(?:illion)?)/i);
+    const hasVerb = /(?:ad+|giv|grant|credit|send|deposit|put|load|top|need|want)/i.test(cleanLower);
+    if (qtyMatch && hasVerb) {
+      const targetMatch = cleanLower.match(/<@!?(\d+)>/);
+      return { tokens: parseQuantity(qtyMatch[1]), target: targetMatch ? targetMatch[0] : 'me' };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Flexible Pizza Directive Parser
+ */
+export function parsePizzaDirective(cleanLower) {
+  // Pattern 1: Verb + [me] + Amount + Pizza + [Target]
+  let m = cleanLower.match(/(?:credit+|ad+|give+|grant+|send+|deposit+|put+|set+|load+)\s+(?:me\s+)?([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:pizza|pizzas|credits?|rs|inr)?(?:\s*(?:to\s*)?(<@!?\d+>|me|myself))?/i);
+  if (m && (cleanLower.includes('pizza') || cleanLower.includes('credit') || cleanLower.includes('rs') || cleanLower.includes('inr'))) {
+    return { amount: parseQuantity(m[1]), target: m[2] };
+  }
+
+  // Pattern 2: Give/Add/Credit me Amount Pizza
+  m = cleanLower.match(/(?:give\s+me|credit\s+me|add\s+me|send\s+me)\s+([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:pizza|pizzas|credits?|rs|inr)?/i);
+  if (m) return { amount: parseQuantity(m[1]), target: 'me' };
+
+  // Pattern 3: Pizza + Amount
+  m = cleanLower.match(/^pizzas?\s+([\d.,]+\s*[kmb]?(?:illion)?)(?:\s*(?:to\s*)?(<@!?\d+>|me|myself))?/i);
+  if (m) return { amount: parseQuantity(m[1]), target: m[2] };
+
+  // Pattern 4: Amount Pizza to me
+  m = cleanLower.match(/^([\d.,]+\s*[kmb]?(?:illion)?)\s*(?:pizza|pizzas)(?:\s*(?:to\s*)?(<@!?\d+>|me|myself))?/i);
+  if (m) return { amount: parseQuantity(m[1]), target: m[2] };
+
+  return null;
+}
+
+/**
  * Safe Natural-Language Admin Action Parser (Section 13 of Blueprint)
  * Parses:
  * - "add 20,000 tokens to @member"
@@ -143,11 +221,14 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
   if (!isOwner) return false;
 
   const lower = text.toLowerCase().trim();
+  const cleanLower = lower
+    .replace(/^(?:hey\s+|yo\s+)?(?:rocket|rocky)[,\s:]*/i, '')
+    .trim();
 
   // Pattern 0: Direct Wallet & Token Controller / Menu Directive
   if (
-    /^(?:modify\s+wallets?|manage\s+wallets?|wallet\s+admin|token\s+admin|admin\s+wallet|wallet\s+control)$/i.test(lower) ||
-    /^(?:modify\s+my\s+wallet|open\s+wallet\s+controls?|add\s+tokens?|add\s+funds?|wallet)$/i.test(lower)
+    /^(?:modify\s+wallets?|manage\s+wallets?|wallet\s+admin|token\s+admin|admin\s+wallet|wallet\s+control)$/i.test(cleanLower) ||
+    /^(?:modify\s+my\s+wallet|open\s+wallet\s+controls?|add\s+tokens?|add\s+funds?|wallet)$/i.test(cleanLower)
   ) {
     const wallet = getOrCreateWallet(author.id);
     const tokenAcc = getOrCreateTokenAccount(author.id);
@@ -157,7 +238,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
       .setTitle('🎛️ BOSS SANDY’S DIRECT WALLET & TOKEN CONTROLLER 🦝⚡')
       .setDescription(
         `Supreme Creator & Boss Sandy, your financial & token controls are active:\n\n` +
-        `• 🍕 **Pizza Wallet Balance:** \`${wallet.balance_pizza} Pizza\` (₹${wallet.balance_pizza} INR)\n` +
+        `• 🍕 **Pizza Wallet Balance:** \`${wallet.balance_pizza.toLocaleString()} Pizza\` (₹${wallet.balance_pizza.toLocaleString()} INR)\n` +
         `• 🪙 **AI Token Allowance:** \`${tokenAcc.allowance_tokens.toLocaleString()} Tokens\` (Used: \`${tokenAcc.used_tokens.toLocaleString()}\`)\n` +
         `• 🛡️ **Workstations:** All 100% Unlocked & Controlled by You.\n\n` +
         `Click any button below to instantly top-up or modify your balances in **1 click**:`
@@ -196,19 +277,30 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
     return true;
   }
 
+  // Pattern 0.5: Fast Balance & Quota Inquiry
+  if (
+    /^(?:tokens?|my\s+tokens?|token\s+balance|check\s+tokens?|how\s+many\s+tokens)$/i.test(cleanLower) ||
+    /^(?:pizza|my\s+pizza|my\s+wallet|check\s+balance|balance)$/i.test(cleanLower)
+  ) {
+    const wallet = getOrCreateWallet(author.id);
+    const tokenAcc = getOrCreateTokenAccount(author.id);
+    const reply = `🦝⚡ Boss Sandy, here are your current balances:\n\n` +
+      `• 🪙 **AI Token Allowance:** \`${tokenAcc.allowance_tokens.toLocaleString()} Tokens\` (Used: \`${tokenAcc.used_tokens.toLocaleString()}\`)\n` +
+      `• 🍕 **Pizza Balance:** \`${wallet.balance_pizza.toLocaleString()} Pizza\` (₹${wallet.balance_pizza.toLocaleString()} INR)\n` +
+      `• 🧠 **Reasoning Effort:** \`${tokenAcc.reasoning_mode.toUpperCase()}\`\n\n` +
+      `*Need more? Just tell me "add 100k tokens" or "give me 500 pizza"!* 🍕🐾`;
+    await message.reply(reply);
+    return true;
+  }
+
   // Pattern 1: Add tokens
-  // Supports: "add 10000 tokens", "add 10000 tokens to me", "give me 50000 tokens", "add 20000 tokens to @member"
-  const tokenMatch = lower.match(/(?:add|grant|give)\s+(?:me\s+)?([\d,]+)\s*(?:ai)?\s*tokens?(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i) ||
-                     lower.match(/(?:give\s+me)\s+([\d,]+)\s*(?:ai)?\s*tokens?/i) ||
-                     lower.match(/^tokens?\s+([\d,]+)(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i);
-  if (tokenMatch) {
-    const rawQty = tokenMatch[1].replace(/,/g, '');
-    const tokens = parseInt(rawQty, 10);
-    const targetMention = tokenMatch[2];
+  // Supports: "add 10000 tokens", "add 10000 tokens to me", "give me 50000 tokens", "addd 999m token to me", "add 20000 tokens to @member"
+  const tokenMatch = parseTokenDirective(cleanLower);
+  if (tokenMatch && tokenMatch.tokens && tokenMatch.tokens > 0) {
+    const tokens = tokenMatch.tokens;
+    const targetMention = tokenMatch.target;
     const mentionIdMatch = targetMention ? targetMention.match(/<@!?(\d+)>/) : null;
     const targetId = mentionIdMatch ? mentionIdMatch[1] : author.id;
-
-    if (!tokens || tokens <= 0) return false;
 
     // If target is Boss Sandy himself -> EXECUTE IMMEDIATELY!
     if (targetId === author.id) {
@@ -224,7 +316,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
       targetId,
       amount: tokens,
       actorId: author.id,
-      guildId: guild.id,
+      guildId: guild ? guild.id : 'dm',
     });
 
     const confirmEmbed = new EmbedBuilder()
@@ -257,22 +349,18 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
   }
 
   // Pattern 2: Credit Pizza to Wallet
-  // Supports: "add 500 pizza", "add 500 pizza to me", "give me 500 pizza", "credit 1000 pizza to @member"
-  const pizzaMatch = lower.match(/(?:credit|add|give)\s+(?:me\s+)?(\d+)\s*(?:pizza|credits?|rs|inr)?(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i) ||
-                     lower.match(/(?:give\s+me)\s+(\d+)\s*(?:pizza|credits?|rs|inr)?/i) ||
-                     lower.match(/^pizza\s+(\d+)(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i);
-  if (pizzaMatch) {
-    const amount = parseInt(pizzaMatch[1], 10);
-    const targetMention = pizzaMatch[2];
+  // Supports: "add 500 pizza", "add 500 pizza to me", "give me 500 pizza", "addd 1k pizza", "credit 1000 pizza to @member"
+  const pizzaMatch = parsePizzaDirective(cleanLower);
+  if (pizzaMatch && pizzaMatch.amount && pizzaMatch.amount > 0) {
+    const amount = pizzaMatch.amount;
+    const targetMention = pizzaMatch.target;
     const mentionIdMatch = targetMention ? targetMention.match(/<@!?(\d+)>/) : null;
     const targetId = mentionIdMatch ? mentionIdMatch[1] : author.id;
-
-    if (!amount || amount <= 0) return false;
 
     // If target is Boss Sandy himself -> EXECUTE IMMEDIATELY!
     if (targetId === author.id) {
       const { newBalance } = creditWallet(author.id, amount, 'Owner Natural Directive', author.id);
-      await message.reply(`✅ *tail wags excitedly* **Done Boss Sandy!** Credited **${amount} Pizza** directly to your wallet! *(Current Balance: ${newBalance} Pizza / ₹${newBalance} INR)* 🍕💰`);
+      await message.reply(`✅ *tail wags excitedly* **Done Boss Sandy!** Credited **${amount.toLocaleString()} Pizza** directly to your wallet! *(Current Balance: ${newBalance.toLocaleString()} Pizza / ₹${newBalance.toLocaleString()} INR)* 🍕💰`);
       return true;
     }
 
@@ -282,7 +370,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
       targetId,
       amount,
       actorId: author.id,
-      guildId: guild.id,
+      guildId: guild ? guild.id : 'dm',
     });
 
     const confirmEmbed = new EmbedBuilder()
@@ -291,7 +379,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
       .setDescription(
         `Boss Sandy, please confirm this wallet credit:\n\n` +
         `• **Target Member:** <@${targetId}>\n` +
-        `• **Credit Amount:** \`+${amount} Pizza\` (₹${amount} INR)\n` +
+        `• **Credit Amount:** \`+${amount.toLocaleString()} Pizza\` (₹${amount.toLocaleString()} INR)\n` +
         `• **Actor:** <@${author.id}>\n\n` +
         `Click **Confirm & Apply** below to execute:`
       )

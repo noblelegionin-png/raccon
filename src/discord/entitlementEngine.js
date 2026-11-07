@@ -28,6 +28,7 @@ import {
   recordAuditEvent,
 } from './discordDb.js';
 import { isDiscordOwner } from './commandHandlers.js';
+import { injectServerCustomEmojis, getEmoji } from './emojiManager.js';
 
 const BRAND_COLOR = 0xff6b35;
 const GOLD_COLOR = 0xf1c40f;
@@ -284,11 +285,13 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
   ) {
     const wallet = getOrCreateWallet(author.id);
     const tokenAcc = getOrCreateTokenAccount(author.id);
-    const reply = `🦝⚡ Boss Sandy, here are your current balances:\n\n` +
+    const reply = injectServerCustomEmojis(
+      `🦝⚡ Boss Sandy, here are your current balances:\n\n` +
       `• 🪙 **AI Token Allowance:** \`${tokenAcc.allowance_tokens.toLocaleString()} Tokens\` (Used: \`${tokenAcc.used_tokens.toLocaleString()}\`)\n` +
       `• 🍕 **Pizza Balance:** \`${wallet.balance_pizza.toLocaleString()} Pizza\` (₹${wallet.balance_pizza.toLocaleString()} INR)\n` +
       `• 🧠 **Reasoning Effort:** \`${tokenAcc.reasoning_mode.toUpperCase()}\`\n\n` +
-      `*Need more? Just tell me "add 100k tokens" or "give me 500 pizza"!* 🍕🐾`;
+      `*Need more? Just tell me "add 100k tokens" or "give me 500 pizza"!* 🍕🐾`
+    );
     await message.reply(reply);
     return true;
   }
@@ -305,7 +308,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
     // If target is Boss Sandy himself -> EXECUTE IMMEDIATELY!
     if (targetId === author.id) {
       const newAllowance = addTokensToAccount(author.id, tokens, author.id, 'Owner Natural Directive');
-      await message.reply(`✅ *salutes with paw* **Done Boss Sandy!** Added **${tokens.toLocaleString()} AI Tokens** directly to your account! *(Total Allowance: ${newAllowance.toLocaleString()} tokens)* 🦝⚡🍕`);
+      await message.reply(injectServerCustomEmojis(`✅ *salutes with paw* **Done Boss Sandy!** Added **${tokens.toLocaleString()} AI Tokens** directly to your account! *(Total Allowance: ${newAllowance.toLocaleString()} tokens)* :rocket_salute::nero_pizza:`));
       return true;
     }
 
@@ -360,7 +363,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
     // If target is Boss Sandy himself -> EXECUTE IMMEDIATELY!
     if (targetId === author.id) {
       const { newBalance } = creditWallet(author.id, amount, 'Owner Natural Directive', author.id);
-      await message.reply(`✅ *tail wags excitedly* **Done Boss Sandy!** Credited **${amount.toLocaleString()} Pizza** directly to your wallet! *(Current Balance: ${newBalance.toLocaleString()} Pizza / ₹${newBalance.toLocaleString()} INR)* 🍕💰`);
+      await message.reply(injectServerCustomEmojis(`✅ *tail wags excitedly* **Done Boss Sandy!** Credited **${amount.toLocaleString()} Pizza** directly to your wallet! *(Current Balance: ${newBalance.toLocaleString()} Pizza / ₹${newBalance.toLocaleString()} INR)* :nero_pizza::nero_coin:`));
       return true;
     }
 
@@ -411,7 +414,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
       if (member) await member.roles.add(buyerRole).catch(() => null);
     }
     grantEntitlement(author.id, 'all', 'permanent', author.id, 3650);
-    await message.reply('👑 *bows respectfully* **Done Boss Sandy!** All VIP workstations are 100% unlocked with permanent `@Buyer` clearance for you! 🛠️🎮🚀');
+    await message.reply(injectServerCustomEmojis('👑 *bows respectfully* **Done Boss Sandy!** All VIP workstations are 100% unlocked with permanent `@Buyer` clearance for you! :buyer_crown::dev_terminal::rocket_boss:'));
     return true;
   }
 
@@ -445,7 +448,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
         const member = await guild.members.fetch(author.id).catch(() => null);
         if (member) await member.roles.add(buyerRole).catch(() => null);
       }
-      await message.reply(`✅ *tail wags* **Done Boss Sandy!** Unlocked **${section.toUpperCase()}** access for you! 🛠️⚡`);
+      await message.reply(injectServerCustomEmojis(`✅ *tail wags* **Done Boss Sandy!** Unlocked **${section.toUpperCase()}** access for you! :dev_terminal::rocket_salute:`));
       return true;
     }
 

@@ -35,6 +35,12 @@ import { isDiscordOwner } from '../commandHandlers.js';
 import { trackIncomingMessage } from '../evidenceArchive.js';
 import { scrubRestrictedBrandNames, validateAndSanitizeResponse } from '../../conversation/responseValidator.js';
 import { syncMemberWWERankRole } from '../verification.js';
+import {
+  injectServerCustomEmojis,
+  getCustomEmojiDirectivesPrompt,
+  getSticker,
+  getRandomRocketSticker,
+} from '../emojiManager.js';
 
 // Anti-spam sliding window cache: userId -> Array of timestamps
 const messageRateMap = new Map();
@@ -471,7 +477,8 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
       `DISCORD INSTRUCTIONS:\n` +
       `- You are chatting on Discord in #${channel.name}!\n` +
       `${isConstantTalk ? '- Act as an active, engaging member in this channel.\n' : ''}` +
-      `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.`;
+      `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.\n\n` +
+      `${getCustomEmojiDirectivesPrompt()}`;
 
     let response = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
     if (scaleMaxAdapter.isConfigured()) {
@@ -498,6 +505,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     const scrubbed = scrubRestrictedBrandNames(response);
     const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner, authorId: author.id });
     response = validated.sanitizedText || scrubbed;
+    response = injectServerCustomEmojis(response);
 
     try {
       if (response.length > 2000) {
@@ -577,6 +585,7 @@ async function handleDirectMessage(message) {
   const scrubbedDm = scrubRestrictedBrandNames(response);
   const validatedDm = validateAndSanitizeResponse(scrubbedDm, content, { isOwner: true });
   response = validatedDm.sanitizedText || scrubbedDm;
+  response = injectServerCustomEmojis(response);
 
   await message.reply(response.slice(0, 2000)).catch(() => {});
 }
@@ -607,7 +616,7 @@ async function executeAdminActionFromChat(message, text) {
     const count = Math.min(parseInt(purgeMatch[1], 10), 100);
     const deleted = await channel.bulkDelete(count + 1, true).catch(() => null);
     const actual = deleted ? Math.max(deleted.size - 1, 0) : count;
-    const confirm = await channel.send(`🧹 *tail wags* Done Boss! Swept away **${actual}** messages cleanly! 🐾🍕`);
+    const confirm = await channel.send(injectServerCustomEmojis(`🧹 *tail wags* Done Boss! Swept away **${actual}** messages cleanly! :dev_terminal::nero_pizza:`));
     setTimeout(() => confirm.delete().catch(() => {}), 4000);
     return true;
   }
@@ -615,14 +624,14 @@ async function executeAdminActionFromChat(message, text) {
   // 2. Lock channel
   if (/^(?:lock|lockdown|lock\s+channel)$/i.test(lower)) {
     await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => null);
-    await message.reply('🔒 *clangs padlock shut* Channel locked down, Boss! Nobody can speak except you and staff. 🐾');
+    await message.reply(injectServerCustomEmojis('🔒 *clangs padlock shut* Channel locked down, Boss! Nobody can speak except you and staff. :rocket_boss:'));
     return true;
   }
 
   // 3. Unlock channel
   if (/^(?:unlock|unlock\s+channel)$/i.test(lower)) {
     await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => null);
-    await message.reply('🔓 *turns brass key* Channel unlocked and open for chatting, Boss! 🍕✨');
+    await message.reply(injectServerCustomEmojis('🔓 *turns brass key* Channel unlocked and open for chatting, Boss! :nero_pizza::rocket_salute:'));
     return true;
   }
 
@@ -636,7 +645,7 @@ async function executeAdminActionFromChat(message, text) {
       else seconds = parseInt(val.replace('s', ''), 10) || 5;
     }
     await channel.setRateLimitPerUser(seconds).catch(() => null);
-    await message.reply(seconds > 0 ? `⏳ Slowmode set to **${seconds}s**, Boss! 🐾` : '⚡ Slowmode disabled, full speed ahead, Boss! 🍕');
+    await message.reply(injectServerCustomEmojis(seconds > 0 ? `⏳ Slowmode set to **${seconds}s**, Boss! :rocket_salute:` : '⚡ Slowmode disabled, full speed ahead, Boss! :rocket_hype::nero_pizza:'));
     return true;
   }
 
@@ -653,7 +662,7 @@ async function executeAdminActionFromChat(message, text) {
       if (unit === 'd') ms = qty * 24 * 60 * 60 * 1000;
       if (unit === 's') ms = qty * 1000;
       await targetMember.timeout(ms, 'Timed out by Boss Sandy via chat').catch(() => null);
-      await message.reply(`⏱️ *paws down gavel* <@${targetId}> has been timed out for **${qty}${unit}** on your command, Boss! 🐾🚨`);
+      await message.reply(injectServerCustomEmojis(`⏱️ *paws down gavel* <@${targetId}> has been timed out for **${qty}${unit}** on your command, Boss! :rocket_evil:🚨`));
       return true;
     }
   }
@@ -665,7 +674,7 @@ async function executeAdminActionFromChat(message, text) {
     const targetMember = await guild.members.fetch(targetId).catch(() => null);
     if (targetMember && targetMember.kickable) {
       await targetMember.kick('Kicked by Boss Sandy via chat').catch(() => null);
-      await message.reply(`👢 *delivers raccoon kick* <@${targetId}> has been kicked from the server, Boss! 🐾`);
+      await message.reply(injectServerCustomEmojis(`👢 *delivers raccoon kick* <@${targetId}> has been kicked from the server, Boss! :rocket_salute:`));
       return true;
     }
   }
@@ -675,7 +684,7 @@ async function executeAdminActionFromChat(message, text) {
   if (banMatch) {
     const targetId = banMatch[1];
     await guild.members.ban(targetId, { reason: 'Banned by Boss Sandy via chat' }).catch(() => null);
-    await message.reply(`🔨 *swings the ban hammer* <@${targetId}> has been permanently banned, Boss! 🐾🚨`);
+    await message.reply(injectServerCustomEmojis(`🔨 *swings the ban hammer* <@${targetId}> has been permanently banned, Boss! :rocket_evil:🚨`));
     return true;
   }
 
@@ -714,7 +723,7 @@ async function executeAdminActionFromChat(message, text) {
         authorUser: message.author,
       });
 
-      await typingMsg.edit(`📢 *salutes with raccoon paw* **BOOM! AI Announcement Dispatched!** Live in <#${annCh.id}>! 🚀🦝\n\n**Title:** ${title}\n🔗 **Link:** ${sentMsg.url}`);
+      await typingMsg.edit(injectServerCustomEmojis(`📢 *salutes with raccoon paw* **BOOM! AI Announcement Dispatched!** Live in <#${annCh.id}>! :rocket_salute::rocket_hype:\n\n**Title:** ${title}\n🔗 **Link:** ${sentMsg.url}`));
     } catch (err) {
       await typingMsg.edit(`⚠️ Failed to broadcast announcement: ${err.message}`);
     }
@@ -758,7 +767,7 @@ async function executeAdminActionFromChat(message, text) {
         authorUser: message.author,
       });
 
-      await message.reply(`📢 *tail wags* **Done Boss! Custom Announcement Dispatched!** Live in <#${annCh.id}>! 🐾🚀\n🔗 **Link:** ${sentMsg.url}`);
+      await message.reply(injectServerCustomEmojis(`📢 *tail wags* **Done Boss! Custom Announcement Dispatched!** Live in <#${annCh.id}>! :rocket_salute::nero_pizza:\n🔗 **Link:** ${sentMsg.url}`));
     } catch (err) {
       await message.reply(`⚠️ Failed to broadcast announcement: ${err.message}`);
     }

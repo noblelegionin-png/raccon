@@ -29,6 +29,7 @@ import {
 } from './discordDb.js';
 import { config } from '../config.js';
 import { isDiscordOwner } from './commandHandlers.js';
+import { buildMasterDashboardEmbed, buildMasterDashboardComponents } from './buttonDashboard.js';
 
 const BRAND_COLOR = 0xff6b35; // Rocket raccoon fiery orange
 const OWNER_COLOR = 0x9b59b6; // Royal purple for owner
@@ -116,6 +117,34 @@ export async function executeServerSetup(interaction) {
     }
 
     const staffRole = createdRoles['Staff'] || guild.roles.cache.find((r) => r.name.toLowerCase() === 'staff');
+
+    // 2.5 Clean up Obsolete / Clutter Channels & Categories (Remove Web, App & Bloat)
+    const OBSOLETE_NAMES = [
+      'mini-app', 'mini-app-owner', 'rocket-mobile', 'website', 'linktree', 'games', 'add-friends',
+      'research', 'study', 'study-mode', 'downloading', 'report-issue', 'feature-requests',
+      'rocket-status', 'changelog', 'owner-logs', 'owner-analytics', 'owner-security', 'owner-backups',
+      'owner-config', 'hall-of-shame', 'live-notifications', 'voice-chat', 'gaming-sessions',
+      'reels', 'shorts', 'vids', 'Gaming Room 1', 'Gaming Room 2', 'Watch Together', 'Private Voice'
+    ];
+    for (const ch of guild.channels.cache.values()) {
+      if (OBSOLETE_NAMES.some((n) => ch.name.toLowerCase() === n.toLowerCase())) {
+        await ch.delete('Server cleanup: removing obsolete channel').catch(() => null);
+      }
+    }
+
+    const OBSOLETE_CATS = [
+      'VERIFICATION', 'CONTROL CENTER', 'ROCKET APPLICATIONS', 'INFORMATION CENTER',
+      'INTELLIGENCE CENTER', 'SUPPORT', 'SYSTEM', 'OWNER PRIVATE', 'SECURITY & SUPPORT',
+      'PRIVATE LIVE & VOICE', 'ENTERTAINMENT'
+    ];
+    for (const cat of guild.channels.cache.values()) {
+      if (cat.type === ChannelType.GuildCategory && OBSOLETE_CATS.some((c) => cat.name.toLowerCase() === c.toLowerCase())) {
+        // Only delete category if it is empty
+        if (cat.children.cache.size === 0) {
+          await cat.delete('Server cleanup: removing obsolete category').catch(() => null);
+        }
+      }
+    }
 
     // 3. Process Categories & Channels
     for (const catDef of SERVER_CATEGORIES) {
@@ -338,14 +367,16 @@ export async function executeServerSetup(interaction) {
 
     // 4. Update Guild Settings with Key Channels
     const announcementsCh = guild.channels.cache.find((c) => c.name === 'announcements');
-    const joinCh = guild.channels.cache.find((c) => c.name === 'join');
-    const rulesCh = guild.channels.cache.find((c) => c.name === 'rules');
+    const rulesCh = guild.channels.cache.find((c) => c.name === 'rules-info') || guild.channels.cache.find((c) => c.name === 'rules');
     const auditLogsCh = guild.channels.cache.find((c) => c.name === 'audit-logs');
     const chatCh = guild.channels.cache.find((c) => c.name === 'chat');
+    const dashboardCh = guild.channels.cache.find((c) => c.name === 'rocket-dashboard');
+    const helpDeskCh = guild.channels.cache.find((c) => c.name === 'help-desk') || guild.channels.cache.find((c) => c.name === 'help');
+    const verifyCh = guild.channels.cache.find((c) => c.name === 'verify');
 
     updateGuildSettings(guild.id, {
       guild_name: guild.name,
-      welcome_channel_id: joinCh ? joinCh.id : undefined,
+      welcome_channel_id: rulesCh ? rulesCh.id : undefined,
       rules_channel_id: rulesCh ? rulesCh.id : (announcementsCh ? announcementsCh.id : undefined),
       mod_log_channel_id: auditLogsCh ? auditLogsCh.id : undefined,
       chat_channel_id: chatCh ? chatCh.id : undefined,
@@ -355,24 +386,27 @@ export async function executeServerSetup(interaction) {
 
     const completionEmbed = new EmbedBuilder()
       .setColor(SUCCESS_COLOR)
-      .setTitle('🚀 ROCKET AI — SERVER INFRASTRUCTURE DEPLOYED & CLEANED')
+      .setTitle('🚀 ROCKET AI — FULL POWER SERVER INFRASTRUCTURE DEPLOYED')
       .setDescription(
-        `Welcome Boss **Sandy**! The complete server infrastructure has been purged of old clutter and cleanly redeployed.\n\n` +
+        `Welcome Boss **Sandy**! The server infrastructure has been completely restructured and purged of all legacy clutter.\n\n` +
         `**Infrastructure & Clean Setup Summary:**\n` +
-        `• **Server Cleaned:** Old messages and duplicate cards purged across all channels 🧹✨\n` +
-        `• **Chat Mode Active:** ⚪ **Mention-Only Mode** (Rocket ONLY talks when @mentioned or asked in commands!)\n` +
-        `• **Mute Control:** 🔊 **Unmuted** (Mute anytime with \`/mute\`, restore with \`/unmute\`)\n` +
-        `• **Talking Channels:** Strictly restricted to <#${chatCh?.id || 'chat'}> & <#${guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}> 💬\n` +
+        `• **Server Restructured:** 5 Streamlined Categories & 13 Core Channels 🌟\n` +
+        `• **Master Button Dashboard:** 200+ Direct button features deployed in <#${dashboardCh?.id || 'rocket-dashboard'}> 🎛️ (Zero commands needed!)\n` +
+        `• **Rocket AI at Full Power:** High-reasoning neural hub in <#${chatCh?.id || 'chat'}> & DMs (Expanded token budget: 2,500 tokens) 🦝⚡\n` +
+        `• **6-Hour Auto-Purge Janitor:** Automated background sweeper cleans chat, text, clips, and memes every 15 min, protecting pinned messages 🧹\n` +
+        `• **Sandy Absolute Defense:** Zero tolerance for disrespect towards Sandy — triggers immediate message purge, 1-hour member timeout & SQLite logging 🛡️\n` +
+        `• **Direct Admin Execution:** Purge, lock, unlock, timeout, kick, ban directly from Sandy's chat/DM instructions 👑\n` +
         `• **Roles Configured:** @Verified, @Brother, @Sandy's Girlfriend, @Friend, @Staff, etc. 🎭\n` +
-        `• **Voice Rooms:** General Voice, Gaming Room 1 & 2, Watch Together, Rocket Voice, Private Voice 🔊\n` +
-        `• **Minecraft Gaming Bridge:** Native Bedrock link ready via \`/connect localhost:19135/ws/minecraft\` 🎮\n\n` +
+        `• **Voice Lounge:** General Voice, Gaming Room, Rocket Lounge 🔊\n\n` +
         `**Key Channel Hubs:**\n` +
-        `👉 <#${rulesCh?.id || 'rules'}> — Server Guidelines & Guidelines 📜\n` +
-        `👉 <#${guild.channels.cache.find((c) => c.name === 'verify')?.id}> — Member Verification 🛡️\n` +
-        `👉 <#${chatCh?.id || 'chat'}> — Community Chat 💬\n` +
-        `👉 <#${guild.channels.cache.find((c) => c.name === 'help')?.id}> — Support Ticket Station 🎫`
+        `👉 <#${dashboardCh?.id || 'rocket-dashboard'}> — Master Control Station (Buttons for everything)\n` +
+        `👉 <#${rulesCh?.id || 'rules-info'}> — Server Guidelines & Zero-Tolerance Policies 📜\n` +
+        `👉 <#${verifyCh?.id || 'verify'}> — Member 1-Click Verification Gateway 🛡️\n` +
+        `👉 <#${chatCh?.id || 'chat'}> — Full Power Conversational Hub 💬\n` +
+        `👉 <#${helpDeskCh?.id || 'help-desk'}> — Confidential Support Ticket Station 🎫\n` +
+        `👉 <#${auditLogsCh?.id || 'audit-logs'}> — Security Audit Logs & Moderation Trail 🔒`
       )
-      .setFooter({ text: 'Rocket AI • Built exclusively for Sandy & Friends 👑' })
+      .setFooter({ text: 'Rocket AI • Built Exclusively for Sandy (Boss) 👑🐾' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [completionEmbed] });
@@ -416,37 +450,28 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
     let components = [];
 
     switch (chDef.name) {
-      case 'welcome': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('👋 WELCOME TO SANDY & FRIENDS PRIVATE SERVER')
-          .setDescription(
-            `Welcome to the private sanctuary of **Sandy** and invited friends! 🍕✨\n\n` +
-            `This server is a private space for close friends, gaming squads, AI development, and collaborative projects.\n\n` +
-            `**Getting Started:**\n` +
-            `1. 📜 Review guidelines in <#${channel.guild.channels.cache.find((c) => c.name === 'rules')?.id || 'rules'}>\n` +
-            `2. 🛡️ Complete verification in <#${channel.guild.channels.cache.find((c) => c.name === 'verify')?.id || 'verify'}>\n` +
-            `3. 🎭 Pick your interest roles in <#${channel.guild.channels.cache.find((c) => c.name === 'choose-roles')?.id || 'choose-roles'}>\n` +
-            `4. 💬 Say hello in <#${channel.guild.channels.cache.find((c) => c.name === 'chat')?.id || 'chat'}>`
-          )
-          .setFooter({ text: 'Private Server • Guarded by Rocket AI 🐾' });
+      case 'rocket-dashboard': {
+        embed = buildMasterDashboardEmbed(channel.guild);
+        components = buildMasterDashboardComponents();
         break;
       }
 
+      case 'rules-info':
       case 'rules': {
         embed = new EmbedBuilder()
           .setColor(BRAND_COLOR)
-          .setTitle('📜 PRIVATE SERVER RULES & GUIDELINES')
+          .setTitle('📜 ROCKET EMPIRE — SERVER RULES & ZERO-TOLERANCE CODE')
           .setDescription(
-            `Welcome to our private community! Please follow these guidelines to keep the server safe, clean, and fun for everyone:\n\n` +
-            `🤝 **1. Respect & Loyalty:** Treat friends with kindness and respect. Harassment, toxicity, hate speech, or bad vibes will result in immediate removal.\n\n` +
-            `🛡️ **2. Boss Protection:** Hostility or toxicity toward Sandy (Nero) will trigger an instant security lockdown and defense protocol.\n\n` +
-            `🛑 **3. Anti-Spam Policy:** Rapid message flooding (7 duplicate messages in 30s) triggers an automated 30-minute timeout. Keep chats clean and readable!\n\n` +
-            `🔒 **4. Absolute Privacy:** Everything discussed in this server stays in this server. No unauthorized screenshots or leaks without consent.\n\n` +
-            `🎫 **5. Ticket & Support:** Need help, have questions, or want to report an issue? Use <#${channel.guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}>.\n\n` +
-            `🦝 **6. Rocket AI Manners:** Rocket operates in ⚪ **Mention-Only Mode** by default. It only talks in <#${channel.guild.channels.cache.find((c) => c.name === 'chat')?.id || 'chat'}> and <#${channel.guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}> when you explicitly tag <@${channel.client.user.id}>!`
+            `Welcome to the inner circle! To keep our community elite, safe, and productive, all members must abide by these rules:\n\n` +
+            `🤝 **1. Respect & Camaraderie:** Treat every member with respect. Harassment, toxicity, hate speech, or malicious trolling result in an immediate permanent ban.\n\n` +
+            `🛡️ **2. Absolute Sandy (Boss) Protection:** Zero tolerance for disrespect, threats, or slander directed at **Sandy (Boss)**. Violations trigger an immediate message deletion, automated 1-hour timeout, and a strike recorded in the SQLite security vault.\n\n` +
+            `🧹 **3. 6-Hour Auto-Purge Protocol:** To maintain peak performance and zero clutter, #chat, #media-clips, and #memes automatically purge messages older than 6 hours. Pinned messages are permanently protected.\n\n` +
+            `🛑 **4. Anti-Spam & Flooding:** Fast message flooding triggers automated temporary timeouts. Keep conversation quality high.\n\n` +
+            `🎛️ **5. Button-First Server:** No complicated slash commands! Head over to <#${channel.guild.channels.cache.find((c) => c.name === 'rocket-dashboard')?.id || 'rocket-dashboard'}> for 200+ interactive buttons to manage moderation, AI brains, roles, and tickets.\n\n` +
+            `🎫 **6. Support & Inquiries:** Need staff attention or want to report an issue? Open a confidential ticket in <#${channel.guild.channels.cache.find((c) => c.name === 'help-desk')?.id || 'help-desk'}>.`
           )
-          .setFooter({ text: 'Monitored 24/7 by Rocket Security Guard 🛡️🐾' });
+          .setFooter({ text: 'Monitored 24/7 by Rocket Security Engine 🛡️🐾' })
+          .setTimestamp();
         break;
       }
 
@@ -456,14 +481,14 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
           .setColor(SUCCESS_COLOR)
           .setTitle('🛡️ MEMBER VERIFICATION GATEWAY')
           .setDescription(
-            `Welcome! Complete this quick 4-step interactive verification to:\n\n` +
-            `• Select what Rocket should call you\n` +
+            `Welcome! Complete this quick 1-click interactive verification to unlock the server:\n\n` +
+            `• Select your preferred display name\n` +
             `• Pick your areas of interest (Gaming, Coding, AI, Study, Content)\n` +
             `• Confirm your relationship with Sandy (**Brother**, **Sandy's Girlfriend**, or **Friend**)\n` +
             `• Automatically unlock your assigned roles and server channels\n\n` +
             `👉 Click the **Start Verification** button below to begin!`
           )
-          .setFooter({ text: 'Rocket Security • Takes ~30 seconds ⏱️' });
+          .setFooter({ text: 'Rocket Security • Takes ~15 seconds ⏱️' });
 
         components = [
           new ActionRowBuilder().addComponents(
@@ -482,12 +507,12 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
           .setTitle('🎭 CUSTOMIZE YOUR INTEREST ROLES')
           .setDescription(
             `Click the buttons below to toggle your interest roles:\n\n` +
-            `• 🎮 **Gaming** — Community gaming roster, Minecraft, Roblox, Brawl Stars\n` +
+            `• 🎮 **Gaming** — Community gaming roster, Roblox, and favorite titles\n` +
             `• 💻 **Coding** — Programming, Python, JavaScript, Discord bots\n` +
             `• 🤖 **AI & Tech** — AI models, neural networks, automation\n` +
             `• 📚 **Study** — Academic study groups, quizzes, tutoring\n` +
-            `• 🎨 **Content** — Media creation, memes, reels & video editing\n\n` +
-            `*Note: Relationship roles (Brother, Sandy's Girlfriend, Friend) are managed exclusively by Sandy & Rocket.*`
+            `• 🎨 **Content** — Media creation, memes & video editing\n\n` +
+            `*Note: VIP relationship roles (Brother, Sandy's Girlfriend, Friend) are managed directly by Sandy & Rocket.*`
           );
 
         components = [
@@ -517,6 +542,76 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
         break;
       }
 
+      case 'chat': {
+        embed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('🦝 ROCKET AI — FULL POWER NEURAL HUB')
+          .setDescription(
+            `Welcome to **#chat**! I am **Rocket**, your mischievous, witty raccoon AI companion created under **Nero Labs** 🐾🍕\n\n` +
+            `⚡ **Rocket at Full Power:**\n` +
+            `• **Expanded Token Budget:** High reasoning mode with up to 2,500 output tokens.\n` +
+            `• **Full Conversational Memory:** Remembers conversations, your preferences, and past context.\n` +
+            `• **6-Hour Auto-Purge:** Active chats are swept every 15 minutes to clear messages older than 6 hours, keeping discussions fresh and fast! (Pinned messages preserved).\n` +
+            `• **Direct Sandy Actions:** Sandy can instruct Rocket directly in chat or DMs to lock/unlock channels, purge messages, timeout, kick, or ban without slash commands.\n` +
+            `• **Mention or DM:** Tag <@${channel.client.user.id}> here or message in DMs for private assistant mode!\n\n` +
+            `*Drop some pizza slices with the button dashboard or say hello!* 🍕🦝`
+          )
+          .setFooter({ text: 'Rocket AI • Neural Companion 🐾' });
+        break;
+      }
+
+      case 'announcements': {
+        embed = new EmbedBuilder()
+          .setColor(GOLD_COLOR)
+          .setTitle('📢 OFFICIAL SERVER ANNOUNCEMENTS')
+          .setDescription(
+            `Official broadcasts, system updates, and major news from **Sandy** and the administrative team.\n\n` +
+            `• Check here regularly for community events, bot upgrades, and important notices.\n` +
+            `• Only Sandy and authorized staff may broadcast to this channel.`
+          )
+          .setFooter({ text: 'Rocket Broadcast Station 📡' });
+        break;
+      }
+
+      case 'general': {
+        embed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('💬 COMMUNITY LOUNGE — GENERAL CHAT')
+          .setDescription(
+            `The central social gathering hub for members and friends!\n\n` +
+            `• Chat about life, projects, ideas, or hang out.\n` +
+            `• Respect community guidelines and enjoy the banter.\n` +
+            `• Tag Rocket (<@${channel.client.user.id}>) if you want a witty remark or helpful insight!`
+          )
+          .setFooter({ text: 'Community Lounge 🍕' });
+        break;
+      }
+
+      case 'media-clips': {
+        embed = new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle('🎬 MEDIA & HIGHLIGHT CLIPS')
+          .setDescription(
+            `Share your best gameplay clips, screenshots, creative art, and media here!\n\n` +
+            `🧹 *Note: This channel runs on the 6-Hour Auto-Purge schedule to prevent media backlog and keep the server lightweight. Pinned clips are permanently preserved.*`
+          )
+          .setFooter({ text: 'Media Showcase • 6h Auto-Clean 🎥' });
+        break;
+      }
+
+      case 'memes': {
+        embed = new EmbedBuilder()
+          .setColor(0xf39c12)
+          .setTitle('🐸 TOP-TIER MEMES & HUMOR')
+          .setDescription(
+            `Drop your freshest memes, funny videos, and comedic gold!\n\n` +
+            `🧹 *Auto-cleaned after 6 hours to keep content spicy and fresh! Pin your greatest memes to save them forever.*`
+          )
+          .setFooter({ text: 'Meme Vault • 6h Auto-Clean 🤣' });
+        break;
+      }
+
+      case 'help-desk':
       case 'help': {
         embed = new EmbedBuilder()
           .setColor(INFO_COLOR)
@@ -524,8 +619,8 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
           .setDescription(
             `Need assistance, want to report an issue, or need private human support from Sandy and staff?\n\n` +
             `Click **Open Support Ticket** below. Rocket will automatically provision a private ticket channel accessible only to you, Rocket, and authorized staff.\n\n` +
-            `• Attach screenshots, transaction IDs, or explanations directly in the ticket.\n` +
-            `• Rocket will guide you through evidence verification and alert staff.`
+            `• Attach screenshots or explanations directly in the ticket.\n` +
+            `• Staff will be immediately notified to assist you.`
           )
           .setFooter({ text: 'Rocket Support Dispatcher 🦝' });
 
@@ -540,369 +635,17 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
         break;
       }
 
-      case 'help-admin': {
+      case 'audit-logs': {
         embed = new EmbedBuilder()
           .setColor(DANGER_COLOR)
-          .setTitle('🔒 STAFF TICKET MANAGEMENT & ESCALATION QUEUE')
+          .setTitle('🔒 ROCKET SECURITY AUDIT & MODERATION TRAIL')
           .setDescription(
-            `Administrative console for Sandy and authorized staff.\n\n` +
-            `• Active tickets will be published here with quick action buttons.\n` +
-            `• Staff can claim tickets, add internal notes, review evidence, or escalate to Sandy.\n` +
-            `• Only authorized staff and Sandy have access to this room.`
-          );
-        break;
-      }
-
-      case 'security': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('🛡️ SECURITY MONITORING & INCIDENT INTELLIGENCE')
-          .setDescription(
-            `Central security log for abuse reporting, suspected scam alerts, and evidence verification.\n\n` +
-            `Rocket maintains transparent message archival and verified evidence scoring:\n` +
-            `• **VERIFIED:** Original records support the report\n` +
-            `• **UNVERIFIED:** Claim exists but original record is unconfirmed\n` +
-            `• **DISPUTED:** Conflicting timestamps, heavy edits, or mismatched IDs`
-          );
-        break;
-      }
-
-      case 'hall-of-shame': {
-        embed = new EmbedBuilder()
-          .setColor(DANGER_COLOR)
-          .setTitle('🚫 RESTRICTED OFFENDER ARCHIVE & HALL OF SHAME')
-          .setDescription(
-            `Restricted archive for confirmed scammers and severe rule violators.\n\n` +
-            `• Entries can only be published by authorized staff with verified evidence references.\n` +
-            `• Private credentials, addresses, and phone numbers are strictly prohibited.\n` +
-            `• Appeals may be submitted by opening a ticket in <#${channel.guild.channels.cache.find((c) => c.name === 'help')?.id || 'help'}>.`
-          );
-        break;
-      }
-
-      case 'live-notifications': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('📺 LIVE VOICE, STREAMING & GAMING ACTIVITY FEED')
-          .setDescription(
-            `Real-time live feed for Sandy's voice sessions, screen sharing / Go Live, and games!\n\n` +
-            `• Whenever Sandy joins voice or starts streaming, alerts appear here with a **Join Voice** button!\n` +
-            `• Want personal alerts in your DMs? Type \`/notifications\` to customize your subscription settings.`
-          );
-        break;
-      }
-
-      case 'control-panel': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('🛠️ ROCKET AI — PERSONAL USER CONTROL PANEL')
-          .setDescription(
-            `Welcome to your personal Rocket control station!\n\n` +
-            `Click **Open My Control Panel** below to access your private, isolated user dashboard, configure your preferred identity, view your token status, and explore tools.\n\n` +
-            `🔒 *Your personal dashboard link is generated privately and never exposed to other members.*`
+            `Administrative audit log for Sandy and authorized staff.\n\n` +
+            `• Real-time logging of user timeouts, kicks, bans, and auto-purge operations.\n` +
+            `• Sandy defense alerts: Any disrespect toward Sandy is logged here with full user details and strike counts.\n` +
+            `• System heartbeat, permission changes, and emergency lockdown logs.`
           )
-          .setFooter({ text: 'Nero Labs Personal Dashboard Gateway 🐾' });
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_open_control_panel')
-              .setLabel('🛠️ Open My Control Panel')
-              .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-              .setCustomId('btn_open_mini_app')
-              .setLabel('🚀 Launch Mini App')
-              .setStyle(ButtonStyle.Success)
-          ),
-        ];
-        break;
-      }
-
-      case 'control-panel-owner': {
-        embed = new EmbedBuilder()
-          .setColor(OWNER_COLOR)
-          .setTitle('👑 ROCKET AI — OWNER COMMAND CENTER (SANDY ONLY)')
-          .setDescription(
-            `Supreme administrative hub for **Sandy**.\n\n` +
-            `• **System Status:** Active & Guarded\n` +
-            `• **Governance:** Zero-trust security policy enforced\n` +
-            `• **Permissions:** Only Sandy holds supreme administrative authority\n\n` +
-            `Use the controls below to inspect system vitals, manage staff permissions, or launch the Owner Web OS.`
-          )
-          .setFooter({ text: 'Restricted Access • Sandy Supreme Clearance 👑' });
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_owner_vitals')
-              .setLabel('📊 System Vitals')
-              .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-              .setCustomId('btn_owner_permissions')
-              .setLabel('👥 User Permissions')
-              .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-              .setCustomId('btn_owner_miniapp')
-              .setLabel('🚀 Owner Web Console')
-              .setStyle(ButtonStyle.Success)
-          ),
-        ];
-        break;
-      }
-
-      case 'website': {
-        const siteUrl = serverLinks.website_url || webBaseUrl;
-        embed = new EmbedBuilder()
-          .setColor(INFO_COLOR)
-          .setTitle('🌐 NERO LABS & ROCKET AI — OFFICIAL PORTAL')
-          .setDescription(
-            `Access the official home of Nero Labs and the Rocket AI platform.\n\n` +
-            `🔗 **Website URL:** ${siteUrl}\n\n` +
-            `Stay connected with our latest updates, models, applications, and announcements!`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setLabel('🌐 Visit Official Website')
-              .setStyle(ButtonStyle.Link)
-              .setURL(siteUrl)
-          ),
-        ];
-        break;
-      }
-
-      case 'linktree': {
-        const treeUrl = serverLinks.linktree_url || 'https://linktr.ee/neroaurelius';
-        embed = new EmbedBuilder()
-          .setColor(SUCCESS_COLOR)
-          .setTitle('🌲 SANDY & COMMUNITY LINKTREE')
-          .setDescription(
-            `Explore official links, social profiles, and project resources for Sandy and community creators.\n\n` +
-            `🔗 **Main Linktree:** ${treeUrl}`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setLabel("🌲 Open Sandy's Linktree")
-              .setStyle(ButtonStyle.Link)
-              .setURL(treeUrl)
-          ),
-        ];
-        break;
-      }
-
-      case 'games': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('🎮 ACTIVE GAMING HUB & SQUAD ROSTER')
-          .setDescription(
-            `Welcome to our gaming lounge! Connect with members across favorite titles:\n\n` +
-            `• **Minecraft** • **Roblox** • **Brawl Stars**\n` +
-            `• **Valorant** • **Steam** • **Palworld** • **GTA V**\n\n` +
-            `Click **View Gaming Roster** below to see everyone's gamer tags, or link your gamertag in <#${channel.guild.channels.cache.find((c) => c.name === 'add-friends')?.id}>!`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_view_gaming_roster')
-              .setLabel('📋 View Gaming Roster')
-              .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-              .setCustomId('btn_add_gaming_profile')
-              .setLabel('➕ Add Your Gamer Tag')
-              .setStyle(ButtonStyle.Success)
-          ),
-        ];
-        break;
-      }
-
-      case 'add-friends': {
-        embed = new EmbedBuilder()
-          .setColor(SUCCESS_COLOR)
-          .setTitle('➕ LINK YOUR GAMING PROFILES')
-          .setDescription(
-            `Add your in-game username or Player ID so friends and teammates can find and play with you!\n\n` +
-            `**Supported Titles:**\n` +
-            `Minecraft, Roblox, Brawl Stars, Valorant, Fortnite, Steam, GTA V, Palworld, and custom games.\n\n` +
-            `👉 Click the button below to register or update your gaming profiles:`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_add_gaming_profile')
-              .setLabel('🎮 Add / Update Gaming Profile')
-              .setStyle(ButtonStyle.Success)
-          ),
-        ];
-        break;
-      }
-
-      case 'mini-app': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('🚀 ROCKET AI — WEB MINI APP')
-          .setDescription(
-            `Launch the full Rocket Web OS directly from your browser or mobile device!\n\n` +
-            `• **Features:** Interactive companion, study helper, task board, and personalized tools.\n` +
-            `• **Privacy:** Isolated authentication session ensures only you see your data.`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_open_mini_app')
-              .setLabel('🚀 Open Personal Mini App')
-              .setStyle(ButtonStyle.Primary)
-          ),
-        ];
-        break;
-      }
-
-      case 'mini-app-owner': {
-        embed = new EmbedBuilder()
-          .setColor(OWNER_COLOR)
-          .setTitle('👑 ROCKET AI — OWNER CONSOLE MINI APP')
-          .setDescription(
-            `Exclusive console interface for **Sandy**.\n\n` +
-            `Access master telemetry, model provider controls, WhatsApp/Telegram bridges, and private storage.\n` +
-            `🔒 *Guarded by owner authentication token.*`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_owner_miniapp')
-              .setLabel('👑 Launch Owner Web OS')
-              .setStyle(ButtonStyle.Success)
-          ),
-        ];
-        break;
-      }
-
-      case 'rocket-mobile': {
-        const mobileUrl = serverLinks.rocket_mobile_url || `${webBaseUrl}/rock3t/index.html`;
-        embed = new EmbedBuilder()
-          .setColor(INFO_COLOR)
-          .setTitle('📱 ROCKET MOBILE WEB APPLICATION')
-          .setDescription(
-            `Optimized mobile web experience for iOS and Android.\n\n` +
-            `Click **Open Rocket Mobile** to launch the mobile-optimized interface.`
-          );
-
-        components = [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('btn_open_rocket_mobile')
-              .setLabel('📱 Open Rocket Mobile')
-              .setStyle(ButtonStyle.Primary)
-          ),
-        ];
-        break;
-      }
-
-      case 'chat': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('🦝 ROCKET AI — MAIN CONVERSATION HUB')
-          .setDescription(
-            `Hey everyone! I am **Rocket**, your mischievous, witty raccoon AI companion created under **Nero Labs** 🐾🍕\n\n` +
-            `**Conversation Modes Supported:**\n` +
-            `1. **Constant Talk Mode:** Rocket participates actively on every message!\n` +
-            `2. **Active Vent/Banter Mode:** Speaks when called by name ("Rocket..."), mentioned, or replied to.\n` +
-            `3. **Dimension / Mention-Only Mode:** Silent guardian, only speaks when explicitly @tagged.\n\n` +
-            `*Loop Protection & 24/7 Boss Defense are active! Have fun and drop some pizza slices with \`/feed\`!*`
-          );
-        break;
-      }
-
-      case 'research': {
-        embed = new EmbedBuilder()
-          .setColor(0x1abc9c)
-          .setTitle('🔬 ROCKET AI — HIGH-REASONING RESEARCH LAB')
-          .setDescription(
-            `Dedicated channel for deep inquiry, structured research, scientific analysis, and comprehensive verification.\n\n` +
-            `• **Reasoning Configuration:** Maximum depth & factual verification enabled.\n` +
-            `• **Use cases:** Mathematics, algorithm design, architecture papers, technical debates, and deep syntheses.\n` +
-            `• **Token Optimization:** Unrestricted for thorough, step-by-step reasoning.`
-          );
-        break;
-      }
-
-      case 'study': {
-        embed = new EmbedBuilder()
-          .setColor(GOLD_COLOR)
-          .setTitle('📚 ROCKET AI — FAST EDUCATIONAL STUDY HUB')
-          .setDescription(
-            `Fast, accessible, and pedagogical study assistant.\n\n` +
-            `• **Focus:** Clear concept explanations, homework breakdowns, and mental models.\n` +
-            `• **Token Efficiency:** Streamlined for rapid, high-retention answers.`
-          );
-        break;
-      }
-
-      case 'study-mode': {
-        embed = new EmbedBuilder()
-          .setColor(0x34495e)
-          .setTitle('🎯 ROCKET AI — INTERACTIVE STUDY SESSIONS & QUIZZES')
-          .setDescription(
-            `Interactive coaching station! Rocket acts as your active tutor:\n\n` +
-            `• Practice quizzes, flashcard sessions, and step-by-step logic drills.\n` +
-            `• Maintains session continuity so you can master subjects topic by topic.`
-          );
-        break;
-      }
-
-      case 'media': {
-        embed = new EmbedBuilder()
-          .setColor(0x9b59b6)
-          .setTitle('🎨 ROCKET AI — VISUAL & MEDIA LAB')
-          .setDescription(
-            `Craft creative visual concepts, prompt engineering, aesthetic critiques, and multimedia ideas.\n\n` +
-            `Share images, art, and graphic design prompts to explore visual workflows with Rocket.`
-          );
-        break;
-      }
-
-      case 'downloading': {
-        embed = new EmbedBuilder()
-          .setColor(0x16a085)
-          .setTitle('📥 ROCKET AI — SAFE DOWNLOAD ASSISTANT')
-          .setDescription(
-            `Assistance with legitimate media workflows, open-source releases, and file transfers.\n\n` +
-            `🔒 *Security Notice:* Rocket conducts automated verification on links and maintains strict confidentiality.`
-          );
-        break;
-      }
-
-      case 'chat': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('💬 COMMUNITY CHAT & ROCKET AI')
-          .setDescription(
-            `Welcome to **#chat**! This is the main discussion lounge for Sandy and friends. 🍕✨\n\n` +
-            `🦝 **Rocket AI Chat Modes:**\n` +
-            `• ⚪ **Mention-Only Mode (ACTIVE):** Rocket will **ONLY** speak when directly tagged (<@${channel.client.user.id}>) or replied to! It will never interrupt normal human conversations.\n` +
-            `• 🔥 **Constant Chat Mode:** Want Rocket to actively banter on every message? Sandy or admins can run \`/chatmode mode:constant\`!\n` +
-            `• 🔇 **Mute Control:** Sandy or staff can mute Rocket anytime with \`/mute\`.\n` +
-            `• 🎮 **Minecraft Bedrock Integration:** In Minecraft, connect live using \`/connect localhost:19135/ws/minecraft\` to talk and receive in-game items!\n\n` +
-            `*Enjoy the server, keep it friendly, and have fun!* 🐾🚀`
-          )
-          .setFooter({ text: 'Rocket AI • Tag @Rocket to chat 👑' });
-        break;
-      }
-
-      case 'rocket-status': {
-        embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle('⚡ ROCKET AI — SYSTEM HEARTBEAT & VITALS')
-          .setDescription(
-            `Real-time status monitor for Rocket AI and Nero Labs cloud services.\n\n` +
-            `Type \`/status\` anytime to view live mood, hunger level, and gateway latency.`
-          );
+          .setFooter({ text: 'Confidential • Staff & Sandy Eyes Only 🔒' });
         break;
       }
 

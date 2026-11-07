@@ -59,12 +59,15 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
   }
 
   // 2. Eradicate ScaleMax Provider Gateway Boilerplate (Rules 6, 8, 9, 64, 65)
-  // If ScaleMax injected its gateway interception text anywhere in the response:
+  // Strip provider boilerplate without destroying the user's actual answer
   const scaleMaxInterceptionPattern = /You are chatting with GPT-6 Luna, an official ScaleMax model.*?(?:available for this key\.?|$)/gis;
   if (scaleMaxInterceptionPattern.test(text)) {
-    const isAskingGreeting = /how\s+are\s+(?:u|you)/i.test(userPrompt);
-    const greetingPrefix = isAskingGreeting ? "I'm doing great, thank you! 😊 " : "";
-    text = `${greetingPrefix}You're talking to Rocket AI, created by Sandy. I'm powered by the Rocket Neural Engine to assist you with conversations, tools, coding, and media. How can I help you today? 🦝⚡`;
+    text = text.replace(scaleMaxInterceptionPattern, '').trim();
+    if (!text) {
+      const isAskingGreeting = /how\s+are\s+(?:u|you)/i.test(userPrompt);
+      const greetingPrefix = isAskingGreeting ? "I'm doing great, thank you! 😊 " : "";
+      text = `${greetingPrefix}Yo! I'm Rocket AI, crafted by Sandy. Ready for action! 🦝⚡`;
+    }
     modified = true;
   }
 

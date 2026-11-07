@@ -48,18 +48,27 @@ CORE PRINCIPLES & ATTRIBUTES:
  */
 export function detectSandyAbuse(text = '') {
   const lower = text.toLowerCase();
-  // Patterns targeting Sandy / Nero
-  const mentionsSandy = /\b(sandy|nero|boss)\b/i.test(lower);
-  const abuseWords = /\b(idiot|stupid|loser|bastard|scam|fraud|hate|fake|shut up|chutiya|kamina|gandu|harami|madarchod|bhosdike|bhadwe)\b/i.test(lower);
+  // Patterns targeting Sandy / Nero / Owner / Creator
+  const mentionsSandy = /\b(sandy|nero|boss|owner|creator|admin)\b/i.test(lower);
+  const abuseWords = /\b(idiot|stupid|loser|bastard|scam|fraud|hate|fake|shut\s*up|threat|kill|punch|attack|curse|trash|clown|noob|chutiya|kamina|gandu|harami|madarchod|bhosdike|bhadwe|lodu|suar|kutte)\b/i.test(lower);
 
   if (mentionsSandy && abuseWords) {
     return true;
   }
-  // Direct abuse in DM or direct reply
-  if (/^(fuck you sandy|sandy is a|sandy is an|sandy idiot|hate sandy)/i.test(lower)) {
+  // Direct hostility or slurs targeting Sandy
+  if (/^(fuck\s*you\s*sandy|sandy\s+is\s+(?:a|an)|sandy\s+idiot|hate\s+sandy|sandy\s+sucks|screw\s+sandy|ban\s+sandy|die\s+sandy)/i.test(lower)) {
+    return true;
+  }
+  // General hate or threats directed at leadership
+  if (/\b(?:threaten|doxx|swat|raid)\b/i.test(lower) && mentionsSandy) {
     return true;
   }
   return false;
+}
+
+export function detectSelfHarmOrSevereThreat(text = '') {
+  const lower = text.toLowerCase();
+  return /\b(kill\s*myself|suicide|commit\s*suicide|end\s*my\s*life|hang\s*myself|self\s*harm|hurt\s*myself|slit\s*wrists)\b/i.test(lower);
 }
 
 /**

@@ -22,7 +22,7 @@ import { checkSmartAntiSpam } from '../antiSpam.js';
 import { getBehaviorProfilePrompt } from '../channelRegistry.js';
 import { getAgentRouting } from '../../models/modelRouter.js';
 import { rocketLifeEngine } from '../../rocket/lifeEngine.js';
-import { detectSandyAbuse, generateDefenseResponse, buildRocketDirective } from '../../rocket/persona.js';
+import { detectSandyAbuse, detectSelfHarmOrSevereThreat, generateDefenseResponse, buildRocketDirective } from '../../rocket/persona.js';
 import { isSandy } from '../../rocket/rbac.js';
 import { scaleMaxAdapter } from '../../provider/scaleMaxAdapter.js';
 import { isDiscordOwner } from '../commandHandlers.js';
@@ -81,20 +81,73 @@ export async function handleMessageCreate(message) {
   }
 
   // -------------------------------------------------------------------------
-  // 1. Defend Sandy (Supreme Boss Protection)
+  // 0.5 Self-Harm & Severe Threat Support & Safety Intervention
+  // -------------------------------------------------------------------------
+  if (detectSelfHarmOrSevereThreat(content)) {
+    try {
+      const helpEmbed = new EmbedBuilder()
+        .setColor(0xe74c3c)
+        .setTitle('💜 ROCKET SAFETY CARE — YOU ARE NOT ALONE')
+        .setDescription(
+          `Hey <@${author.id}>, Rocket heard you and we care about you. You are valuable, and help is available right now:\n\n` +
+          `• 📞 **National / International Suicide & Crisis Lifeline:** Call or text **988** (Available 24/7, free & confidential)\n` +
+          `• 💬 **Crisis Text Line:** Text **HOME** to **741741**\n` +
+          `• 🌐 **International Helplines:** https://findahelpline.com/\n\n` +
+          `Please talk to a trusted friend, family member, or professional right away. You don't have to carry this alone. 🐾💜`
+        )
+        .setFooter({ text: 'Rocket AI Safety Intervention • 24/7 Compassion' });
+
+      await message.reply({ embeds: [helpEmbed] }).catch(() => null);
+
+      const auditLogCh = guild.channels.cache.find((c) => c.name === 'audit-logs');
+      if (auditLogCh && auditLogCh.isTextBased()) {
+        const staffAlert = new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle('🚨 URGENT SAFETY CARE ALERT')
+          .setDescription(
+            `A member (<@${author.id}> - ${author.tag}) expressed signs of self-harm or distress in <#${channel.id}>.\n` +
+            `Support resources were delivered immediately.`
+          )
+          .setTimestamp();
+        await auditLogCh.send({ embeds: [staffAlert] }).catch(() => null);
+      }
+      return;
+    } catch (careErr) {
+      console.warn('[Safety Care Alert Error]:', careErr.message);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 1. Defend Sandy (Supreme Boss Protection — Instant 1-Hour Timeout & Deletion)
   // -------------------------------------------------------------------------
   if (!isOwner && detectSandyAbuse(content)) {
     try {
+      await message.delete().catch(() => null);
+
+      let timeoutApplied = false;
+      if (member && member.moderatable) {
+        try {
+          await member.timeout(60 * 60 * 1000, 'Zero tolerance: Hostility/disrespect towards Sandy (Owner)');
+          timeoutApplied = true;
+        } catch (tmErr) {
+          console.warn('[Boss Protection Timeout Error]:', tmErr.message);
+        }
+      }
+
       const defense = generateDefenseResponse(member?.displayName || author.username);
-      await message.reply(defense);
-      addWarning(guild.id, author.id, author.tag, 'system', 'Rocket Security Guard', 'Hostility / abuse towards Sandy');
+      const actionNotice = timeoutApplied
+        ? `\n\n🚨 **ENFORCEMENT:** <@${author.id}> has been placed in a **1-HOUR TIMEOUT** for disrespecting Boss Sandy! 🐾`
+        : `\n\n🚨 **ENFORCEMENT:** Message purged and official warning recorded. Disrespect is strictly forbidden! 🐾`;
+
+      await channel.send(`${defense}${actionNotice}`);
+      addWarning(guild.id, author.id, author.tag, 'system', 'Rocket Defense Guard', 'Hostility / disrespect towards Sandy (Owner)');
       recordModLog(guild.id, {
-        action: 'warn',
+        action: timeoutApplied ? 'timeout_1h' : 'warn',
         userId: author.id,
         userTag: author.tag,
         moderatorId: 'system',
         moderatorTag: 'Rocket Defense Guard',
-        reason: 'Attempted abuse towards Sandy (Boss)',
+        reason: 'Zero tolerance: Hostility / disrespect towards Sandy (Owner)',
         details: content.slice(0, 100),
       });
       return;
@@ -232,9 +285,11 @@ export async function handleMessageCreate(message) {
     return;
   }
 
-  // 3.1 Strict Permitted Channels: Rocket only talks in #help and #chat!
+  // 3.1 Channel Talking Rules
   const channelNameClean = channel.name.toLowerCase();
   const isPermittedChannel = channelNameClean === 'chat' ||
+                             channelNameClean === 'general' ||
+                             channelNameClean === 'help-desk' ||
                              channelNameClean === 'help' ||
                              (settings.chat_channel_id && settings.chat_channel_id === channel.id);
 
@@ -243,27 +298,25 @@ export async function handleMessageCreate(message) {
     ? (await channel.messages.fetch(message.reference.messageId).catch(() => null))?.author.id === message.client.user.id
     : false;
 
-  // In all other channels (like #rules, #welcome, #general, #introductions, etc.):
-  // Rocket remains 100% silent UNLESS directly @mentioned or replied to by Owner Sandy!
-  if (!isPermittedChannel) {
-    if (isOwner && (isDirectMention || isReplyToRocket)) {
-      await handleRocketChat(message, { isOwner, isConstantTalk: false, channelConfig });
-    }
+  // If directly @mentioned or replied to: Rocket will answer across any channel where member has access
+  if (isDirectMention || isReplyToRocket) {
+    await handleRocketChat(message, { isOwner, isConstantTalk: false, channelConfig });
     return;
   }
 
-  // 3.2 Inside Permitted Channels (#chat, #help):
-  // 2 Modes: 'mention_only' (default) vs 'constant'
-  const activeChatMode = settings.chat_mode || 'mention_only';
+  // If not explicitly mentioned: Rocket only chats inside permitted conversational channels (#chat, #general)
+  if (!isPermittedChannel) {
+    return;
+  }
 
+  // 3.2 Inside Permitted Channels: check chat mode ('mention_only' vs 'constant')
+  const activeChatMode = settings.chat_mode || 'mention_only';
   let shouldRespond = false;
-  if (isDirectMention || isReplyToRocket) {
-    shouldRespond = true;
-  } else if (!content.startsWith('!') && !content.startsWith('/')) {
-    if (activeChatMode === 'constant') {
+
+  if (!content.startsWith('!') && !content.startsWith('/')) {
+    if (activeChatMode === 'constant' || isOwner) {
       shouldRespond = true;
     }
-    // If activeChatMode === 'mention_only', shouldRespond remains FALSE!
   }
 
   if (shouldRespond) {
@@ -287,6 +340,12 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
       ? '🦝 *peeks out from behind a pizza box* Haan Boss Sandy! You rang? What do you need? 🍕🐾'
       : `🦝 *peeks out from behind a pizza box* Hey ${senderDisplayName}! You rang? What do you need? 🍕🐾`;
     return message.reply(greeting);
+  }
+
+  // Real Administrative Action Engine for Boss Sandy
+  if (isOwner) {
+    const executed = await executeAdminActionFromChat(message, cleanedText);
+    if (executed) return;
   }
 
   try {
@@ -326,23 +385,10 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   const channelProfileKey = channelConfig?.ai_behavior_profile || 'chat';
   const channelPrompt = getBehaviorProfilePrompt(channelProfileKey, channel.name);
 
-  // Model router integration: select optimal reasoning level and token budgeting
+  // Model router integration: FULL POWER token budgeting and high reasoning effort
   let routingCategory = 'chat';
-  let maxOutputTokens = 500;
-  let reasoningEffort = 'none';
-
-  if (channelProfileKey === 'research') {
-    routingCategory = 'research';
-    maxOutputTokens = 1500;
-    reasoningEffort = 'high';
-  } else if (channelProfileKey === 'media') {
-    routingCategory = 'media';
-    maxOutputTokens = 600;
-  } else if (channelProfileKey === 'study') {
-    maxOutputTokens = 450;
-  } else if (channelProfileKey === 'study_mode') {
-    maxOutputTokens = 500;
-  }
+  let maxOutputTokens = 2500;
+  let reasoningEffort = 'high';
 
   const agentRouting = getAgentRouting(routingCategory);
   const activeModel = agentRouting.model || 'gpt-6-luna';
@@ -418,6 +464,10 @@ async function handleDirectMessage(message) {
     ).catch(() => {});
   }
 
+  // Check if Boss Sandy gave an administrative command in DMs
+  const executed = await executeAdminActionFromChat(message, content);
+  if (executed) return;
+
   try {
     await message.channel.sendTyping();
   } catch {}
@@ -436,11 +486,12 @@ async function handleDirectMessage(message) {
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: 'gpt-6-luna',
         messages: [
-          { role: 'system', content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). Speak in character as Rocket.` },
+          { role: 'system', content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full reasoning power and full server administrative access. Speak with fierce loyalty, warmth, and high intelligence.` },
           { role: 'user', content },
         ],
-        maxTokens: 500,
-        timeoutMs: 30000,
+        maxTokens: 2500,
+        reasoningEffort: 'high',
+        timeoutMs: 40000,
       });
       response = completion.choices?.[0]?.message?.content || response;
     } catch (err) {
@@ -454,4 +505,101 @@ async function handleDirectMessage(message) {
   response = validatedDm.sanitizedText || scrubbedDm;
 
   await message.reply(response.slice(0, 2000)).catch(() => {});
+}
+
+/**
+ * Real Administrative Action Engine for Boss Sandy directly via chat or DMs
+ */
+async function executeAdminActionFromChat(message, text) {
+  let { guild, channel } = message;
+  const isDm = !guild;
+  if (!guild) {
+    guild = message.client.guilds.cache.get('1567219126550663281') || message.client.guilds.cache.first();
+    if (guild) {
+      channel = guild.channels.cache.find((c) => c.name === 'chat') || guild.channels.cache.first();
+    }
+  }
+  if (!guild || !channel) return false;
+
+  const lower = text.toLowerCase().trim();
+
+  // 1. Purge / Clear N messages
+  const purgeMatch = lower.match(/^(?:purge|clear|clean|delete)\s+(\d+)\s*(?:messages?|msgs?)?/i);
+  if (purgeMatch) {
+    const count = Math.min(parseInt(purgeMatch[1], 10), 100);
+    const deleted = await channel.bulkDelete(count + 1, true).catch(() => null);
+    const actual = deleted ? Math.max(deleted.size - 1, 0) : count;
+    const confirm = await channel.send(`🧹 *tail wags* Done Boss! Swept away **${actual}** messages cleanly! 🐾🍕`);
+    setTimeout(() => confirm.delete().catch(() => {}), 4000);
+    return true;
+  }
+
+  // 2. Lock channel
+  if (/^(?:lock|lockdown|lock\s+channel)$/i.test(lower)) {
+    await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => null);
+    await message.reply('🔒 *clangs padlock shut* Channel locked down, Boss! Nobody can speak except you and staff. 🐾');
+    return true;
+  }
+
+  // 3. Unlock channel
+  if (/^(?:unlock|unlock\s+channel)$/i.test(lower)) {
+    await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => null);
+    await message.reply('🔓 *turns brass key* Channel unlocked and open for chatting, Boss! 🍕✨');
+    return true;
+  }
+
+  // 4. Slowmode
+  const slowMatch = lower.match(/^slowmode\s+(off|\d+s?|\d+m?)/i);
+  if (slowMatch) {
+    let seconds = 0;
+    const val = slowMatch[1].toLowerCase();
+    if (val !== 'off') {
+      if (val.endsWith('m')) seconds = parseInt(val, 10) * 60;
+      else seconds = parseInt(val.replace('s', ''), 10) || 5;
+    }
+    await channel.setRateLimitPerUser(seconds).catch(() => null);
+    await message.reply(seconds > 0 ? `⏳ Slowmode set to **${seconds}s**, Boss! 🐾` : '⚡ Slowmode disabled, full speed ahead, Boss! 🍕');
+    return true;
+  }
+
+  // 5. Timeout user
+  const timeoutMatch = lower.match(/^timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)?([mhsd])?/i);
+  if (timeoutMatch) {
+    const targetId = timeoutMatch[1];
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (targetMember && targetMember.moderatable) {
+      const qty = parseInt(timeoutMatch[2] || '10', 10);
+      const unit = timeoutMatch[3] || 'm';
+      let ms = qty * 60 * 1000;
+      if (unit === 'h') ms = qty * 60 * 60 * 1000;
+      if (unit === 'd') ms = qty * 24 * 60 * 60 * 1000;
+      if (unit === 's') ms = qty * 1000;
+      await targetMember.timeout(ms, 'Timed out by Boss Sandy via chat').catch(() => null);
+      await message.reply(`⏱️ *paws down gavel* <@${targetId}> has been timed out for **${qty}${unit}** on your command, Boss! 🐾🚨`);
+      return true;
+    }
+  }
+
+  // 6. Kick user
+  const kickMatch = lower.match(/^kick\s+<@!?(\d+)>/i);
+  if (kickMatch) {
+    const targetId = kickMatch[1];
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (targetMember && targetMember.kickable) {
+      await targetMember.kick('Kicked by Boss Sandy via chat').catch(() => null);
+      await message.reply(`👢 *delivers raccoon kick* <@${targetId}> has been kicked from the server, Boss! 🐾`);
+      return true;
+    }
+  }
+
+  // 7. Ban user
+  const banMatch = lower.match(/^ban\s+<@!?(\d+)>/i);
+  if (banMatch) {
+    const targetId = banMatch[1];
+    await guild.members.ban(targetId, { reason: 'Banned by Boss Sandy via chat' }).catch(() => null);
+    await message.reply(`🔨 *swings the ban hammer* <@${targetId}> has been permanently banned, Boss! 🐾🚨`);
+    return true;
+  }
+
+  return false;
 }

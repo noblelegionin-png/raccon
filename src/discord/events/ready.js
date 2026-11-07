@@ -6,10 +6,14 @@
 
 import { ActivityType } from 'discord.js';
 import { slashCommands } from '../slashCommands.js';
+import { startAutoPurgeScheduler } from '../autoPurge.js';
 
 export async function handleReady(client) {
   console.log(`[Rocket Discord] 🦝 Logged in as ${client.user.tag} (${client.user.id})`);
   console.log(`[Rocket Discord] Patrolling ${client.guilds.cache.size} server(s).`);
+
+  // Start 6-hour automatic channel purge scheduler
+  startAutoPurgeScheduler(client);
 
   // Set Raccoon Presence
   client.user.setPresence({

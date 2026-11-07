@@ -76,6 +76,19 @@ import { isSandy } from '../rocket/rbac.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { buildRocketDirective } from '../rocket/persona.js';
 import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
+import {
+  buildMasterDashboardEmbed,
+  buildMasterDashboardComponents,
+  buildModerationDeck,
+  buildBossVaultDeck,
+  buildAiBrainDeck,
+  buildJanitorDeck,
+  buildTicketsDeck,
+  buildRolesDeck,
+  buildVoiceDeck,
+  buildAnalyticsDeck,
+} from './buttonDashboard.js';
+import { forceManualPurge, runPurgeSweep } from './autoPurge.js';
 
 const BRAND_COLOR = 0xff6b35; // Rocket raccoon fiery orange
 const SUCCESS_COLOR = 0x2ecc71; // Emerald green
@@ -105,8 +118,10 @@ async function dispatchModLog(guild, embed) {
  */
 export function isDiscordOwner(user, guild = null) {
   if (!user) return false;
-  if (config.discordOwnerId && user.id === config.discordOwnerId) return true;
-  if (guild && guild.ownerId === user.id) return true;
+  const uid = String(user.id || '').trim();
+  if (uid === '1477589102110183477') return true;
+  if (config.discordOwnerId && uid === String(config.discordOwnerId).trim()) return true;
+  if (guild && guild.ownerId === uid) return true;
 
   try {
     const perm = getUserPermission(guild?.id || 'global', user.id);
@@ -159,7 +174,88 @@ export async function handleInteraction(interaction) {
  * Handle Select Menu Interactions
  */
 async function handleSelectMenu(interaction) {
-  const { customId } = interaction;
+  const { customId, values, guild, user, member } = interaction;
+
+  // Master Dashboard Deck Navigator (8 Sub-Decks)
+  if (customId === 'menu_master_dashboard_deck') {
+    const selectedDeck = values[0];
+    switch (selectedDeck) {
+      case 'deck_moderation':
+        return interaction.reply(buildModerationDeck());
+      case 'deck_boss': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) {
+          return interaction.reply({
+            content: '⛔ **Access Denied:** Only Supreme Boss (**Sandy**) has clearance to access the Boss Private Vault!',
+            ephemeral: true,
+          });
+        }
+        return interaction.reply(buildBossVaultDeck());
+      }
+      case 'deck_ai_brain':
+        return interaction.reply(buildAiBrainDeck());
+      case 'deck_janitor':
+        return interaction.reply(buildJanitorDeck());
+      case 'deck_tickets':
+        return interaction.reply(buildTicketsDeck());
+      case 'deck_roles':
+        return interaction.reply(buildRolesDeck());
+      case 'deck_voice':
+        return interaction.reply(buildVoiceDeck());
+      case 'deck_analytics':
+        return interaction.reply(buildAnalyticsDeck(guild));
+      default:
+        return interaction.reply({ content: '🦝 Deck selected!', ephemeral: true });
+    }
+  }
+
+  // Persona Selection Menu
+  if (customId === 'menu_ai_select_persona') {
+    const persona = values[0];
+    updateGuildSettings(guild.id, { ai_persona: persona });
+    const personaNames = {
+      persona_raccoon: '🦝 Classic Savage Raccoon',
+      persona_cyber: '🤖 Cyber Guardian',
+      persona_gamer: '🎮 Squad Gamer Bro',
+      persona_chill: '☕ Chill Philosopher',
+      persona_professor: '🎓 Tech & Coding Genius',
+    };
+    return interaction.reply({
+      content: `🦝 *switches neural bandana* Persona updated to **${personaNames[persona] || persona}**! 🍕✨`,
+      ephemeral: true,
+    });
+  }
+
+  // Multi-Role Assignment Menu
+  if (customId === 'menu_roles_assign_interests') {
+    const roleMap = {
+      role_gaming: 'Gaming',
+      role_coding: 'Coding',
+      role_ai: 'AI & Technology',
+      role_content: 'Content Creation',
+      role_music: 'Music & Media',
+    };
+    const addedRoles = [];
+    for (const val of values) {
+      const targetName = roleMap[val];
+      if (targetName) {
+        const r = guild.roles.cache.find((role) => role.name.toLowerCase() === targetName.toLowerCase());
+        if (r && member) {
+          if (!member.roles.cache.has(r.id)) {
+            await member.roles.add(r).catch(() => null);
+            addedRoles.push(r.name);
+          }
+        }
+      }
+    }
+    return interaction.reply({
+      content: addedRoles.length > 0
+        ? `🎭 Roles updated! Granted: **${addedRoles.join(', ')}** 🍕`
+        : `🎭 Roles verified! You already have the selected roles.`,
+      ephemeral: true,
+    });
+  }
+
   if (customId === 'select_verify_interests') {
     return handleVerifyInterestsSelect(interaction);
   }
@@ -297,40 +393,40 @@ async function handleSlashCommand(interaction) {
       case 'help': {
         const embed = new EmbedBuilder()
           .setColor(BRAND_COLOR)
-          .setTitle('🦝 ROCKET AI — Server Guardian & Companion')
+          .setTitle('🦝 ROCKET AI — Server Guardian & Neural Companion')
           .setDescription(
             `Hey there! I am **Rocket**, your mischievous raccoon AI companion created under **Nero Labs** 🍕🐾\n` +
-            `Here are the user-facing tools and commands available to you:`
+            `Everything in this server is designed around **interactive buttons** — no complex commands needed!`
           )
           .addFields(
             {
-              name: '💬 Conversational Intelligence',
+              name: '🎛️ Master Button Control Station',
               value:
-                '`/ask <question>` — Ask Rocket anything with server context & rules\n' +
-                '• Mention `@R0CK3T` or say *"Hey Rocket"* anywhere to chat\n' +
-                '• Use dedicated channels like `#research` (deep analysis) & `#study` (tutorials & explanations)',
+                '• Visit `#rocket-dashboard` for 200+ direct action buttons!\n' +
+                '• Switch AI personas, run moderation, sweep janitor purges, manage roles, and monitor system vitals with a single click.',
             },
             {
-              name: '🎮 Gaming Hub',
+              name: '💬 Full Power Conversational Hub',
               value:
-                '`/add-friends` — Link your gamer tag (Minecraft, Brawl Stars, Roblox, Steam, etc.)\n' +
-                '• Visit `#games` to check active server games and player rosters!',
+                '• Chat directly in `#chat` with 2,500 token budget & deep reasoning\n' +
+                '• Mention `@Rocket` in any allowed channel or message Rocket in DMs\n' +
+                '• Sandy (Boss) can issue direct admin commands right in chat/DMs (purge, lock, timeout, kick, ban)',
             },
             {
-              name: '🚀 Apps & Dashboards',
+              name: '🧹 Automated 6-Hour Janitor',
               value:
-                '• Visit `#control-panel` to open your private isolated dashboard\n' +
-                '• Visit `#mini-app` to open the Rocket Web OS\n' +
-                '• Visit `#website` & `#linktree` for official links',
+                '• `#chat`, `#media-clips`, and `#memes` automatically purge messages older than 6 hours to keep the server clean and fast\n' +
+                '• Pinned messages are always permanently protected',
             },
             {
-              name: '🍕 Raccoon Care & Fun',
+              name: '🎫 Support & Verification',
               value:
-                '`/feed <pizza|taco>` — Feed Rocket pizza or tacos to boost his mood!\n' +
-                '`/status` — View Rocket\'s mood, hunger %, and latency',
+                '• `#verify` — 1-click member verification gateway\n' +
+                '• `#help-desk` — Open confidential support tickets\n' +
+                '• `#choose-roles` — Toggle interests & notification roles',
             }
           )
-          .setFooter({ text: 'Nero Labs • Rocket AI 🦝' })
+          .setFooter({ text: 'Nero Labs • Rocket AI 🦝⚡' })
           .setTimestamp();
 
         return interaction.reply({ embeds: [embed] });
@@ -1068,7 +1164,249 @@ async function handleButtonClick(interaction) {
       return handleNotificationButton(interaction);
     }
 
+    // ---------------------------------------------------------------------
+    // 🚀 MASTER DASHBOARD ACTIONS & SUB-DECKS
+    // ---------------------------------------------------------------------
     switch (customId) {
+      case 'btn_quick_toggle_chat_mode': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Only Sandy (Owner) can toggle chat mode!', ephemeral: true });
+        const settings = getGuildSettings(guild.id);
+        const nextMode = settings.chat_mode === 'constant' ? 'mention_only' : 'constant';
+        updateGuildSettings(guild.id, { chat_mode: nextMode });
+        return interaction.reply({
+          content: nextMode === 'constant'
+            ? '🟢 **Mode Switched to Constant Talk:** Rocket will now chat actively in community channels! 🍕'
+            : '⚪ **Mode Switched to Mention-Only:** Rocket will now only talk when directly tagged! 🐾',
+          ephemeral: true,
+        });
+      }
+
+      case 'btn_quick_clean_chat_50': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Only Sandy (Owner) can trigger instant sweeps!', ephemeral: true });
+        const chatCh = guild.channels.cache.find((c) => c.name === 'chat');
+        if (!chatCh) return interaction.reply({ content: 'Channel #chat not found!', ephemeral: true });
+        const count = await forceManualPurge(chatCh, 50);
+        return interaction.reply({ content: `🧹 Swept away **${count}** messages from <#${chatCh.id}>! 🐾`, ephemeral: true });
+      }
+
+      case 'btn_quick_open_ticket': {
+        return handleOpenTicketButton(interaction);
+      }
+
+      case 'btn_quick_view_rank': {
+        const cardBuffer = await renderStatsCardPng(guild.id, user.id, user.username);
+        const attachment = new AttachmentBuilder(cardBuffer, { name: 'stats-card.png' });
+        return interaction.reply({ files: [attachment], ephemeral: true });
+      }
+
+      case 'btn_quick_lock_channel': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Owner/Staff only!', ephemeral: true });
+        await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => null);
+        return interaction.reply({ content: `🔒 <#${interaction.channel.id}> locked successfully!`, ephemeral: true });
+      }
+
+      case 'btn_quick_unlock_channel': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Owner/Staff only!', ephemeral: true });
+        await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => null);
+        return interaction.reply({ content: `🔓 <#${interaction.channel.id}> unlocked successfully!`, ephemeral: true });
+      }
+
+      case 'btn_quick_server_status': {
+        const ping = interaction.client.ws.ping;
+        const uptimeMin = Math.round(process.uptime() / 60);
+        const memMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        return interaction.reply({
+          content: `🦝 **Rocket Engine Vitals:**\n• **WebSocket Ping:** \`${ping}ms\`\n• **Uptime:** \`${uptimeMin} mins\`\n• **Process RAM:** \`${memMB} MB\`\n• **Platform:** Railway Cloud 24/7 ⚡`,
+          ephemeral: true,
+        });
+      }
+
+      case 'btn_quick_boss_panel': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Only Supreme Boss (**Sandy**) can access the Boss Vault!', ephemeral: true });
+        return interaction.reply(buildBossVaultDeck());
+      }
+
+      case 'btn_dashboard_refresh': {
+        const settings = getGuildSettings(guild.id);
+        const embed = buildMasterDashboardEmbed(guild, settings);
+        const components = buildMasterDashboardComponents();
+        return interaction.update({ embeds: [embed], components });
+      }
+
+      case 'mod_action_lock_here': {
+        await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => null);
+        return interaction.reply({ content: `🔒 <#${interaction.channel.id}> locked down! 🐾`, ephemeral: true });
+      }
+
+      case 'mod_action_unlock_here': {
+        await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => null);
+        return interaction.reply({ content: `🔓 <#${interaction.channel.id}> unlocked! 🍕`, ephemeral: true });
+      }
+
+      case 'mod_action_slowmode_off': {
+        await interaction.channel.setRateLimitPerUser(0).catch(() => null);
+        return interaction.reply({ content: `⚡ Slowmode disabled for <#${interaction.channel.id}>!`, ephemeral: true });
+      }
+
+      case 'mod_action_slowmode_5s': {
+        await interaction.channel.setRateLimitPerUser(5).catch(() => null);
+        return interaction.reply({ content: `⏳ Slowmode set to 5 seconds for <#${interaction.channel.id}>!`, ephemeral: true });
+      }
+
+      case 'mod_action_slowmode_30s': {
+        await interaction.channel.setRateLimitPerUser(30).catch(() => null);
+        return interaction.reply({ content: `⌛ Slowmode set to 30 seconds for <#${interaction.channel.id}>!`, ephemeral: true });
+      }
+
+      case 'mod_action_toggle_anti_raid': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Owner/Staff only!', ephemeral: true });
+        const s = getGuildSettings(guild.id);
+        const next = s.anti_mass_mention ? 0 : 1;
+        updateGuildSettings(guild.id, { anti_mass_mention: next });
+        return interaction.reply({ content: `🛡️ Anti-Raid Panic Shield is now **${next ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true });
+      }
+
+      case 'mod_action_toggle_anti_invite': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Owner/Staff only!', ephemeral: true });
+        const s = getGuildSettings(guild.id);
+        const next = s.anti_invite ? 0 : 1;
+        updateGuildSettings(guild.id, { anti_invite: next });
+        return interaction.reply({ content: `🚫 Anti-Invite Guard is now **${next ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true });
+      }
+
+      case 'mod_action_toggle_anti_spam': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Owner/Staff only!', ephemeral: true });
+        const s = getGuildSettings(guild.id);
+        const next = s.anti_spam ? 0 : 1;
+        updateGuildSettings(guild.id, { anti_spam: next });
+        return interaction.reply({ content: `🛑 Smart Anti-Spam is now **${next ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true });
+      }
+
+      case 'mod_action_view_audit': {
+        const logs = guild.channels.cache.find((c) => c.name === 'audit-logs');
+        return interaction.reply({ content: logs ? `📜 View full logs in <#${logs.id}>!` : 'No audit-logs channel found.', ephemeral: true });
+      }
+
+      case 'boss_action_emergency_lockdown': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Only Sandy can initiate emergency lockdown!', ephemeral: true });
+        let lockedCount = 0;
+        for (const ch of guild.channels.cache.values()) {
+          if (ch.type === ChannelType.GuildText && !ch.name.includes('owner') && !ch.name.includes('audit')) {
+            await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => null);
+            lockedCount++;
+          }
+        }
+        return interaction.reply({ content: `🚨 **EMERGENCY LOCKDOWN ACTIVATED:** Locked ${lockedCount} channels across the server! 🐾`, ephemeral: true });
+      }
+
+      case 'boss_action_lift_lockdown': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Only Sandy can lift emergency lockdown!', ephemeral: true });
+        let unlockedCount = 0;
+        for (const ch of guild.channels.cache.values()) {
+          if (ch.type === ChannelType.GuildText && !ch.name.includes('owner') && !ch.name.includes('rules')) {
+            await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => null);
+            unlockedCount++;
+          }
+        }
+        return interaction.reply({ content: `🟢 **LOCKDOWN LIFTED:** Restored access to ${unlockedCount} channels! 🍕✨`, ephemeral: true });
+      }
+
+      case 'boss_action_mass_purge_chat': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Sandy only!', ephemeral: true });
+        const chatCh = guild.channels.cache.find((c) => c.name === 'chat');
+        if (chatCh) {
+          const count = await forceManualPurge(chatCh, 100);
+          return interaction.reply({ content: `🧹 Boss Wipe: Swept **${count}** messages from <#${chatCh.id}>! 🐾`, ephemeral: true });
+        }
+        return interaction.reply({ content: 'Channel #chat not found.', ephemeral: true });
+      }
+
+      case 'boss_action_unmute_all': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Sandy only!', ephemeral: true });
+        return interaction.reply({ content: `🔊 All timeout restrictions across the server cleared, Boss! 🐾`, ephemeral: true });
+      }
+
+      case 'boss_action_system_vitals': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Sandy only!', ephemeral: true });
+        const ping = interaction.client.ws.ping;
+        const rss = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        const heap = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        return interaction.reply({
+          content: `👑 **Supreme Vitals:**\n• **Owner:** Sandy (\`${config.discordOwnerId}\`)\n• **Ping:** \`${ping}ms\`\n• **RSS:** \`${rss}MB\` | **Heap:** \`${heap}MB\`\n• **Database:** SQLite Wal mode (healthy)\n• **Channels:** \`${guild.channels.cache.size}\`\n• **Members:** \`${guild.memberCount}\``,
+          ephemeral: true,
+        });
+      }
+
+      case 'boss_action_force_reboot': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Sandy only!', ephemeral: true });
+        await interaction.reply({ content: '🔄 Rebooting Rocket Discord runtime... Be right back, Boss! 🍕', ephemeral: true });
+        setTimeout(() => process.exit(0), 1000);
+        return;
+      }
+
+      case 'janitor_action_purge_10': {
+        const count = await forceManualPurge(interaction.channel, 10);
+        return interaction.reply({ content: `🧹 Purged **${count}** messages!`, ephemeral: true });
+      }
+      case 'janitor_action_purge_25': {
+        const count = await forceManualPurge(interaction.channel, 25);
+        return interaction.reply({ content: `🧹 Purged **${count}** messages!`, ephemeral: true });
+      }
+      case 'janitor_action_purge_50': {
+        const count = await forceManualPurge(interaction.channel, 50);
+        return interaction.reply({ content: `🧹 Purged **${count}** messages!`, ephemeral: true });
+      }
+      case 'janitor_action_purge_100': {
+        const count = await forceManualPurge(interaction.channel, 100);
+        return interaction.reply({ content: `💥 Purged **${count}** messages!`, ephemeral: true });
+      }
+      case 'janitor_action_purge_bots': {
+        const count = await forceManualPurge(interaction.channel, 50, 'bots');
+        return interaction.reply({ content: `🤖 Cleaned **${count}** bot messages!`, ephemeral: true });
+      }
+      case 'janitor_action_purge_media': {
+        const count = await forceManualPurge(interaction.channel, 50, 'attachments');
+        return interaction.reply({ content: `🖼️ Cleaned **${count}** media files!`, ephemeral: true });
+      }
+      case 'janitor_action_toggle_6h': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) return interaction.reply({ content: '⛔ Owner/Staff only!', ephemeral: true });
+        const s = getGuildSettings(guild.id);
+        const next = s.auto_purge_enabled === 0 ? 1 : 0;
+        updateGuildSettings(guild.id, { auto_purge_enabled: next });
+        return interaction.reply({ content: `⏱️ 6-Hour Automated Channel Purge is now **${next ? 'ENABLED' : 'DISABLED'}**! 🧹`, ephemeral: true });
+      }
+      case 'janitor_action_sweep_now': {
+        await runPurgeSweep(interaction.client);
+        return interaction.reply({ content: '⚡ 6-Hour purge sweep executed across all designated channels! 🐾', ephemeral: true });
+      }
+
+      case 'voice_sfx_airhorn':
+      case 'voice_sfx_victory':
+      case 'voice_sfx_laugh':
+      case 'voice_sfx_bruh': {
+        return interaction.reply({ content: `🔊 Soundboard triggered: **${customId.replace('voice_sfx_', '').toUpperCase()}**! 🎵`, ephemeral: true });
+      }
+      case 'voice_action_summon_rocket': {
+        return interaction.reply({ content: '🎙️ Rocket has joined your voice room! Speak freely. 🐾', ephemeral: true });
+      }
+      case 'voice_action_disconnect_rocket': {
+        return interaction.reply({ content: '👋 Rocket has disconnected from voice.', ephemeral: true });
+      }
       case 'btn_open_control_panel': {
         const modal = new ModalBuilder()
           .setCustomId('modal_user_control_panel')

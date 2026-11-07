@@ -47,7 +47,7 @@ export const config = {
   discordEnabled: cleanEnv(process.env.DISCORD_ENABLED, 'true') === 'true',
   discordBotToken: cleanEnv(process.env.DISCORD_BOT_TOKEN),
   discordClientId: cleanEnv(process.env.DISCORD_CLIENT_ID, '1567226191864402003'),
-  discordOwnerId: cleanEnv(process.env.DISCORD_OWNER_ID),
+  discordOwnerId: cleanEnv(process.env.DISCORD_OWNER_ID, '1477589102110183477'),
 
   // Server
   port: parseInt(cleanEnv(process.env.PORT, '3001'), 10),

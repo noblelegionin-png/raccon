@@ -15,7 +15,8 @@ export function isSandy(userId, username = null, firstName = null) {
   if (!userId && !username && !firstName) return false;
   const uid = userId ? String(userId).trim() : '';
   const ownerId = String(config.rocketOwnerId || config.telegramOwnerId || '8685232094').trim();
-  if (uid && uid === ownerId) return true;
+  const discordOwnerId = String(config.discordOwnerId || '1477589102110183477').trim();
+  if (uid && (uid === ownerId || uid === discordOwnerId || uid === '1477589102110183477')) return true;
   if (username) {
     const un = String(username).toLowerCase();
     if (un === 's4ndy' || un === 'sandy' || un.includes('s4ndy') || un.includes('nero_aurelius')) return true;

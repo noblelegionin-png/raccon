@@ -99,6 +99,17 @@ import {
   directBroadcastAnnouncement,
   generateAiAnnouncement,
 } from './announcementSystem.js';
+import {
+  buildWalletDashboard,
+  handleWalletButton,
+  handleDepositModalSubmit,
+  handleRefundModalSubmit,
+} from './walletLedger.js';
+import {
+  buildReasoningSelector,
+  handleReasoningSelect,
+  handleAdminConfirmationButton,
+} from './entitlementEngine.js';
 
 const BRAND_COLOR = 0xff6b35; // Rocket raccoon fiery orange
 const SUCCESS_COLOR = 0x2ecc71; // Emerald green
@@ -185,6 +196,11 @@ export async function handleInteraction(interaction) {
  */
 async function handleSelectMenu(interaction) {
   const { customId, values, guild, user, member } = interaction;
+
+  // Reasoning Mode Selector (Blueprint v1.0)
+  if (customId === 'menu_select_reasoning_mode') {
+    return handleReasoningSelect(interaction);
+  }
 
   // Master Dashboard Deck Navigator (10 Sub-Decks • 200+ Features)
   if (customId === 'menu_master_dashboard_deck') {
@@ -1475,6 +1491,14 @@ async function handleSlashCommand(interaction) {
         });
       }
 
+      case 'wallet': {
+        return interaction.reply(buildWalletDashboard(user));
+      }
+
+      case 'reasoning': {
+        return interaction.reply(buildReasoningSelector(user));
+      }
+
       case 'announce': {
         const isOwner = isDiscordOwner(user, guild);
         const hasRocketRole = member?.roles?.cache?.some((r) => {
@@ -1595,6 +1619,21 @@ async function handleButtonClick(interaction) {
     // Live Voice & Gaming Notification Buttons
     if (customId.startsWith('btn_notify_')) {
       return handleNotificationButton(interaction);
+    }
+
+    // 🍕 Rocket Wallet & Entitlement Actions (Blueprint v1.0)
+    if (
+      customId.startsWith('btn_wallet_') ||
+      customId.startsWith('btn_verify_payment_') ||
+      customId.startsWith('btn_reject_payment_')
+    ) {
+      return handleWalletButton(interaction);
+    }
+    if (
+      customId.startsWith('btn_confirm_admin_') ||
+      customId.startsWith('btn_cancel_admin_')
+    ) {
+      return handleAdminConfirmationButton(interaction);
     }
 
     // 📢 Rocket Announcement Dispatch Studio & Actions
@@ -2334,6 +2373,12 @@ async function handleModalSubmit(interaction) {
     }
     if (customId === 'modal_announce_custom') {
       return handleCustomAnnouncementSubmit(interaction);
+    }
+    if (customId === 'modal_wallet_deposit') {
+      return handleDepositModalSubmit(interaction);
+    }
+    if (customId === 'modal_wallet_refund') {
+      return handleRefundModalSubmit(interaction);
     }
     if (customId === 'modal_user_control_panel') {
       const customUsername = interaction.fields.getTextInputValue('input_username') || user.username;

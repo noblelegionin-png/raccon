@@ -510,4 +510,12 @@ export const slashCommands = [
             )
         )
     ),
+
+  new SlashCommandBuilder()
+    .setName('wallet')
+    .setDescription('🍕 Open your personal Nero Labs Pizza Wallet dashboard.'),
+
+  new SlashCommandBuilder()
+    .setName('reasoning')
+    .setDescription('⚡ Configure Rocket AI neural reasoning effort (none, low, high, max).'),
 ];

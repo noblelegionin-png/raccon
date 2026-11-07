@@ -282,6 +282,104 @@ export function initDiscordDb() {
       appeal_status TEXT DEFAULT 'none',
       created_at TEXT NOT NULL
     );
+
+    -- =========================================================================
+    -- 🍕 ROCKET BLUEPRINT: WALLET LEDGER, ENTITLEMENTS, TOKENS & AUDIT
+    -- =========================================================================
+
+    -- 1. Member Wallet (Pizza Virtual Credit: 1 Pizza = ₹1)
+    CREATE TABLE IF NOT EXISTS discord_wallets (
+      member_id TEXT PRIMARY KEY,
+      balance_pizza INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    -- 2. Wallet Transactions (Double-Entry Audit Ledger)
+    CREATE TABLE IF NOT EXISTS discord_wallet_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      member_id TEXT NOT NULL,
+      amount_pizza INTEGER NOT NULL,
+      direction TEXT NOT NULL, -- 'credit', 'debit'
+      reason TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      status TEXT DEFAULT 'completed', -- 'pending', 'completed', 'cancelled'
+      related_ticket_id INTEGER,
+      timestamp TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wallet_tx_member ON discord_wallet_transactions(member_id);
+
+    -- 3. Payments (Inbound INR via India UPI / Google Pay)
+    CREATE TABLE IF NOT EXISTS discord_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider_ref TEXT,
+      utr_number TEXT,
+      amount_inr REAL NOT NULL,
+      payer_id TEXT NOT NULL,
+      payer_tag TEXT,
+      status TEXT DEFAULT 'pending', -- 'pending', 'verified', 'rejected'
+      receipt_url TEXT,
+      created_at TEXT NOT NULL,
+      verified_at TEXT,
+      verified_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_payments_payer ON discord_payments(payer_id);
+
+    -- 4. Entitlements (Service and Workstation access rights)
+    CREATE TABLE IF NOT EXISTS discord_entitlements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      member_id TEXT NOT NULL,
+      section TEXT NOT NULL, -- 'coding', 'web', 'gaming', 'ai', 'research', 'all'
+      scope TEXT NOT NULL, -- 'trial', '7d', '30d', 'permanent'
+      starts_at TEXT NOT NULL,
+      expires_at TEXT,
+      status TEXT DEFAULT 'active', -- 'active', 'expired', 'revoked'
+      granted_by TEXT NOT NULL,
+      source TEXT DEFAULT 'purchase'
+    );
+    CREATE INDEX IF NOT EXISTS idx_entitlements_member ON discord_entitlements(member_id, section);
+
+    -- 5. Token Accounts & Usage Metering (₹1 = 1,000 AI tokens)
+    CREATE TABLE IF NOT EXISTS discord_token_accounts (
+      member_id TEXT PRIMARY KEY,
+      allowance_tokens INTEGER DEFAULT 0,
+      used_tokens INTEGER DEFAULT 0,
+      reasoning_mode TEXT DEFAULT 'high', -- 'none', 'low', 'high', 'max'
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS discord_usage_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      member_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      charge_tokens INTEGER NOT NULL,
+      workstation TEXT,
+      timestamp TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_usage_member ON discord_usage_events(member_id);
+
+    -- 6. Immutable System Audit Events
+    CREATE TABLE IF NOT EXISTS discord_audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_id TEXT,
+      before_state TEXT,
+      after_state TEXT,
+      reason TEXT,
+      timestamp TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_actor ON discord_audit_events(actor_id);
+
+    -- 7. Member Preferences (Language & Style)
+    CREATE TABLE IF NOT EXISTS discord_member_preferences (
+      member_id TEXT PRIMARY KEY,
+      language TEXT DEFAULT 'English',
+      response_style TEXT DEFAULT 'detailed',
+      updated_at TEXT NOT NULL
+    );
   `);
 
   try {
@@ -310,6 +408,16 @@ export function initDiscordDb() {
   } catch {}
   try {
     db.exec('ALTER TABLE discord_member_profiles ADD COLUMN verified_at TEXT;');
+  } catch {}
+
+  try {
+    db.exec('ALTER TABLE discord_tickets ADD COLUMN category TEXT DEFAULT \'general\';');
+  } catch {}
+  try {
+    db.exec('ALTER TABLE discord_tickets ADD COLUMN payout_reference TEXT;');
+  } catch {}
+  try {
+    db.exec('ALTER TABLE discord_tickets ADD COLUMN auto_close_paused INTEGER DEFAULT 0;');
   } catch {}
 
   initialized = true;
@@ -1613,5 +1721,260 @@ export function listHallOfShameEntries(guildId) {
   `).all(String(guildId));
 }
 
+// ---------------------------------------------------------------------------
+// 🍕 Blueprint: Wallet & Ledger Functions
+// ---------------------------------------------------------------------------
 
+export function getOrCreateWallet(memberId) {
+  initDiscordDb();
+  const db = getDb();
+  let wallet = db.prepare('SELECT * FROM discord_wallets WHERE member_id = ?').get(String(memberId));
+  if (!wallet) {
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO discord_wallets (member_id, balance_pizza, created_at, updated_at) VALUES (?, ?, ?, ?)').run(
+      String(memberId),
+      0,
+      now,
+      now
+    );
+    wallet = db.prepare('SELECT * FROM discord_wallets WHERE member_id = ?').get(String(memberId));
+  }
+  return wallet;
+}
+
+export function creditWallet(memberId, amountPizza, reason, actorId, ticketId = null) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  const qty = Math.max(0, parseInt(amountPizza, 10));
+
+  const wallet = getOrCreateWallet(memberId);
+  const newBalance = wallet.balance_pizza + qty;
+
+  db.prepare('UPDATE discord_wallets SET balance_pizza = ?, updated_at = ? WHERE member_id = ?').run(
+    newBalance,
+    now,
+    String(memberId)
+  );
+  const result = db.prepare(`
+    INSERT INTO discord_wallet_transactions (member_id, amount_pizza, direction, reason, actor_id, status, related_ticket_id, timestamp)
+    VALUES (?, ?, 'credit', ?, ?, 'completed', ?, ?)
+  `).run(String(memberId), qty, reason, String(actorId), ticketId, now);
+
+  recordAuditEvent(actorId, 'WALLET_CREDIT', memberId, `Balance: ${wallet.balance_pizza}`, `Balance: ${newBalance}`, reason);
+  return { newBalance, transactionId: Number(result.lastInsertRowid) };
+}
+
+export function debitWallet(memberId, amountPizza, reason, actorId, ticketId = null) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  const qty = Math.max(0, parseInt(amountPizza, 10));
+
+  const wallet = getOrCreateWallet(memberId);
+  if (wallet.balance_pizza < qty) {
+    throw new Error(`Insufficient Pizza balance. Available: ${wallet.balance_pizza} Pizza, Required: ${qty} Pizza.`);
+  }
+
+  const newBalance = wallet.balance_pizza - qty;
+
+  db.prepare('UPDATE discord_wallets SET balance_pizza = ?, updated_at = ? WHERE member_id = ?').run(
+    newBalance,
+    now,
+    String(memberId)
+  );
+  const result = db.prepare(`
+    INSERT INTO discord_wallet_transactions (member_id, amount_pizza, direction, reason, actor_id, status, related_ticket_id, timestamp)
+    VALUES (?, ?, 'debit', ?, ?, 'completed', ?, ?)
+  `).run(String(memberId), qty, reason, String(actorId), ticketId, now);
+
+  recordAuditEvent(actorId, 'WALLET_DEBIT', memberId, `Balance: ${wallet.balance_pizza}`, `Balance: ${newBalance}`, reason);
+  return { newBalance, transactionId: Number(result.lastInsertRowid) };
+}
+
+export function getWalletTransactions(memberId, limit = 10) {
+  initDiscordDb();
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM discord_wallet_transactions
+    WHERE member_id = ?
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(String(memberId), limit);
+}
+
+// ---------------------------------------------------------------------------
+// 💳 Blueprint: Payments & UTR Verification
+// ---------------------------------------------------------------------------
+
+export function createPaymentRecord({ payerId, payerTag, amountInr, providerRef, utrNumber = null, receiptUrl = null }) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  const result = db.prepare(`
+    INSERT INTO discord_payments (provider_ref, utr_number, amount_inr, payer_id, payer_tag, status, receipt_url, created_at)
+    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+  `).run(providerRef, utrNumber, amountInr, String(payerId), payerTag, receiptUrl, now);
+  return Number(result.lastInsertRowid);
+}
+
+export function verifyPayment(paymentId, verifiedBy) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  const payment = db.prepare('SELECT * FROM discord_payments WHERE id = ?').get(paymentId);
+  if (!payment) throw new Error('Payment record not found.');
+  if (payment.status === 'verified') return payment;
+
+  db.prepare('UPDATE discord_payments SET status = \'verified\', verified_at = ?, verified_by = ? WHERE id = ?').run(
+    now,
+    String(verifiedBy),
+    paymentId
+  );
+  // 1 Pizza = ₹1 conversion
+  const pizzaCredited = Math.floor(payment.amount_inr);
+  creditWallet(payment.payer_id, pizzaCredited, `Verified UPI/GPay Payment #${paymentId} (UTR: ${payment.utr_number || 'N/A'})`, verifiedBy);
+
+  return db.prepare('SELECT * FROM discord_payments WHERE id = ?').get(paymentId);
+}
+
+// ---------------------------------------------------------------------------
+// 🛡️ Blueprint: Entitlement Engine Functions
+// ---------------------------------------------------------------------------
+
+export function grantEntitlement(memberId, section, scope = '30d', grantedBy = 'system', durationDays = 30) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date();
+  const startsAt = now.toISOString();
+
+  let expiresAt = null;
+  if (scope !== 'permanent') {
+    const expDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    expiresAt = expDate.toISOString();
+  }
+
+  const existing = db.prepare('SELECT * FROM discord_entitlements WHERE member_id = ? AND section = ? AND status = \'active\'').get(
+    String(memberId),
+    section
+  );
+
+  if (existing) {
+    db.prepare('UPDATE discord_entitlements SET scope = ?, expires_at = ?, granted_by = ?, starts_at = ? WHERE id = ?').run(
+      scope,
+      expiresAt,
+      String(grantedBy),
+      startsAt,
+      existing.id
+    );
+    recordAuditEvent(grantedBy, 'ENTITLEMENT_RENEW', memberId, existing.scope, scope, `Section: ${section}`);
+    return existing.id;
+  }
+
+  const result = db.prepare(`
+    INSERT INTO discord_entitlements (member_id, section, scope, starts_at, expires_at, status, granted_by)
+    VALUES (?, ?, ?, ?, ?, 'active', ?)
+  `).run(String(memberId), section, scope, startsAt, expiresAt, String(grantedBy));
+
+  recordAuditEvent(grantedBy, 'ENTITLEMENT_GRANT', memberId, 'none', scope, `Section: ${section}`);
+  return Number(result.lastInsertRowid);
+}
+
+export function checkMemberEntitlement(memberId, section) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const entitlement = db.prepare(`
+    SELECT * FROM discord_entitlements
+    WHERE member_id = ? AND (section = ? OR section = 'all') AND status = 'active'
+    AND (expires_at IS NULL OR expires_at > ?)
+  `).get(String(memberId), section, now);
+
+  return Boolean(entitlement);
+}
+
+export function listMemberEntitlements(memberId) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  return db.prepare(`
+    SELECT * FROM discord_entitlements
+    WHERE member_id = ? AND status = 'active'
+    AND (expires_at IS NULL OR expires_at > ?)
+  `).all(String(memberId), now);
+}
+
+// ---------------------------------------------------------------------------
+// 🤖 Blueprint: AI Token Accounts & Reasoning Mode
+// ---------------------------------------------------------------------------
+
+export function getOrCreateTokenAccount(memberId) {
+  initDiscordDb();
+  const db = getDb();
+  let acc = db.prepare('SELECT * FROM discord_token_accounts WHERE member_id = ?').get(String(memberId));
+  if (!acc) {
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO discord_token_accounts (member_id, allowance_tokens, used_tokens, reasoning_mode, updated_at) VALUES (?, 0, 0, \'high\', ?)').run(
+      String(memberId),
+      now
+    );
+    acc = db.prepare('SELECT * FROM discord_token_accounts WHERE member_id = ?').get(String(memberId));
+  }
+  return acc;
+}
+
+export function addTokensToAccount(memberId, tokenQty, actorId, reason = 'Top-up') {
+  initDiscordDb();
+  const db = getDb();
+  const acc = getOrCreateTokenAccount(memberId);
+  const now = new Date().toISOString();
+  const newAllowance = acc.allowance_tokens + tokenQty;
+
+  db.prepare('UPDATE discord_token_accounts SET allowance_tokens = ?, updated_at = ? WHERE member_id = ?').run(
+    newAllowance,
+    now,
+    String(memberId)
+  );
+
+  recordAuditEvent(actorId, 'TOKEN_ADD', memberId, `Allowance: ${acc.allowance_tokens}`, `Allowance: ${newAllowance}`, reason);
+  return newAllowance;
+}
+
+export function setMemberReasoningMode(memberId, mode) {
+  initDiscordDb();
+  const db = getDb();
+  const valid = ['none', 'low', 'high', 'max'].includes(mode) ? mode : 'high';
+  getOrCreateTokenAccount(memberId);
+  const now = new Date().toISOString();
+  db.prepare('UPDATE discord_token_accounts SET reasoning_mode = ?, updated_at = ? WHERE member_id = ?').run(
+    valid,
+    now,
+    String(memberId)
+  );
+  return valid;
+}
+
+export function getMemberReasoningMode(memberId) {
+  const acc = getOrCreateTokenAccount(memberId);
+  return acc.reasoning_mode || 'high';
+}
+
+// ---------------------------------------------------------------------------
+// 📜 Blueprint: Immutable Audit Trail
+// ---------------------------------------------------------------------------
+
+export function recordAuditEvent(actorId, action, targetId = null, beforeState = null, afterState = null, reason = null) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    db.prepare(`
+      INSERT INTO discord_audit_events (actor_id, action, target_id, before_state, after_state, reason, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(String(actorId), action, targetId ? String(targetId) : null, beforeState, afterState, reason, now);
+  } catch (err) {
+    console.warn('[Audit Log Warning]:', err.message);
+  }
+}
 

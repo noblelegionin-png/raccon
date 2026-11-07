@@ -325,6 +325,17 @@ export const SERVER_CATEGORIES = [
     name: 'SUPPORT & AUDIT',
     channels: [
       {
+        name: 'wallet-hub',
+        type: ChannelType.GuildText,
+        topic: '🍕 Nero Labs Pizza Wallet & Ledger Hub. Check balance, add funds, request refunds.',
+        purpose: 'Interactive personal wallet and billing management.',
+        profile: 'system',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'standard',
+        isReadOnlyForMembers: true,
+      },
+      {
         name: 'help-desk',
         type: ChannelType.GuildText,
         topic: '🎫 Support Ticket Station. Click Open Ticket to create a private help room.',

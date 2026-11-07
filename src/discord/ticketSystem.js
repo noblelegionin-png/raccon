@@ -50,10 +50,16 @@ export async function handleOpenTicketButton(interaction, categoryKey = 'general
   }
 
   const sectionTitles = {
+    order: '📦 Service & Work Order',
     coding: '💻 Coding Work Order',
     web: '🌐 Web Dev Work Order',
-    gaming: '🎮 Gaming Work Order',
+    gaming: '🎮 Gaming Help & Setup',
     ai: '🤖 AI Automation Order',
+    wallet: '🍕 Wallet & Balance Help',
+    refund: '🔄 Refund Eligibility Request',
+    token: '⚡ AI Token Allocation',
+    custom_model: '🧠 Custom Model / API Request',
+    safety: '🚨 Safety & Abuse Report',
     general: '🎫 Support Ticket',
   };
 
@@ -226,18 +232,24 @@ export async function handleTicketModalSubmit(interaction) {
     // Update SQLite with the created channel ID
     updateTicketChannel(ticket.id, ticketChannel.id);
 
-    // 5. Post Welcome & Workstation Controls in the Ticket Channel
+    // 5. Post Welcome & Workstation Controls in the Ticket Channel (Blueprint Section 9)
     const ticketEmbed = new EmbedBuilder()
       .setColor(0x00e5ff)
-      .setTitle(`🎫 ${section.toUpperCase()} WORK ORDER #${ticketNumber} — ${user.username.toUpperCase()}`)
+      .setTitle(`🎫 ${section.toUpperCase()} TICKET #${ticketNumber} — ${user.username.toUpperCase()}`)
       .setDescription(
-        `👋 Welcome <@${user.id}>! This is your private workstation with Boss Sandy <@${ownerId}>.\n\n` +
-        `• **Project / Need:** ${subject}\n` +
-        `• **Details & Scope:** ${details}\n\n` +
-        `👑 **Boss Sandy** will discuss the details, timeline, and pricing directly with you right here!\n\n` +
-        `🔒 *This channel is 100% private between you, Sandy, and staff.*`
+        `👋 Welcome <@${user.id}>! This is your private ticket workstation with Boss Sandy <@${ownerId}>.\n\n` +
+        `### 📋 **Ticket Header Details**\n` +
+        `• **Creator:** <@${user.id}> (${user.tag || user.username})\n` +
+        `• **Category:** ${sectionTitles[section] || section.toUpperCase()}\n` +
+        `• **Status:** 🟢 OPEN\n` +
+        `• **Auto-Close Target:** 12 Hours *(Paused for payment, refund & active support)*\n\n` +
+        `### 📌 **Summary & Scope**\n` +
+        `• **Subject:** ${subject}\n` +
+        `• **Details:** ${details}\n\n` +
+        `👑 **Boss Sandy** will assist you directly right here!\n\n` +
+        `🔒 *Confidentiality: This room is strictly isolated to you, Sandy, and staff.*`
       )
-      .setFooter({ text: 'Rocket AI • Secure Client Workstation 🦝' })
+      .setFooter({ text: 'Rocket AI • Unified Ticket Engine • Blueprint v1.0 🦝' })
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(

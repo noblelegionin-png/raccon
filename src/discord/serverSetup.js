@@ -870,6 +870,48 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
+      case 'wallet-hub':
+      case 'wallet': {
+        embed = new EmbedBuilder()
+          .setColor(GOLD_COLOR)
+          .setTitle('🍕 NERO LABS VIRTUAL WALLET & BILLING HUB')
+          .setDescription(
+            `Welcome to the **Nero Labs Wallet Hub**! Pizza is our internal credit system for workstation licenses, custom engineering, and AI token allocations.\n\n` +
+            `• **Conversion Rate:** \`1 Pizza = ₹1 INR\`\n` +
+            `• **AI Tokens:** \`₹1 = 1,000 AI Tokens\` (Minimum top-up: ₹50 for 50,000 tokens)\n` +
+            `• **Payment Gateways:** India Google Pay & UPI payments supported.\n` +
+            `• **Refund Guarantee:** 6-Month eligibility window with 10% processing deduction.\n\n` +
+            `👉 *Click **Open My Wallet** below to view your private balance, recent ledger transactions, and deposit funds (Only visible to you!)*`
+          )
+          .setFooter({ text: 'Rocket Virtual Wallet • Blueprint v1.0 🛡️' });
+
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_wallet_view_balance')
+              .setLabel('💳 Open My Wallet')
+              .setEmoji('💳')
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId('btn_wallet_deposit')
+              .setLabel('➕ Add Funds (UPI / GPay)')
+              .setEmoji('➕')
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId('btn_wallet_refund')
+              .setLabel('🔄 Request Refund')
+              .setEmoji('🔄')
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId('btn_open_ticket_wallet')
+              .setLabel('🎫 Wallet Ticket')
+              .setEmoji('🎫')
+              .setStyle(ButtonStyle.Secondary)
+          ),
+        ];
+        break;
+      }
+
       case 'help-desk':
       case 'help': {
         embed = new EmbedBuilder()

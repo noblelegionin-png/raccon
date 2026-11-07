@@ -13,6 +13,7 @@ import {
   generateAiAnnouncement,
   buildAnnouncementStudioPayload,
 } from '../announcementSystem.js';
+import { handleNaturalLanguageAdminDirective } from '../entitlementEngine.js';
 import {
   getGuildSettings,
   getMemberProfile,
@@ -575,6 +576,10 @@ async function executeAdminActionFromChat(message, text) {
   if (!guild || !channel) return false;
 
   const lower = text.toLowerCase().trim();
+
+  // 0. Blueprint Natural-Language Owner Directive (tokens, access, pizza credits with confirmation cards)
+  const nlpExecuted = await handleNaturalLanguageAdminDirective(message, text);
+  if (nlpExecuted) return true;
 
   // 1. Purge / Clear N messages
   const purgeMatch = lower.match(/^(?:purge|clear|clean|delete)\s+(\d+)\s*(?:messages?|msgs?)?/i);

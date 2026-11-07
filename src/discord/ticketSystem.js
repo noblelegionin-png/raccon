@@ -454,10 +454,8 @@ export async function handleTicketButton(interaction) {
         .setDescription(
           `👑 **Boss Sandy** has officially verified <@${targetUserId}> as a **N3R0L4BS Buyer**!\n\n` +
           `🔓 **Unlocked Workstation Channels:**\n` +
-          `• 💻 **Coding:** <#${guild.channels.cache.find(c => c.name === 'coding-chat')?.id || 'coding-chat'}>, <#${guild.channels.cache.find(c => c.name === 'code-runner')?.id || 'code-runner'}>, <#${guild.channels.cache.find(c => c.name === 'bot-showcase')?.id || 'bot-showcase'}>\n` +
-          `• 🌐 **Web:** <#${guild.channels.cache.find(c => c.name === 'web-dev')?.id || 'web-dev'}>, <#${guild.channels.cache.find(c => c.name === 'live-previews')?.id || 'live-previews'}>, <#${guild.channels.cache.find(c => c.name === 'design-lab')?.id || 'design-lab'}>\n` +
-          `• 🎮 **Gaming:** <#${guild.channels.cache.find(c => c.name === 'gaming-hub')?.id || 'gaming-hub'}>, <#${guild.channels.cache.find(c => c.name === 'game-assets')?.id || 'game-assets'}>\n` +
-          `• 🤖 **AI & Tech:** <#${guild.channels.cache.find(c => c.name === 'ai-tools')?.id || 'ai-tools'}>\n\n` +
+          `• 🛠️ **AI & Dev Workstation:** <#${guild.channels.cache.find(c => c.name === 'dev-workstation')?.id || 'dev-workstation'}>, <#${guild.channels.cache.find(c => c.name === 'ai-studio')?.id || 'ai-studio'}>, <#${guild.channels.cache.find(c => c.name === 'live-previews')?.id || 'live-previews'}>\n` +
+          `• 🎮 **Gaming Workstation:** <#${guild.channels.cache.find(c => c.name === 'gaming-hub')?.id || 'gaming-hub'}>\n\n` +
           `Welcome aboard! Your workstation access is permanently unlocked.`
         )
         .setFooter({ text: 'Rocket AI • VIP Buyer Verification ⭐' })

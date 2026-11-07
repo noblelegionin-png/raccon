@@ -224,7 +224,7 @@ export async function executeServerSetup(interaction) {
             ],
           });
         }
-        if (targetRole) {
+        if (!catDef.isBuyerCategory && targetRole) {
           overwrites.push({
             id: targetRole.id,
             allow: [
@@ -739,19 +739,19 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
           .setColor(INFO_COLOR)
           .setTitle('🎭 CHOOSE YOUR INTERESTS & UNLOCK WORKSTATIONS')
           .setDescription(
-            `Click any button below to toggle your interest in **1 click**! Only the channels for your selected interests will be visible in your server list:\n\n` +
-            `• 💻 **Coding** — Unlocks the **CODING SECTION** (#coding-chat, #code-runner, #bot-showcase)\n` +
-            `• 🌐 **Web Dev** — Unlocks the **WEB SECTION** (#web-dev, #live-previews, #design-lab)\n` +
-            `• 🎮 **Gaming** — Unlocks the **GAMING SECTION** (#gaming-hub, #game-assets)\n` +
-            `• 🤖 **AI & Tech** — Unlocks the **AI & TECH SECTION** (#ai-tools)\n` +
-            `• 🎨 **Content** — Video editing, media assets, and creative design\n` +
-            `• 📚 **Study** — Academic study groups, quizzes, and documentation\n` +
-            `• 🔬 **Research** — In-depth tech research, papers & architecture\n\n` +
+            `Click any button below to toggle your interest in **1 click**! Customize your roles and notification preferences:\n\n` +
+            `• 💻 **Coding** — Developer interest, bots, programming discussions\n` +
+            `• 🌐 **Web Dev** — Web apps, frontend/backend engineering\n` +
+            `• 🎮 **Gaming** — Gaming community, squad matchmaking\n` +
+            `• 🤖 **AI & Tech** — AI models, neural technology & automation\n` +
+            `• 🎨 **Content** — Video editing, media assets, creative design\n` +
+            `• 📚 **Study** — Academic study groups, learning & research\n` +
+            `• 🔬 **Research** — In-depth tech architecture & papers\n\n` +
             `⚠️ **Strict 5-Title Limit Rule:**\n` +
             `• **1 Title:** Base Status (\`@Member\`, \`@Elder\`, \`@Staff\` — Staff/Elder given by Admin)\n` +
             `• **3 Titles:** Department Interests (Select up to **3 max** below in 1 click)\n` +
             `• **1 Title:** WWE Championship Rank (Sets your custom chat & name color!)\n\n` +
-            `*Rest of the roles are exclusively managed by Boss Sandy & Rocket.*`
+            `🔒 *VIP Workstations are unlocked for official @Buyer members.*`
           );
 
         components = [
@@ -959,17 +959,18 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
+      case 'dev-workstation':
       case 'coding-chat': {
         embed = new EmbedBuilder()
           .setColor(INFO_COLOR)
-          .setTitle('💻 VIP BUYER CODING WORKSTATION')
+          .setTitle('🛠️ VIP BUYER FULL-STACK DEV WORKSTATION')
           .setDescription(
-            `Welcome to the private **Coding Workstation** for verified N3R0L4BS Buyers and Clients!\n\n` +
-            `• Discuss software architecture, codebase issues, and features directly with Sandy.\n` +
-            `• Test snippets in <#${guild.channels.cache.find((c) => c.name === 'code-runner')?.id || 'code-runner'}>\n` +
-            `• Inspect live bot builds in <#${guild.channels.cache.find((c) => c.name === 'bot-showcase')?.id || 'bot-showcase'}>`
+            `Welcome to the private **Dev Workstation** for verified N3R0L4BS Buyers and Clients!\n\n` +
+            `• Full-stack coding, scripts, web development, software architecture & live debugging.\n` +
+            `• Direct pairing and code review with Boss Sandy and Rocket AI.\n` +
+            `• Check live staging and demo deployments in <#${guild.channels.cache.find((c) => c.name === 'live-previews')?.id || 'live-previews'}>.`
           )
-          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 💻' });
+          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 🛠️' });
         break;
       }
 
@@ -1069,15 +1070,16 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
+      case 'ai-studio':
       case 'ai-tools': {
         embed = new EmbedBuilder()
           .setColor(0xe67e22)
-          .setTitle('🤖 VIP BUYER AI WORKSTATION')
+          .setTitle('🤖 VIP BUYER AI STUDIO & NEURAL LAB')
           .setDescription(
-            `Welcome to the private **AI Workstation** for verified N3R0L4BS Buyers!\n\n` +
-            `• Test custom AI models, agent architectures, and autonomous workflows with Sandy.`
+            `Welcome to the private **AI Studio** for verified N3R0L4BS Buyers!\n\n` +
+            `• Test custom AI models, neural prompting, agent architectures, and autonomous workflows with Sandy & Rocket AI.`
           )
-          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 🤖' });
+          .setFooter({ text: 'VIP Buyer AI Studio • Sandy & Clients 🤖' });
         break;
       }
 

@@ -518,7 +518,23 @@ export const MEMBER_TIERS = {
 export function getMemberProfile(guildId, userId) {
   initDiscordDb();
   const db = getDb();
-  return db.prepare('SELECT * FROM discord_member_profiles WHERE guild_id = ? AND user_id = ?').get(String(guildId), String(userId));
+  const row = db.prepare('SELECT * FROM discord_member_profiles WHERE guild_id = ? AND user_id = ?').get(String(guildId), String(userId));
+  if (!row) return null;
+  if (row.interests) {
+    if (typeof row.interests === 'string') {
+      try {
+        const parsed = JSON.parse(row.interests);
+        row.interests = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        row.interests = row.interests.trim() ? [row.interests.trim()] : [];
+      }
+    } else if (!Array.isArray(row.interests)) {
+      row.interests = [];
+    }
+  } else {
+    row.interests = [];
+  }
+  return row;
 }
 
 export function setMemberTier(guildId, userId, tier, { username = '', displayName = '', notes = '' } = {}) {

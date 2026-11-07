@@ -30,6 +30,17 @@ export const SERVER_CATEGORIES = [
         isReadOnlyForMembers: true,
       },
       {
+        name: 'announcements',
+        type: ChannelType.GuildText,
+        topic: '📢 Official server announcements and important broadcasts from Sandy.',
+        purpose: 'High-visibility updates and owner announcements.',
+        profile: 'general',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+      {
         name: 'verify',
         type: ChannelType.GuildText,
         topic: '🛡️ Member verification station. Click Start Verification to unlock the server!',
@@ -83,14 +94,14 @@ export const SERVER_CATEGORIES = [
         isRocketAccessOnly: true,
       },
       {
-        name: 'announcements',
+        name: 'wallet-hub',
         type: ChannelType.GuildText,
-        topic: '📢 Official server announcements and important broadcasts from Sandy.',
-        purpose: 'High-visibility updates and owner announcements.',
-        profile: 'general',
+        topic: '🍕 Nero Labs Pizza Wallet & Ledger Hub. Check balance, add funds, request refunds.',
+        purpose: 'Interactive personal wallet and billing management.',
+        profile: 'system',
         reasoning: 'low',
         speed: 'fast',
-        tokenOptimization: 'minimal',
+        tokenOptimization: 'standard',
         isReadOnlyForMembers: true,
       },
     ],
@@ -136,11 +147,10 @@ export const SERVER_CATEGORIES = [
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 04 — CODING SECTION (Orders public, Workstation strictly Buyer Only)
+  // CATEGORY 04 — COMMISSIONS & ORDERS (Public 1-Click Ticket Launchpads)
   // -------------------------------------------------------------------------
   {
-    name: '💻 CODING SECTION',
-    targetRoleName: 'Coding',
+    name: '🛒 COMMISSIONS & ORDERS',
     channels: [
       {
         name: 'coding-orders',
@@ -154,49 +164,6 @@ export const SERVER_CATEGORIES = [
         isReadOnlyForMembers: true,
       },
       {
-        name: 'coding-chat',
-        type: ChannelType.GuildText,
-        topic: '💻 VIP Client & Buyer engineering room, architecture and code reviews.',
-        purpose: 'Technical programming discussions (Verified Buyers Only).',
-        profile: 'chat',
-        reasoning: 'medium',
-        speed: 'fast',
-        tokenOptimization: 'standard',
-        isBuyerOnly: true,
-      },
-      {
-        name: 'code-runner',
-        type: ChannelType.GuildText,
-        topic: '⚡ Run & test multi-language code snippets with Rocket (Buyers Only).',
-        purpose: 'Code snippet execution & debugging (Verified Buyers Only).',
-        profile: 'chat',
-        reasoning: 'high',
-        speed: 'fast',
-        tokenOptimization: 'standard',
-        isBuyerOnly: true,
-      },
-      {
-        name: 'bot-showcase',
-        type: ChannelType.GuildText,
-        topic: '🤖 Showcase of active bots, automation scripts and tools.',
-        purpose: 'Bot and project showcase (Verified Buyers Only).',
-        profile: 'general',
-        reasoning: 'low',
-        speed: 'fast',
-        tokenOptimization: 'minimal',
-        isBuyerOnly: true,
-      },
-    ],
-  },
-
-  // -------------------------------------------------------------------------
-  // CATEGORY 05 — WEB SECTION (Orders public, Workstation strictly Buyer Only)
-  // -------------------------------------------------------------------------
-  {
-    name: '🌐 WEB SECTION',
-    targetRoleName: 'Web Dev',
-    channels: [
-      {
         name: 'web-orders',
         type: ChannelType.GuildText,
         topic: '🌐 Order custom web apps, landing pages & UI/UX with Sandy. Click Open Ticket below!',
@@ -208,14 +175,58 @@ export const SERVER_CATEGORIES = [
         isReadOnlyForMembers: true,
       },
       {
-        name: 'web-dev',
+        name: 'gaming-orders',
         type: ChannelType.GuildText,
-        topic: '🌐 VIP Client & Buyer web engineering, Next.js apps, and cloud deploy.',
-        purpose: 'Web engineering and design (Verified Buyers Only).',
+        topic: '🎮 Order custom Roblox builds, game configs & server setups with Sandy!',
+        purpose: 'Work order ticket launchpad for Gaming commissions.',
+        profile: 'help',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+      {
+        name: 'ai-orders',
+        type: ChannelType.GuildText,
+        topic: '🤖 Order custom AI agents, neural models & workflows with Sandy!',
+        purpose: 'Work order ticket launchpad for AI commissions.',
+        profile: 'help',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
+  // CATEGORY 05 — AI & DEV WORKSTATIONS (VIP Buyers Only)
+  // -------------------------------------------------------------------------
+  {
+    name: '🛠️ AI & DEV WORKSTATIONS',
+    targetRoleName: 'Buyer',
+    isBuyerCategory: true,
+    channels: [
+      {
+        name: 'dev-workstation',
+        type: ChannelType.GuildText,
+        topic: '🛠️ VIP Buyer Full-Stack Workstation: Web Dev, Coding, Scripts, Architecture & Review.',
+        purpose: 'Full-stack engineering & programming discussions (Verified Buyers Only).',
         profile: 'chat',
-        reasoning: 'medium',
+        reasoning: 'high',
         speed: 'fast',
         tokenOptimization: 'standard',
+        isBuyerOnly: true,
+      },
+      {
+        name: 'ai-studio',
+        type: ChannelType.GuildText,
+        topic: '🤖 VIP Buyer AI Studio: Neural Prompting, Agents, LLM Integrations & Workflows.',
+        purpose: 'AI and neural technology discussions (Verified Buyers Only).',
+        profile: 'chat',
+        reasoning: 'high',
+        speed: 'fast',
+        tokenOptimization: 'full_power',
         isBuyerOnly: true,
       },
       {
@@ -229,38 +240,17 @@ export const SERVER_CATEGORIES = [
         tokenOptimization: 'minimal',
         isBuyerOnly: true,
       },
-      {
-        name: 'design-lab',
-        type: ChannelType.GuildText,
-        topic: '🎨 UI/UX mockups, CSS styles, and design systems.',
-        purpose: 'UI design and creative mockups (Verified Buyers Only).',
-        profile: 'general',
-        reasoning: 'low',
-        speed: 'fast',
-        tokenOptimization: 'minimal',
-        isBuyerOnly: true,
-      },
     ],
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 06 — GAMING SECTION (Orders public, Workstation strictly Buyer Only)
+  // CATEGORY 06 — GAMING WORKSTATION (VIP Buyers Only)
   // -------------------------------------------------------------------------
   {
-    name: '🎮 GAMING SECTION',
-    targetRoleName: 'Gaming',
+    name: '🎮 GAMING WORKSTATION',
+    targetRoleName: 'Buyer',
+    isBuyerCategory: true,
     channels: [
-      {
-        name: 'gaming-orders',
-        type: ChannelType.GuildText,
-        topic: '🎮 Order custom Roblox builds, game configs & server setups with Sandy!',
-        purpose: 'Work order ticket launchpad for Gaming commissions.',
-        profile: 'help',
-        reasoning: 'low',
-        speed: 'fast',
-        tokenOptimization: 'minimal',
-        isReadOnlyForMembers: true,
-      },
       {
         name: 'gaming-hub',
         type: ChannelType.GuildText,
@@ -272,69 +262,15 @@ export const SERVER_CATEGORIES = [
         tokenOptimization: 'standard',
         isBuyerOnly: true,
       },
-      {
-        name: 'game-assets',
-        type: ChannelType.GuildText,
-        topic: '📦 Custom maps, game configs, scripts and 3D assets.',
-        purpose: 'Game asset exchange and configurations (Verified Buyers Only).',
-        profile: 'general',
-        reasoning: 'low',
-        speed: 'fast',
-        tokenOptimization: 'minimal',
-        isBuyerOnly: true,
-      },
     ],
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 07 — AI & TECH (Orders public, Workstation strictly Buyer Only)
-  // -------------------------------------------------------------------------
-  {
-    name: '🤖 AI & TECH',
-    targetRoleName: 'AI & Technology',
-    channels: [
-      {
-        name: 'ai-orders',
-        type: ChannelType.GuildText,
-        topic: '🤖 Order custom AI agents, neural models & workflows with Sandy!',
-        purpose: 'Work order ticket launchpad for AI commissions.',
-        profile: 'help',
-        reasoning: 'low',
-        speed: 'fast',
-        tokenOptimization: 'minimal',
-        isReadOnlyForMembers: true,
-      },
-      {
-        name: 'ai-tools',
-        type: ChannelType.GuildText,
-        topic: '🤖 AI tools, LLMs, prompting, and neural agent development.',
-        purpose: 'AI and neural technology discussions (Verified Buyers Only).',
-        profile: 'chat',
-        reasoning: 'high',
-        speed: 'fast',
-        tokenOptimization: 'full_power',
-        isBuyerOnly: true,
-      },
-    ],
-  },
-
-  // -------------------------------------------------------------------------
-  // CATEGORY 08 — SUPPORT & AUDIT
+  // CATEGORY 07 — SUPPORT & AUDIT
   // -------------------------------------------------------------------------
   {
     name: 'SUPPORT & AUDIT',
     channels: [
-      {
-        name: 'wallet-hub',
-        type: ChannelType.GuildText,
-        topic: '🍕 Nero Labs Pizza Wallet & Ledger Hub. Check balance, add funds, request refunds.',
-        purpose: 'Interactive personal wallet and billing management.',
-        profile: 'system',
-        reasoning: 'low',
-        speed: 'fast',
-        tokenOptimization: 'standard',
-        isReadOnlyForMembers: true,
-      },
       {
         name: 'help-desk',
         type: ChannelType.GuildText,
@@ -361,7 +297,7 @@ export const SERVER_CATEGORIES = [
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 09 — VOICE LOUNGE
+  // CATEGORY 08 — VOICE LOUNGE
   // -------------------------------------------------------------------------
   {
     name: 'VOICE LOUNGE',
@@ -371,18 +307,6 @@ export const SERVER_CATEGORIES = [
         type: ChannelType.GuildVoice,
         topic: '🔊 Open general hangout voice channel.',
         purpose: 'Community voice hangout.',
-      },
-      {
-        name: 'Gaming Room',
-        type: ChannelType.GuildVoice,
-        topic: '🎮 High-bitrate squad gaming voice room.',
-        purpose: 'Squad gaming and tactical coms.',
-      },
-      {
-        name: 'Rocket Voice',
-        type: ChannelType.GuildVoice,
-        topic: '🦝 Dedicated voice lounge with Rocket AI.',
-        purpose: 'Voice conversations and music/soundboard.',
       },
     ],
   },

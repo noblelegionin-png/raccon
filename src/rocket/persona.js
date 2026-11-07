@@ -159,8 +159,20 @@ export function buildRocketDirective({
   if (userProfile?.wwe_rank) {
     prompt += `\n- WWE Championship Rank: ${userProfile.wwe_rank} (${userProfile.wwe_title || 'Contender'})`;
   }
-  if (userProfile?.interests && userProfile.interests.length > 0) {
-    prompt += `\n- Declared Interests: ${userProfile.interests.join(', ')}`;
+  let interestsList = [];
+  if (Array.isArray(userProfile?.interests)) {
+    interestsList = userProfile.interests;
+  } else if (typeof userProfile?.interests === 'string') {
+    try {
+      const parsed = JSON.parse(userProfile.interests);
+      if (Array.isArray(parsed)) interestsList = parsed;
+      else if (userProfile.interests.trim()) interestsList = [userProfile.interests.trim()];
+    } catch {
+      if (userProfile.interests.trim()) interestsList = [userProfile.interests.trim()];
+    }
+  }
+  if (interestsList.length > 0) {
+    prompt += `\n- Declared Interests: ${interestsList.join(', ')}`;
   }
   prompt += `\n- IS THIS USER BOSS SANDY? ${isSandy ? 'YES, THIS IS BOSS SANDY! Give him top priority, warmth, and full allegiance. Call him Boss.' : `NO! This is "${senderName}". CRITICAL MANDATE: DO NOT CALL THEM BOSS! You are strictly forbidden from calling ${senderName} "Boss" or "boss". Call them "${senderName}".`}`;
 

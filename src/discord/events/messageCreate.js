@@ -321,10 +321,12 @@ export async function handleMessageCreate(message) {
   const isNeuralChatChannel = channelNameClean === 'chat';
   const isPermittedChannel = isNeuralChatChannel ||
                              channelNameClean === 'general' ||
+                             channelNameClean === 'dev-workstation' ||
                              channelNameClean === 'coding-chat' ||
-                             channelNameClean === 'web-dev' ||
-                             channelNameClean === 'gaming-hub' ||
+                             channelNameClean === 'ai-studio' ||
                              channelNameClean === 'ai-tools' ||
+                             channelNameClean === 'gaming-hub' ||
+                             channelNameClean === 'web-dev' ||
                              channelNameClean === 'help-desk' ||
                              channelNameClean === 'help' ||
                              (settings.chat_channel_id && settings.chat_channel_id === channel.id);
@@ -403,106 +405,120 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   }
 
   try {
-    await channel.sendTyping();
-  } catch {}
-
-  // Fetch recent conversation history so Rocket understands context
-  let recentChatStream = '';
-  try {
-    const history = await channel.messages.fetch({ limit: 8 });
-    const reversed = Array.from(history.values()).reverse();
-    recentChatStream = reversed
-      .filter((m) => m.id !== message.id)
-      .map((m) => `${m.member?.displayName || m.author.username}: ${m.content}`)
-      .join('\n');
-  } catch {}
-
-  const profile = getMemberProfile(guild.id, author.id);
-  const userTier = isOwner ? 'owner' : (profile?.role_tier || 'member');
-  const serverContext = getFormattedServerContext(guild.id);
-  const lifeState = rocketLifeEngine.getState('discord');
-
-  const directive = buildRocketDirective({
-    senderName: senderDisplayName,
-    isSandy: isOwner,
-    userRole: userTier,
-    userProfile: profile,
-    lifeState,
-    isGroup: true,
-    groupTitle: guild.name,
-    groupId: guild.id,
-    channelName: channel.name,
-    recentChat: recentChatStream || null,
-  });
-
-  // Channel-aware profile directives
-  const channelProfileKey = channelConfig?.ai_behavior_profile || 'chat';
-  const channelPrompt = getBehaviorProfilePrompt(channelProfileKey, channel.name);
-
-  // Model router integration: High-IQ witty companion with fast, smart responses
-  let routingCategory = 'chat';
-  let maxOutputTokens = 1200;
-  let reasoningEffort = 'low';
-
-  const agentRouting = getAgentRouting(routingCategory);
-  const activeModel = agentRouting.model || 'gpt-6-luna';
-
-  const fullSystemPrompt =
-    `${directive}\n\n` +
-    `SMART COMPANION & INTELLECT DIRECTIVES:\n` +
-    `- You are an ultra-smart, witty raccoon created by Sandy under Nero Labs.\n` +
-    `- You have elite knowledge in Coding, Web Development, and Gaming.\n` +
-    `- NEVER sound dumb, slow, or corporate! Never output sterile disclaimers like "I'm just an AI" or "I am not infallible".\n` +
-    `- Speak with high intelligence, razor-sharp wits, practical solutions, and raccoon swagger! 🦝⚡\n\n` +
-    `CHANNEL CONTEXT & DIRECTIVES:\n` +
-    `${channelPrompt}\n\n` +
-    `MEMBER STANDING & CRITICAL ADDRESSING RULES:\n` +
-    `- Sender: "${senderDisplayName}"\n` +
-    `- Designated Tier: ${userTier.toUpperCase()}\n` +
-    `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with absolute allegiance.' : `This user is ${senderDisplayName}. Address them as "${senderDisplayName}".`}\n\n` +
-    `${serverContext}\n` +
-    `DISCORD INSTRUCTIONS:\n` +
-    `- You are chatting on Discord in #${channel.name}!\n` +
-    `${isConstantTalk ? '- Act as an active, engaging member in this channel.\n' : ''}` +
-    `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.`;
-
-  let response = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
-  if (scaleMaxAdapter.isConfigured()) {
     try {
-      const completion = await scaleMaxAdapter.createChatCompletion({
-        model: activeModel,
-        messages: [
-          { role: 'system', content: fullSystemPrompt },
-          { role: 'user', content: cleanedText },
-        ],
-        maxTokens: maxOutputTokens,
-        reasoningEffort: reasoningEffort,
-        timeoutMs: 40000,
-      });
+      await channel.sendTyping();
+    } catch {}
 
-      response = completion.choices?.[0]?.message?.content || response;
-    } catch (err) {
-      console.warn('[Rocket Discord AI Error]:', err.message);
-      response = '🦝🐾 *tail puffs* Whoa, neural flux glitch! Toss me another pizza slice and hit me with that again! 🍕';
-    }
-  }
+    // Fetch recent conversation history so Rocket understands context
+    let recentChatStream = '';
+    try {
+      const history = await channel.messages.fetch({ limit: 8 });
+      const reversed = Array.from(history.values()).reverse();
+      recentChatStream = reversed
+        .filter((m) => m.id !== message.id)
+        .map((m) => `${m.member?.displayName || m.author.username}: ${m.content}`)
+        .join('\n');
+    } catch {}
 
-  // Universal sanitization & zero provider leakage guarantee
-  const scrubbed = scrubRestrictedBrandNames(response);
-  const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner });
-  response = validated.sanitizedText || scrubbed;
+    const profile = getMemberProfile(guild.id, author.id);
+    const userTier = isOwner ? 'owner' : (profile?.role_tier || 'member');
+    const serverContext = getFormattedServerContext(guild.id);
+    const lifeState = rocketLifeEngine.getState('discord');
 
-  try {
-    if (response.length > 2000) {
-      // Split into Discord-friendly chunks
-      for (let i = 0; i < response.length; i += 1900) {
-        await message.reply(response.slice(i, i + 1900));
+    const directive = buildRocketDirective({
+      senderName: senderDisplayName,
+      isSandy: isOwner,
+      userRole: userTier,
+      userProfile: profile,
+      lifeState,
+      isGroup: true,
+      groupTitle: guild.name,
+      groupId: guild.id,
+      channelName: channel.name,
+      recentChat: recentChatStream || null,
+    });
+
+    // Channel-aware profile directives
+    const channelProfileKey = channelConfig?.ai_behavior_profile || 'chat';
+    const channelPrompt = getBehaviorProfilePrompt(channelProfileKey, channel.name);
+
+    // Model router integration: High-IQ witty companion with fast, smart responses
+    let routingCategory = 'chat';
+    let maxOutputTokens = 1200;
+    let reasoningEffort = 'low';
+
+    const agentRouting = getAgentRouting(routingCategory);
+    const activeModel = agentRouting.model || 'gpt-6-luna';
+
+    const fullSystemPrompt =
+      `${directive}\n\n` +
+      `SMART COMPANION & INTELLECT DIRECTIVES:\n` +
+      `- You are an ultra-smart, witty raccoon created by Sandy under Nero Labs.\n` +
+      `- You have elite knowledge in Coding, Web Development, and Gaming.\n` +
+      `- NEVER sound dumb, slow, or corporate! Never output sterile disclaimers like "I'm just an AI" or "I am not infallible".\n` +
+      `- Speak with high intelligence, razor-sharp wits, practical solutions, and raccoon swagger! 🦝⚡\n\n` +
+      `CHANNEL CONTEXT & DIRECTIVES:\n` +
+      `${channelPrompt}\n\n` +
+      `MEMBER STANDING & CRITICAL ADDRESSING RULES:\n` +
+      `- Sender: "${senderDisplayName}"\n` +
+      `- Designated Tier: ${userTier.toUpperCase()}\n` +
+      `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with absolute allegiance.' : `This user is ${senderDisplayName}. Address them as "${senderDisplayName}".`}\n\n` +
+      `${serverContext}\n` +
+      `DISCORD INSTRUCTIONS:\n` +
+      `- You are chatting on Discord in #${channel.name}!\n` +
+      `${isConstantTalk ? '- Act as an active, engaging member in this channel.\n' : ''}` +
+      `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.`;
+
+    let response = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
+    if (scaleMaxAdapter.isConfigured()) {
+      try {
+        const completion = await scaleMaxAdapter.createChatCompletion({
+          model: activeModel,
+          messages: [
+            { role: 'system', content: fullSystemPrompt },
+            { role: 'user', content: cleanedText },
+          ],
+          maxTokens: maxOutputTokens,
+          reasoningEffort: reasoningEffort,
+          timeoutMs: 40000,
+        });
+
+        response = completion.choices?.[0]?.message?.content || response;
+      } catch (err) {
+        console.warn('[Rocket Discord AI Error]:', err.message);
+        response = '🦝🐾 *tail puffs* Whoa, neural flux glitch! Toss me another pizza slice and hit me with that again! 🍕';
       }
-    } else {
-      await message.reply(response);
     }
-  } catch (replyErr) {
-    console.error('[Rocket Discord Reply Error]:', replyErr.message);
+
+    // Universal sanitization & zero provider leakage guarantee
+    const scrubbed = scrubRestrictedBrandNames(response);
+    const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner });
+    response = validated.sanitizedText || scrubbed;
+
+    try {
+      if (response.length > 2000) {
+        // Split into Discord-friendly chunks
+        for (let i = 0; i < response.length; i += 1900) {
+          const chunk = response.slice(i, i + 1900);
+          await message.reply(chunk).catch(async () => {
+            await channel.send(chunk).catch(() => null);
+          });
+        }
+      } else {
+        await message.reply(response).catch(async () => {
+          await channel.send(response).catch(() => null);
+        });
+      }
+    } catch (replyErr) {
+      console.error('[Rocket Discord Reply Error]:', replyErr.message);
+      await channel.send(response).catch(() => null);
+    }
+  } catch (fatalChatErr) {
+    console.error('[Rocket Fatal Chat Handler Error]:', fatalChatErr);
+    const fallback = isOwner
+      ? '🦝 *tail puffs* Neural flux blip, Boss Sandy! Toss me another pizza slice and hit me with that again! 🍕⚡'
+      : `🦝 *tail puffs* Neural flux blip! Toss me a pizza slice and hit me with that again! 🍕🐾`;
+    await channel.send(fallback).catch(() => null);
   }
 }
 

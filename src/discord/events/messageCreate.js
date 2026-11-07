@@ -507,14 +507,9 @@ async function handleDirectMessage(message) {
   const { author, content } = message;
   const isOwner = isDiscordOwner(author);
 
-  // STRICT PRIVACY: Only Sandy (Boss) can talk normally with Rocket in DMs!
+  // STRICT PRIVACY: Rocket NEVER talks in anyone's personal DMs except Boss Sandy!
   if (!isOwner) {
-    return message.reply(
-      '🔒 **Direct Messages Restricted:**\n' +
-      'Rocket DMs are exclusively reserved for **Sandy (Owner)**. Normal conversational chat is disabled here.\n\n' +
-      '• To chat with Rocket, head over to the server community in <#chat> or any channel!\n' +
-      '• Need help or support? Open a confidential support ticket in the server `#help` channel. 🐾🔒'
-    ).catch(() => {});
+    return; // Complete silence - strictly prohibited from chatting in any non-owner DMs!
   }
 
   // Check if Boss Sandy gave an administrative command in DMs

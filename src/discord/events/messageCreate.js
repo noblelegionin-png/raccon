@@ -299,12 +299,15 @@ export async function handleMessageCreate(message) {
   }
 
   // 3.1 Exclusive Rocket Access Role Check
-  // ONLY Boss Sandy or members with the 'Rocket Access' role can text or talk with Rocket!
+  // Boss Sandy, Rocket Operators, or members with the 'Rocket Access' / 'Rocket' / 'Verified' role can text or talk with Rocket!
   const hasRocketRole =
     isOwner ||
     (member &&
       member.roles.cache.some(
-        (r) => r.name.toLowerCase() === 'rocket access' || r.name.toLowerCase() === 'rocket'
+        (r) =>
+          r.name.toLowerCase() === 'rocket access' ||
+          r.name.toLowerCase() === 'rocket' ||
+          r.name.toLowerCase() === 'verified'
       ));
 
   // 3.2 Channel Talking Rules
@@ -325,13 +328,13 @@ export async function handleMessageCreate(message) {
     ? (await channel.messages.fetch(message.reference.messageId).catch(() => null))?.author.id === message.client.user.id
     : false;
 
-  // If directly @mentioned or replied to: ONLY members with Rocket Access or Sandy can chat!
+  // If directly @mentioned or replied to: respond to Sandy & members with Rocket Access / Verified!
   if (isDirectMention || isReplyToRocket) {
     if (!hasRocketRole) {
-      await message.reply('⛔ **Exclusive Access Only:** You need the **@Rocket Access** role to text or talk with Rocket AI! 🐾🔒').catch(() => null);
+      await message.reply('⛔ **Exclusive Access Only:** You need the **@Rocket Access** or **@Verified** role to talk with Rocket AI! 🐾🔒').catch(() => null);
       return;
     }
-    await handleRocketChat(message, { isOwner, isConstantTalk: false, channelConfig });
+    await handleRocketChat(message, { isOwner, isConstantTalk: false, channelConfig, hasRocketRole });
     return;
   }
 
@@ -346,29 +349,35 @@ export async function handleMessageCreate(message) {
   }
 
   // 3.3 Inside Permitted Channels:
-  // In #chat (Neural Hub): Rocket ALWAYS chats with Sandy & Rocket Operators without needing an @mention!
-  // In other permitted channels: respond if activeChatMode is constant/active or isOwner
-  const activeChatMode = settings.chat_mode || 'active';
+  // In constant mode: Rocket chats freely in permitted channels!
+  // In mention_only mode: Rocket chats only when @mentioned, or if Boss Sandy speaks in #chat!
+  const activeChatMode = settings.chat_mode || 'constant';
   const isConstantMode = activeChatMode === 'constant' || activeChatMode === 'active';
   let shouldRespond = false;
 
   if (!content.startsWith('!') && !content.startsWith('/')) {
-    if (isNeuralChatChannel || isConstantMode || isOwner) {
+    if (isConstantMode) {
+      shouldRespond = true;
+    } else if (isNeuralChatChannel && isOwner) {
+      // In #chat, Sandy can always converse with Rocket even in mention_only mode!
       shouldRespond = true;
     }
   }
 
   if (shouldRespond) {
-    await handleRocketChat(message, { isOwner, isConstantTalk: isConstantMode, channelConfig });
+    await handleRocketChat(message, { isOwner, isConstantTalk: isConstantMode, channelConfig, hasRocketRole });
   }
 }
 
 /**
  * Handle Conversational AI interaction
  */
-async function handleRocketChat(message, { isOwner, isConstantTalk = false, channelConfig = null }) {
+async function handleRocketChat(message, { isOwner, isConstantTalk = false, channelConfig = null, hasRocketRole = false }) {
   const { guild, channel, author, member, content } = message;
   const senderDisplayName = member?.displayName || author.username;
+  const isRocketUser = isOwner || hasRocketRole || (member && member.roles.cache.some(
+    (r) => r.name.toLowerCase() === 'rocket access' || r.name.toLowerCase() === 'rocket'
+  ));
 
   // Clean prompt text
   let cleanedText = content.replace(/<@!?\d+>/g, '').trim();
@@ -382,7 +391,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   }
 
   // Real Administrative Action Engine for Boss Sandy & Rocket Operators
-  if (hasRocketRole) {
+  if (isRocketUser) {
     const executed = await executeAdminActionFromChat(message, cleanedText);
     if (executed) return;
   }

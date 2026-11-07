@@ -295,10 +295,15 @@ export async function handleConfirmVerification(interaction) {
   const assignedRoleNames = ['Verified'];
 
   if (member) {
-    // 1. Assign @Verified role
+    // 1. Assign @Verified role & @Rocket Access
     const verifiedRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'verified');
     if (verifiedRole) {
       await member.roles.add(verifiedRole).catch(() => null);
+    }
+    const rocketRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'rocket access' || r.name.toLowerCase() === 'rocket');
+    if (rocketRole) {
+      await member.roles.add(rocketRole).catch(() => null);
+      assignedRoleNames.push(rocketRole.name);
     }
 
     // 2. Automatic Role Assignment for Relationship with Sandy

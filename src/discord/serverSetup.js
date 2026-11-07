@@ -24,6 +24,7 @@ import { SERVER_CATEGORIES } from './channelRegistry.js';
 import {
   registerChannelConfig,
   updateGuildSettings,
+  getGuildSettings,
   getServerLinks,
   grantUserPermission,
 } from './discordDb.js';
@@ -611,7 +612,7 @@ export async function executeServerSetup(interaction) {
       rules_channel_id: rulesCh ? rulesCh.id : (announcementsCh ? announcementsCh.id : undefined),
       mod_log_channel_id: auditLogsCh ? auditLogsCh.id : undefined,
       chat_channel_id: chatCh ? chatCh.id : undefined,
-      chat_mode: 'mention_only',
+      chat_mode: getGuildSettings(guild.id)?.chat_mode || 'constant',
       is_muted: 0,
     });
 

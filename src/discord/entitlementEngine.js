@@ -19,6 +19,7 @@ import {
   checkMemberEntitlement,
   grantEntitlement,
   listMemberEntitlements,
+  getOrCreateWallet,
   getOrCreateTokenAccount,
   setMemberReasoningMode,
   getMemberReasoningMode,
@@ -143,16 +144,80 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
 
   const lower = text.toLowerCase().trim();
 
+  // Pattern 0: Direct Wallet & Token Controller / Menu Directive
+  if (
+    /^(?:modify\s+wallets?|manage\s+wallets?|wallet\s+admin|token\s+admin|admin\s+wallet|wallet\s+control)$/i.test(lower) ||
+    /^(?:modify\s+my\s+wallet|open\s+wallet\s+controls?|add\s+tokens?|add\s+funds?|wallet)$/i.test(lower)
+  ) {
+    const wallet = getOrCreateWallet(author.id);
+    const tokenAcc = getOrCreateTokenAccount(author.id);
+
+    const embed = new EmbedBuilder()
+      .setColor(GOLD_COLOR)
+      .setTitle('🎛️ BOSS SANDY’S DIRECT WALLET & TOKEN CONTROLLER 🦝⚡')
+      .setDescription(
+        `Supreme Creator & Boss Sandy, your financial & token controls are active:\n\n` +
+        `• 🍕 **Pizza Wallet Balance:** \`${wallet.balance_pizza} Pizza\` (₹${wallet.balance_pizza} INR)\n` +
+        `• 🪙 **AI Token Allowance:** \`${tokenAcc.allowance_tokens.toLocaleString()} Tokens\` (Used: \`${tokenAcc.used_tokens.toLocaleString()}\`)\n` +
+        `• 🛡️ **Workstations:** All 100% Unlocked & Controlled by You.\n\n` +
+        `Click any button below to instantly top-up or modify your balances in **1 click**:`
+      )
+      .setFooter({ text: 'Supreme Boss Direct Controls • Instant Execution 🍕' });
+
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('btn_owner_add_10k_tokens')
+        .setLabel('+10,000 Tokens')
+        .setEmoji('🪙')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('btn_owner_add_50k_tokens')
+        .setLabel('+50,000 Tokens')
+        .setEmoji('⚡')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('btn_owner_add_100_pizza')
+        .setLabel('+100 Pizza (₹100)')
+        .setEmoji('🍕')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('btn_owner_add_500_pizza')
+        .setLabel('+500 Pizza (₹500)')
+        .setEmoji('💰')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('btn_owner_unlock_workstations')
+        .setLabel('Unlock Workstations')
+        .setEmoji('🔓')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await message.reply({ embeds: [embed], components: [row1] });
+    return true;
+  }
+
   // Pattern 1: Add tokens
-  const tokenMatch = lower.match(/(?:add|grant|give)\s+([\d,]+)\s*(?:ai)?\s*tokens?\s*(?:to)?\s*<@!?(\d+)>/i);
+  // Supports: "add 10000 tokens", "add 10000 tokens to me", "give me 50000 tokens", "add 20000 tokens to @member"
+  const tokenMatch = lower.match(/(?:add|grant|give)\s+(?:me\s+)?([\d,]+)\s*(?:ai)?\s*tokens?(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i) ||
+                     lower.match(/(?:give\s+me)\s+([\d,]+)\s*(?:ai)?\s*tokens?/i) ||
+                     lower.match(/^tokens?\s+([\d,]+)(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i);
   if (tokenMatch) {
     const rawQty = tokenMatch[1].replace(/,/g, '');
     const tokens = parseInt(rawQty, 10);
-    const targetId = tokenMatch[2];
+    const targetMention = tokenMatch[2];
+    const mentionIdMatch = targetMention ? targetMention.match(/<@!?(\d+)>/) : null;
+    const targetId = mentionIdMatch ? mentionIdMatch[1] : author.id;
 
     if (!tokens || tokens <= 0) return false;
 
-    // Show confirmation card before applying
+    // If target is Boss Sandy himself -> EXECUTE IMMEDIATELY!
+    if (targetId === author.id) {
+      const newAllowance = addTokensToAccount(author.id, tokens, author.id, 'Owner Natural Directive');
+      await message.reply(`✅ *salutes with paw* **Done Boss Sandy!** Added **${tokens.toLocaleString()} AI Tokens** directly to your account! *(Total Allowance: ${newAllowance.toLocaleString()} tokens)* 🦝⚡🍕`);
+      return true;
+    }
+
+    // Show confirmation card for other members
     const actionId = `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     pendingAdminActions.set(actionId, {
       type: 'ADD_TOKENS',
@@ -166,7 +231,7 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
       .setColor(GOLD_COLOR)
       .setTitle('🛡️ OWNER ACTION CONFIRMATION — ADD AI TOKENS')
       .setDescription(
-        `Boss Sandy, please confirm this high-impact quota update:\n\n` +
+        `Boss Sandy, please confirm this token allocation:\n\n` +
         `• **Target Member:** <@${targetId}>\n` +
         `• **Token Allocation:** \`+${tokens.toLocaleString()} AI Tokens\`\n` +
         `• **Actor:** <@${author.id}>\n\n` +
@@ -191,11 +256,84 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
     return true;
   }
 
-  // Pattern 2: Grant Workstation Access
-  const accessMatch = lower.match(/(?:grant|give)\s+(coding|web|gaming|ai|research|all)\s*(?:workstation|hub|access)?\s*(?:to)?\s*<@!?(\d+)>(?:\s*for\s*(\d+[dhmw]|permanent))?/i);
+  // Pattern 2: Credit Pizza to Wallet
+  // Supports: "add 500 pizza", "add 500 pizza to me", "give me 500 pizza", "credit 1000 pizza to @member"
+  const pizzaMatch = lower.match(/(?:credit|add|give)\s+(?:me\s+)?(\d+)\s*(?:pizza|credits?|rs|inr)?(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i) ||
+                     lower.match(/(?:give\s+me)\s+(\d+)\s*(?:pizza|credits?|rs|inr)?/i) ||
+                     lower.match(/^pizza\s+(\d+)(?:\s*(?:to)\s*(<@!?\d+>|me|myself))?/i);
+  if (pizzaMatch) {
+    const amount = parseInt(pizzaMatch[1], 10);
+    const targetMention = pizzaMatch[2];
+    const mentionIdMatch = targetMention ? targetMention.match(/<@!?(\d+)>/) : null;
+    const targetId = mentionIdMatch ? mentionIdMatch[1] : author.id;
+
+    if (!amount || amount <= 0) return false;
+
+    // If target is Boss Sandy himself -> EXECUTE IMMEDIATELY!
+    if (targetId === author.id) {
+      const { newBalance } = creditWallet(author.id, amount, 'Owner Natural Directive', author.id);
+      await message.reply(`✅ *tail wags excitedly* **Done Boss Sandy!** Credited **${amount} Pizza** directly to your wallet! *(Current Balance: ${newBalance} Pizza / ₹${newBalance} INR)* 🍕💰`);
+      return true;
+    }
+
+    const actionId = `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    pendingAdminActions.set(actionId, {
+      type: 'CREDIT_PIZZA',
+      targetId,
+      amount,
+      actorId: author.id,
+      guildId: guild.id,
+    });
+
+    const confirmEmbed = new EmbedBuilder()
+      .setColor(GOLD_COLOR)
+      .setTitle('🛡️ OWNER ACTION CONFIRMATION — CREDIT PIZZA')
+      .setDescription(
+        `Boss Sandy, please confirm this wallet credit:\n\n` +
+        `• **Target Member:** <@${targetId}>\n` +
+        `• **Credit Amount:** \`+${amount} Pizza\` (₹${amount} INR)\n` +
+        `• **Actor:** <@${author.id}>\n\n` +
+        `Click **Confirm & Apply** below to execute:`
+      )
+      .setFooter({ text: 'High-Impact Action Safeguard • Blueprint Section 8' });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`btn_confirm_admin_${actionId}`)
+        .setLabel('Confirm & Credit Pizza')
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`btn_cancel_admin_${actionId}`)
+        .setLabel('Cancel')
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await message.reply({ embeds: [confirmEmbed], components: [row] });
+    return true;
+  }
+
+  // Pattern 3: Instant Buyer Role & Workstation Unlock for Boss Sandy
+  // Supports: "make me buyer", "give me buyer", "grant buyer to me", "unlock workstations"
+  if (/^(?:make\s+me\s+buyer|give\s+me\s+buyer|grant\s+buyer|grant\s+me\s+buyer|unlock\s+workstations|give\s+buyer\s+to\s+me)$/i.test(lower)) {
+    const buyerRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'buyer');
+    if (buyerRole) {
+      const member = await guild.members.fetch(author.id).catch(() => null);
+      if (member) await member.roles.add(buyerRole).catch(() => null);
+    }
+    grantEntitlement(author.id, 'all', 'permanent', author.id, 3650);
+    await message.reply('👑 *bows respectfully* **Done Boss Sandy!** All VIP workstations are 100% unlocked with permanent `@Buyer` clearance for you! 🛠️🎮🚀');
+    return true;
+  }
+
+  // Pattern 4: Grant Workstation Access to Member
+  const accessMatch = lower.match(/(?:grant|give)\s+(coding|web|gaming|ai|research|all)\s*(?:workstation|hub|access)?\s*(?:to)?\s*(<@!?\d+>|me|myself)(?:\s*for\s*(\d+[dhmw]|permanent))?/i);
   if (accessMatch) {
     const section = accessMatch[1].toLowerCase();
-    const targetId = accessMatch[2];
+    const targetMention = accessMatch[2];
+    const mentionIdMatch = targetMention ? targetMention.match(/<@!?(\d+)>/) : null;
+    const targetId = mentionIdMatch ? mentionIdMatch[1] : author.id;
     const durationStr = (accessMatch[3] || '30d').toLowerCase();
 
     let days = 30;
@@ -209,6 +347,18 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
     } else if (durationStr.includes('permanent')) {
       days = 3650;
       scope = 'permanent';
+    }
+
+    // If target is Sandy himself -> execute immediately!
+    if (targetId === author.id) {
+      grantEntitlement(author.id, section, scope, author.id, days);
+      const buyerRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'buyer');
+      if (buyerRole) {
+        const member = await guild.members.fetch(author.id).catch(() => null);
+        if (member) await member.roles.add(buyerRole).catch(() => null);
+      }
+      await message.reply(`✅ *tail wags* **Done Boss Sandy!** Unlocked **${section.toUpperCase()}** access for you! 🛠️⚡`);
+      return true;
     }
 
     const actionId = `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -252,52 +402,6 @@ export async function handleNaturalLanguageAdminDirective(message, text) {
     return true;
   }
 
-  // Pattern 3: Credit Pizza to Wallet
-  const pizzaMatch = lower.match(/(?:credit|add|give)\s+(\d+)\s*(?:pizza|credits?|rs|inr)?\s*(?:to)?\s*<@!?(\d+)>/i);
-  if (pizzaMatch) {
-    const amount = parseInt(pizzaMatch[1], 10);
-    const targetId = pizzaMatch[2];
-
-    if (!amount || amount <= 0) return false;
-
-    const actionId = `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    pendingAdminActions.set(actionId, {
-      type: 'CREDIT_PIZZA',
-      targetId,
-      amount,
-      actorId: author.id,
-      guildId: guild.id,
-    });
-
-    const confirmEmbed = new EmbedBuilder()
-      .setColor(GOLD_COLOR)
-      .setTitle('🛡️ OWNER ACTION CONFIRMATION — CREDIT PIZZA')
-      .setDescription(
-        `Boss Sandy, please confirm this wallet credit:\n\n` +
-        `• **Target Member:** <@${targetId}>\n` +
-        `• **Credit Amount:** \`+${amount} Pizza\` (₹${amount} INR)\n` +
-        `• **Actor:** <@${author.id}>\n\n` +
-        `Click **Confirm & Apply** below to execute:`
-      )
-      .setFooter({ text: 'High-Impact Action Safeguard • Blueprint Section 8' });
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`btn_confirm_admin_${actionId}`)
-        .setLabel('Confirm & Credit Pizza')
-        .setEmoji('✅')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`btn_cancel_admin_${actionId}`)
-        .setLabel('Cancel')
-        .setEmoji('❌')
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await message.reply({ embeds: [confirmEmbed], components: [row] });
-    return true;
-  }
-
   return false;
 }
 
@@ -308,6 +412,35 @@ export async function handleAdminConfirmationButton(interaction) {
   const { customId, user, guild } = interaction;
   if (!isDiscordOwner(user, guild)) {
     return interaction.reply({ content: '⛔ Only Supreme Boss Sandy can authorize this action.', ephemeral: true });
+  }
+
+  // Boss Sandy 1-Click Direct Wallet Buttons
+  if (customId === 'btn_owner_add_10k_tokens') {
+    const newAllowance = addTokensToAccount(user.id, 10000, user.id, 'Boss Sandy 1-Click');
+    return interaction.reply({ content: `🪙 **+10,000 AI Tokens added directly to your account!** Total: \`${newAllowance.toLocaleString()}\` 🦝⚡`, ephemeral: true });
+  }
+
+  if (customId === 'btn_owner_add_50k_tokens') {
+    const newAllowance = addTokensToAccount(user.id, 50000, user.id, 'Boss Sandy 1-Click');
+    return interaction.reply({ content: `⚡ **+50,000 AI Tokens added directly to your account!** Total: \`${newAllowance.toLocaleString()}\` 🦝🚀`, ephemeral: true });
+  }
+
+  if (customId === 'btn_owner_add_100_pizza') {
+    const { newBalance } = creditWallet(user.id, 100, 'Boss Sandy 1-Click', user.id);
+    return interaction.reply({ content: `🍕 **+100 Pizza (₹100) credited directly to your wallet!** Total: \`${newBalance} Pizza\` 💰🐾`, ephemeral: true });
+  }
+
+  if (customId === 'btn_owner_add_500_pizza') {
+    const { newBalance } = creditWallet(user.id, 500, 'Boss Sandy 1-Click', user.id);
+    return interaction.reply({ content: `🍕 **+500 Pizza (₹500) credited directly to your wallet!** Total: \`${newBalance} Pizza\` 💰👑`, ephemeral: true });
+  }
+
+  if (customId === 'btn_owner_unlock_workstations') {
+    grantEntitlement(user.id, 'all', 'permanent', user.id, 3650);
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    const buyerRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'buyer');
+    if (member && buyerRole) await member.roles.add(buyerRole).catch(() => null);
+    return interaction.reply({ content: `👑 **All VIP workstations unlocked permanently with @Buyer clearance for you, Boss Sandy!** 🛠️🎮✨`, ephemeral: true });
   }
 
   if (customId.startsWith('btn_cancel_admin_')) {

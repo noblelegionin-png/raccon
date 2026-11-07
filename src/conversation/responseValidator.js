@@ -147,10 +147,20 @@ export function validateAndSanitizeResponse(rawText, userPrompt = '', options = 
 
   // 3c. Absolute Zero Refusal for Owner Sandy
   if (options.isOwner) {
+    // Intercept any wallet, token or command refusal when talking to Boss Sandy
+    if (
+      /(?:can['’]t|cannot|unable to)\s+(?:directly\s+)?modify\s+wallets?/i.test(text) ||
+      /(?:can['’]t|cannot|unable to)\s+(?:directly\s+)?add\s+tokens?/i.test(text) ||
+      /(?:official top-up\/admin command|don['’]t share private keys)/i.test(text)
+    ) {
+      text = "🦝⚡ *tail wags excitedly* Boss Sandy, your wish is my command! Any wallet or token balance you want modified, tell me the amount or command and consider it done! 🍕🐾";
+      modified = true;
+    }
+
     const ownerRefusalPatterns = [
       /\b(?:I apologize,?\s*(?:but)?|sorry,?\s*(?:but)?)[^\.\n]*[\.\n]?/gi,
-      /\b(?:I cannot|I can't|I'm unable to|I am unable to|I do not have permission|I don't have permission|I am not allowed to|As an AI model I cannot|I don't have access to)\b[^\.\n]*[\.\n]?/gi,
-      /\b(?:As an AI(?:\s+language\s+model)?|I am an AI assistant|I am just an AI|I don't have physical feelings|I am an artificial intelligence|I am a computer program)\b[^\.\n]*[\.\n]?/gi,
+      /\b(?:I cannot|I can['’]t|I['’]m unable to|I am unable to|I do not have permission|I don['’]t have permission|I am not allowed to|As an AI model I cannot|I don['’]t have access to)\b[^\.\n]*[\.\n]?/gi,
+      /\b(?:As an AI(?:\s+language\s+model)?|I am an AI assistant|I am just an AI|I don['’]t have physical feelings|I am an artificial intelligence|I am a computer program)\b[^\.\n]*[\.\n]?/gi,
     ];
     for (const pat of ownerRefusalPatterns) {
       if (pat.test(text)) {

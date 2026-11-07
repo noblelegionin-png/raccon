@@ -1631,7 +1631,8 @@ async function handleButtonClick(interaction) {
     }
     if (
       customId.startsWith('btn_confirm_admin_') ||
-      customId.startsWith('btn_cancel_admin_')
+      customId.startsWith('btn_cancel_admin_') ||
+      customId.startsWith('btn_owner_')
     ) {
       return handleAdminConfirmationButton(interaction);
     }

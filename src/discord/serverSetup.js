@@ -444,7 +444,7 @@ async function cleanChannelCompletely(channel) {
 /**
  * Helper to deploy or update interactive cards and buttons in designated channels
  */
-async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, ownerId) {
+export async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, ownerId) {
   try {
     let embed = null;
     let components = [];
@@ -504,38 +504,54 @@ async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, o
       case 'choose-roles': {
         embed = new EmbedBuilder()
           .setColor(INFO_COLOR)
-          .setTitle('🎭 CUSTOMIZE YOUR INTEREST ROLES')
+          .setTitle('🎭 CHOOSE YOUR INTERESTS & UNLOCK WORKSTATIONS')
           .setDescription(
-            `Click the buttons below to toggle your interest roles:\n\n` +
-            `• 🎮 **Gaming** — Community gaming roster, Roblox, and favorite titles\n` +
-            `• 💻 **Coding** — Programming, Python, JavaScript, Discord bots\n` +
-            `• 🤖 **AI & Tech** — AI models, neural networks, automation\n` +
-            `• 📚 **Study** — Academic study groups, quizzes, tutoring\n` +
-            `• 🎨 **Content** — Media creation, memes & video editing\n\n` +
-            `*Note: VIP relationship roles (Brother, Sandy's Girlfriend, Friend) are managed directly by Sandy & Rocket.*`
+            `Click any button below to toggle your interest in **1 click**! Only the channels for your selected interests will be visible in your server list:\n\n` +
+            `• 💻 **Coding** — Unlocks the **CODING SECTION** (#coding-chat, #code-runner, #bot-showcase)\n` +
+            `• 🌐 **Web Dev** — Unlocks the **WEB SECTION** (#web-dev, #live-previews, #design-lab)\n` +
+            `• 🎮 **Gaming** — Unlocks the **GAMING SECTION** (#gaming-hub, #game-assets)\n` +
+            `• 🤖 **AI & Tech** — Unlocks the **AI & TECH SECTION** (#ai-tools)\n` +
+            `• 🎨 **Content** — Video editing, media assets, and creative design\n` +
+            `• 📚 **Study** — Academic study groups, quizzes, and documentation\n` +
+            `• 🔬 **Research** — In-depth tech research, papers & architecture\n\n` +
+            `⚠️ **Strict 5-Title Limit Rule:**\n` +
+            `• **1 Title:** Base Status (\`@Member\`, \`@Elder\`, \`@Staff\` — Staff/Elder given by Admin)\n` +
+            `• **3 Titles:** Department Interests (Select up to **3 max** below in 1 click)\n` +
+            `• **1 Title:** WWE Championship Rank (Sets your custom chat & name color!)\n\n` +
+            `*Rest of the roles are exclusively managed by Boss Sandy & Rocket.*`
           );
 
         components = [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId('btn_toggle_role_Gaming')
-              .setLabel('🎮 Gaming')
-              .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
               .setCustomId('btn_toggle_role_Coding')
               .setLabel('💻 Coding')
-              .setStyle(ButtonStyle.Secondary),
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId('btn_toggle_role_Web Dev')
+              .setLabel('🌐 Web Dev')
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId('btn_toggle_role_Gaming')
+              .setLabel('🎮 Gaming')
+              .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
               .setCustomId('btn_toggle_role_AI & Technology')
               .setLabel('🤖 AI & Tech')
+              .setStyle(ButtonStyle.Primary)
+          ),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('btn_toggle_role_Content Creation')
+              .setLabel('🎨 Content')
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId('btn_toggle_role_Study')
               .setLabel('📚 Study')
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
-              .setCustomId('btn_toggle_role_Content Creation')
-              .setLabel('🎨 Content')
+              .setCustomId('btn_toggle_role_Research')
+              .setLabel('🔬 Research')
               .setStyle(ButtonStyle.Secondary)
           ),
         ];

@@ -383,17 +383,63 @@ export const PROTECTED_ROLES = [
   'owner',
   'ow n3r',
   'rock3t',
+  'rocket access',
+  'rocket',
+  'elder',
   'admin',
+  'client',
+  'worker',
+];
+
+// Self-selectable interest departments (strictly capped at 3 max per person)
+export const SELF_SELECT_INTERESTS = [
+  'gaming',
+  'coding',
+  'web dev',
+  'ai & technology',
+  'study',
+  'research',
+  'content creation',
 ];
 
 export function isProtectedRelationshipRole(roleName) {
   if (!roleName) return false;
-  return PROTECTED_ROLES.includes(roleName.toLowerCase());
+  const lower = roleName.toLowerCase();
+  if (lower.startsWith('[') && lower.includes(']')) return true; // Protected WWE Rank Roles
+  return PROTECTED_ROLES.includes(lower);
+}
+
+/**
+ * Sync WWE Championship Rank Role & chat name color for a guild member
+ */
+export async function syncMemberWWERankRole(guild, member, rankCode) {
+  if (!guild || !member) return null;
+  try {
+    const allWWERoles = guild.roles.cache.filter((r) => r.name.startsWith('[') && r.name.includes(']'));
+    const targetRole = allWWERoles.find((r) => r.name.startsWith(`[${rankCode}]`));
+
+    // Remove any outdated WWE rank roles
+    for (const [, r] of allWWERoles) {
+      if (r.id !== targetRole?.id && member.roles.cache.has(r.id)) {
+        await member.roles.remove(r).catch(() => null);
+      }
+    }
+
+    // Add target WWE rank role if missing
+    if (targetRole && !member.roles.cache.has(targetRole.id)) {
+      await member.roles.add(targetRole).catch(() => null);
+      return targetRole;
+    }
+    return targetRole;
+  } catch (err) {
+    console.warn('[WWE Rank Sync Error]:', err.message);
+    return null;
+  }
 }
 
 /**
  * Handle Toggle Role Buttons from #choose-roles
- * Strictly prevents normal members from assigning or modifying protected relationship roles!
+ * Enforces 1-click toggling, strictly capped at 3 interests max!
  */
 export async function handleRoleToggleButton(interaction) {
   const { customId, guild, user } = interaction;
@@ -401,7 +447,7 @@ export async function handleRoleToggleButton(interaction) {
 
   if (isProtectedRelationshipRole(roleName)) {
     return interaction.reply({
-      content: '⛔ **Protected Role:** This role is managed exclusively by **Sandy & Rocket** and cannot be self-assigned.',
+      content: '⛔ **Restricted Role:** This role is managed exclusively by **Sandy (Owner)** and cannot be self-assigned.',
       ephemeral: true,
     });
   }
@@ -416,11 +462,38 @@ export async function handleRoleToggleButton(interaction) {
     return interaction.reply({ content: `Role \`@${roleName}\` not found on this server.`, ephemeral: true });
   }
 
-  if (member.roles.cache.has(role.id)) {
+  const isAlreadyActive = member.roles.cache.has(role.id);
+
+  if (isAlreadyActive) {
+    // 1-Click Removal
     await member.roles.remove(role).catch(() => null);
-    return interaction.reply({ content: `Removed role \`@${role.name}\`.`, ephemeral: true });
+    return interaction.reply({
+      content: `❌ Removed **@${role.name}**. That section is now hidden from your channel list.`,
+      ephemeral: true,
+    });
   } else {
+    // Check 3-Interest Cap
+    const currentInterests = member.roles.cache.filter((r) =>
+      SELF_SELECT_INTERESTS.includes(r.name.toLowerCase())
+    );
+
+    if (currentInterests.size >= 3) {
+      const activeList = currentInterests.map((r) => `\`@${r.name}\``).join(', ');
+      return interaction.reply({
+        content:
+          `⚠️ **Title Limit Reached (Max 3 Interests):**\n\n` +
+          `You already have 3 active interests: ${activeList}.\n` +
+          `Per server rules, you can only pick up to **3 interests** at a time (5 total titles max per person).\n\n` +
+          `👉 *Click one of your active interests to deselect it before picking a new one!* 🐾`,
+        ephemeral: true,
+      });
+    }
+
+    // 1-Click Grant
     await member.roles.add(role).catch(() => null);
-    return interaction.reply({ content: `Granted role \`@${role.name}\`! 🎉`, ephemeral: true });
+    return interaction.reply({
+      content: `✅ Granted **@${role.name}** in 1 click! That department is now unlocked in your channel list! 🎉`,
+      ephemeral: true,
+    });
   }
 }

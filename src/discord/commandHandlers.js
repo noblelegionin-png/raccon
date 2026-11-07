@@ -219,8 +219,9 @@ async function handleSelectMenu(interaction) {
   if (customId === 'menu_mod_actions') {
     const action = values[0];
     const isOwner = isDiscordOwner(user, guild);
-    const isMod = isOwner || member?.permissions.has(PermissionFlagsBits.ManageMessages) || member?.permissions.has(PermissionFlagsBits.ModerateMembers);
-    if (!isMod) return interaction.reply({ content: '⛔ Access Denied: Staff/Moderator permission required.', ephemeral: true });
+    const hasRocketRole = member?.roles.cache.some(r => r.name.toLowerCase() === 'rocket access' || r.name.toLowerCase() === 'rocket');
+    const isMod = isOwner || hasRocketRole || member?.permissions.has(PermissionFlagsBits.ManageMessages) || member?.permissions.has(PermissionFlagsBits.ModerateMembers);
+    if (!isMod) return interaction.reply({ content: '⛔ Access Denied: You need the **@Rocket Access** or Staff role to use moderation controls.', ephemeral: true });
 
     switch (action) {
       case 'mod_sel_timeout_60s':

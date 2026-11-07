@@ -28,6 +28,7 @@ import { scaleMaxAdapter } from '../../provider/scaleMaxAdapter.js';
 import { isDiscordOwner } from '../commandHandlers.js';
 import { trackIncomingMessage } from '../evidenceArchive.js';
 import { scrubRestrictedBrandNames, validateAndSanitizeResponse } from '../../conversation/responseValidator.js';
+import { syncMemberWWERankRole } from '../verification.js';
 
 // Anti-spam sliding window cache: userId -> Array of timestamps
 const messageRateMap = new Map();
@@ -257,6 +258,9 @@ export async function handleMessageCreate(message) {
     });
 
     if (xpResult && xpResult.rankAscended) {
+      // Sync Discord WWE Championship Rank role & chat name color!
+      await syncMemberWWERankRole(guild, member, xpResult.newRank);
+
       const generalChannel = guild.channels.cache.find((c) => c.name === 'general');
       if (generalChannel && generalChannel.isTextBased()) {
         const rankEmbed = new EmbedBuilder()
@@ -265,11 +269,20 @@ export async function handleMessageCreate(message) {
           .setDescription(
             `🎉 Congratulations <@${author.id}>! You have ascended from **${xpResult.oldRank}** to **${xpResult.newRank}** (\`${xpResult.rankInfo.title}\`)!\n\n` +
             `• **New Multiplier Boost:** \`${xpResult.rankInfo.multiplier}x\`\n` +
-            `• **Total XP:** \`${Number(xpResult.totalXp).toLocaleString()} XP\`\n\n` +
+            `• **Total XP:** \`${Number(xpResult.totalXp).toLocaleString()} XP\`\n` +
+            `• **Chat Name Color:** Updated to match your new rank!\n\n` +
             `*Use \`/info\` to view your shiny new WWE statistics card!* 🏆`
           )
           .setFooter({ text: 'Rocket AI • WWE Championship Division 🦝' });
         generalChannel.send({ embeds: [rankEmbed] }).catch(() => null);
+      }
+    }
+
+    // Ensure verified members have at least [C] Rookie Contender so their chat name color is active
+    if (member && member.roles.cache.some((r) => r.name.toLowerCase() === 'verified')) {
+      const hasWWERank = member.roles.cache.some((r) => r.name.startsWith('[') && r.name.includes(']'));
+      if (!hasWWERank) {
+        await syncMemberWWERankRole(guild, member, 'C');
       }
     }
   } catch (actErr) {
@@ -285,10 +298,24 @@ export async function handleMessageCreate(message) {
     return;
   }
 
-  // 3.1 Channel Talking Rules
+  // 3.1 Exclusive Rocket Access Role Check
+  // ONLY Boss Sandy or members with the 'Rocket Access' role can text or talk with Rocket!
+  const hasRocketRole =
+    isOwner ||
+    (member &&
+      member.roles.cache.some(
+        (r) => r.name.toLowerCase() === 'rocket access' || r.name.toLowerCase() === 'rocket'
+      ));
+
+  // 3.2 Channel Talking Rules
   const channelNameClean = channel.name.toLowerCase();
-  const isPermittedChannel = channelNameClean === 'chat' ||
+  const isNeuralChatChannel = channelNameClean === 'chat';
+  const isPermittedChannel = isNeuralChatChannel ||
                              channelNameClean === 'general' ||
+                             channelNameClean === 'coding-chat' ||
+                             channelNameClean === 'web-dev' ||
+                             channelNameClean === 'gaming-hub' ||
+                             channelNameClean === 'ai-tools' ||
                              channelNameClean === 'help-desk' ||
                              channelNameClean === 'help' ||
                              (settings.chat_channel_id && settings.chat_channel_id === channel.id);
@@ -298,29 +325,41 @@ export async function handleMessageCreate(message) {
     ? (await channel.messages.fetch(message.reference.messageId).catch(() => null))?.author.id === message.client.user.id
     : false;
 
-  // If directly @mentioned or replied to: Rocket will answer across any channel where member has access
+  // If directly @mentioned or replied to: ONLY members with Rocket Access or Sandy can chat!
   if (isDirectMention || isReplyToRocket) {
+    if (!hasRocketRole) {
+      await message.reply('⛔ **Exclusive Access Only:** You need the **@Rocket Access** role to text or talk with Rocket AI! 🐾🔒').catch(() => null);
+      return;
+    }
     await handleRocketChat(message, { isOwner, isConstantTalk: false, channelConfig });
     return;
   }
 
-  // If not explicitly mentioned: Rocket only chats inside permitted conversational channels (#chat, #general)
+  // If not explicitly mentioned: Rocket only chats inside permitted conversational channels
   if (!isPermittedChannel) {
     return;
   }
 
-  // 3.2 Inside Permitted Channels: check chat mode ('mention_only' vs 'constant')
-  const activeChatMode = settings.chat_mode || 'mention_only';
+  // Inside permitted channels: non-Rocket members cannot trigger responses
+  if (!hasRocketRole) {
+    return;
+  }
+
+  // 3.3 Inside Permitted Channels:
+  // In #chat (Neural Hub): Rocket ALWAYS chats with Sandy & Rocket Operators without needing an @mention!
+  // In other permitted channels: respond if activeChatMode is constant/active or isOwner
+  const activeChatMode = settings.chat_mode || 'active';
+  const isConstantMode = activeChatMode === 'constant' || activeChatMode === 'active';
   let shouldRespond = false;
 
   if (!content.startsWith('!') && !content.startsWith('/')) {
-    if (activeChatMode === 'constant' || isOwner) {
+    if (isNeuralChatChannel || isConstantMode || isOwner) {
       shouldRespond = true;
     }
   }
 
   if (shouldRespond) {
-    await handleRocketChat(message, { isOwner, isConstantTalk: activeChatMode === 'constant', channelConfig });
+    await handleRocketChat(message, { isOwner, isConstantTalk: isConstantMode, channelConfig });
   }
 }
 
@@ -342,8 +381,8 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     return message.reply(greeting);
   }
 
-  // Real Administrative Action Engine for Boss Sandy
-  if (isOwner) {
+  // Real Administrative Action Engine for Boss Sandy & Rocket Operators
+  if (hasRocketRole) {
     const executed = await executeAdminActionFromChat(message, cleanedText);
     if (executed) return;
   }
@@ -385,26 +424,31 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   const channelProfileKey = channelConfig?.ai_behavior_profile || 'chat';
   const channelPrompt = getBehaviorProfilePrompt(channelProfileKey, channel.name);
 
-  // Model router integration: FULL POWER token budgeting and high reasoning effort
+  // Model router integration: High-IQ witty companion with fast, smart responses
   let routingCategory = 'chat';
-  let maxOutputTokens = 2500;
-  let reasoningEffort = 'high';
+  let maxOutputTokens = 1200;
+  let reasoningEffort = 'low';
 
   const agentRouting = getAgentRouting(routingCategory);
   const activeModel = agentRouting.model || 'gpt-6-luna';
 
   const fullSystemPrompt =
     `${directive}\n\n` +
+    `SMART COMPANION & INTELLECT DIRECTIVES:\n` +
+    `- You are an ultra-smart, witty raccoon created by Sandy under Nero Labs.\n` +
+    `- You have elite knowledge in Coding, Web Development, and Gaming.\n` +
+    `- NEVER sound dumb, slow, or corporate! Never output sterile disclaimers like "I'm just an AI" or "I am not infallible".\n` +
+    `- Speak with high intelligence, razor-sharp wits, practical solutions, and raccoon swagger! 🦝⚡\n\n` +
     `CHANNEL CONTEXT & DIRECTIVES:\n` +
     `${channelPrompt}\n\n` +
     `MEMBER STANDING & CRITICAL ADDRESSING RULES:\n` +
     `- Sender: "${senderDisplayName}"\n` +
     `- Designated Tier: ${userTier.toUpperCase()}\n` +
-    `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with full allegiance.' : `This user is ${senderDisplayName}. NEVER CALL THEM BOSS! Address them as "${senderDisplayName}".`}\n\n` +
+    `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with absolute allegiance.' : `This user is ${senderDisplayName}. Address them as "${senderDisplayName}".`}\n\n` +
     `${serverContext}\n` +
     `DISCORD INSTRUCTIONS:\n` +
     `- You are chatting on Discord in #${channel.name}!\n` +
-    `${isConstantTalk ? '- CONSTANT TALK MODE IS ON: Converse naturally with the group on this message! Act like an active real friend/member in the chat.\n' : ''}` +
+    `${isConstantTalk ? '- Act as an active, engaging member in this channel.\n' : ''}` +
     `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.`;
 
   let response = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
@@ -417,7 +461,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
           { role: 'user', content: cleanedText },
         ],
         maxTokens: maxOutputTokens,
-        reasoningEffort: reasoningEffort !== 'none' ? reasoningEffort : undefined,
+        reasoningEffort: reasoningEffort,
         timeoutMs: 40000,
       });
 

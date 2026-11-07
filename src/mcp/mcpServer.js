@@ -18,10 +18,16 @@ import { minecraftBridge } from '../minecraft/bridge.js';
 import { minecraftCommandExecutor } from '../minecraft/commandExecutor.js';
 import { gameGroupNotifier } from '../minecraft/gameGroupNotifier.js';
 import { playerRegistry } from '../minecraft/playerRegistry.js';
-import { whatsAppService } from '../whatsapp/whatsappService.js';
-import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
-import { buildOutreachMessage } from '../whatsapp/whatsappPersona.js';
-import { stickerService } from '../whatsapp/stickerService.js';
+// Discontinued WhatsApp & Telegram stubs
+const whatsAppService = {
+  isConnected: () => false,
+  getStatus: () => ({ isConnected: false, status: 'discontinued' }),
+};
+const sandyStatusService = {
+  broadcastSandyStatus: () => {},
+};
+const buildOutreachMessage = () => '';
+const stickerService = {};
 import { isWhatsAppSilentModeActive, setWhatsAppSilentMode } from '../maintenance/maintenanceService.js';
 import { visualShoppingEngine } from '../shopping/visualShoppingEngine.js';
 

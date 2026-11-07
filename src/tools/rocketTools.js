@@ -34,9 +34,29 @@ import { productSearchService } from '../shopping/productSearchService.js';
 import { lookupBiome, lookupMob } from '../minecraft/gameKnowledge.js';
 import { minecraftCommandExecutor } from '../minecraft/commandExecutor.js';
 import { pdfService } from '../pdf/pdfService.js';
-import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
-import { outreachService } from '../whatsapp/outreachService.js';
-import { delegationService } from '../whatsapp/delegationService.js';
+// WhatsApp services (Discontinued & stubbed)
+const sandyStatusService = {
+  getStatus: () => ({ status: 'discontinued' }),
+  getAuthoritativeAvailability: () => 'available',
+  getUrgentRequests: () => [],
+  getContactProfile: () => null,
+  updateContactSmartMemory: () => {},
+  setContactLanguagePreference: () => {},
+};
+const outreachService = {
+  resolveRecipient: () => null,
+  composeAiOutreach: async () => '',
+  registerDispatchedOutreach: () => {},
+  normalizePhoneNumber: (s) => s,
+};
+const delegationService = {
+  listActiveDelegations: () => [],
+  stopDelegation: () => ({ success: true }),
+  resolveTarget: () => null,
+  startDelegation: () => {},
+  buildInitialGreeting: () => '',
+  logMessage: () => {},
+};
 import { muteChat, unmuteChat } from '../maintenance/maintenanceService.js';
 import {
   addDurableMemory,

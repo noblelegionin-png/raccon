@@ -1,6 +1,5 @@
 import { getDb, logAudit } from '../db/index.js';
 import { simulationService } from '../simulation/simulationService.js';
-import { rebeccaCareService } from '../whatsapp/rebeccaCareService.js';
 
 /**
  * ⏰ MYRA AI — PERSISTENT SCHEDULER & REMINDER ENGINE

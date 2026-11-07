@@ -48,9 +48,17 @@ import {
   getGroupModerationRules,
   updateGroupModerationRules,
 } from '../groups/moderation.js';
-import { getRocketBotStatus as getBotStatus, getRocketBotApi as getBotApi } from '../rocketBot/bot.js';
-import { whatsAppService } from '../whatsapp/whatsappService.js';
-import { sandyStatusService } from '../whatsapp/sandyStatusService.js';
+// Discontinued WhatsApp & Telegram stubs
+const getBotStatus = () => ({ isRunning: false, status: 'discontinued' });
+const getBotApi = () => null;
+const whatsAppService = {
+  isConnected: () => false,
+  getStatus: () => ({ isConnected: false, status: 'discontinued', isConfigured: false }),
+  sock: null,
+};
+const sandyStatusService = {
+  broadcastSandyStatus: () => {},
+};
 import {
   isMaintenanceModeActive,
   enableMaintenanceMode,

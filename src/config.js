@@ -16,32 +16,24 @@ function cleanEnv(val, fallback = '') {
 }
 
 export const config = {
-  // Legacy Telegram (Completely Discontinued & Removed)
-  telegramEnabled: false,
-  telegramBotToken: '',
-  telegramOwnerId: cleanEnv(process.env.ROCKET_OWNER_ID, cleanEnv(process.env.TELEGRAM_OWNER_ID, '8685232094')),
-
-  // 🦝 ROCKET NEW TELEGRAM BOT & RACCOON OS
-  rocketTelegramEnabled: cleanEnv(process.env.ROCKET_TELEGRAM_ENABLED, 'true') === 'true',
-  rocketTelegramBotToken: cleanEnv(process.env.ROCKET_TELEGRAM_BOT_TOKEN),
-  rocketOwnerId: cleanEnv(process.env.ROCKET_OWNER_ID, cleanEnv(process.env.TELEGRAM_OWNER_ID, '8685232094')),
-  rocketMiniAppUrl: cleanEnv(process.env.ROCKET_MINIAPP_URL, cleanEnv(process.env.WEBAPP_PUBLIC_URL)),
-
   // ScaleMax & Model Provider
   scaleMaxApiKey: cleanEnv(process.env.SCALEMAX_API_KEY, 'sm_live_c8c0b3957660ecbda0af7e884d7695e7'),
   scaleMaxBaseUrl: (cleanEnv(process.env.SCALEMAX_BASE_URL, 'https://api.scalemax.pro/token/v1')).replace(/\/+$/, ''),
   scaleMaxDefaultModel: cleanEnv(process.env.SCALEMAX_DEFAULT_MODEL, 'gpt-6-luna'),
   deepSeekApiKey: cleanEnv(process.env.DEEPSEEK_API_KEY),
 
-  // Dashboard Security
-  dashboardAccessKey: cleanEnv(process.env.DASHBOARD_ACCESS_KEY),
-
-  // WhatsApp Bridge Configuration
-  whatsAppEnabled: cleanEnv(process.env.WHATSAPP_ENABLED, 'true') === 'true',
-  whatsAppOwnerNumber: cleanEnv(process.env.WHATSAPP_OWNER_NUMBER, ''),
-  whatsAppAutoReply: cleanEnv(process.env.WHATSAPP_AUTO_REPLY, 'true') === 'true',
-  whatsAppMode: cleanEnv(process.env.WHATSAPP_MODE, 'all'), // 'all' or 'owner_only'
-  whatsAppNotifyTelegram: cleanEnv(process.env.WHATSAPP_NOTIFY_TELEGRAM, 'false') === 'true',
+  // Legacy Telegram & WhatsApp (Completely Discontinued)
+  telegramEnabled: false,
+  telegramBotToken: '',
+  telegramOwnerId: '',
+  rocketTelegramEnabled: false,
+  rocketTelegramBotToken: '',
+  rocketOwnerId: '',
+  whatsAppEnabled: false,
+  whatsAppOwnerNumber: '',
+  whatsAppAutoReply: false,
+  whatsAppMode: 'disabled',
+  whatsAppNotifyTelegram: false,
 
   // 🎮 Discord Bot Configuration (R0CK3T)
   discordEnabled: cleanEnv(process.env.DISCORD_ENABLED, 'true') === 'true',
@@ -67,9 +59,6 @@ export const config = {
 // Validate critical configuration on startup
 export function validateConfig() {
   const issues = [];
-  if (config.rocketTelegramEnabled && !config.rocketTelegramBotToken) {
-    issues.push('ROCKET_TELEGRAM_BOT_TOKEN is not set. Rocket bot will remain offline.');
-  }
   if (config.discordEnabled && !config.discordBotToken) {
     issues.push('DISCORD_BOT_TOKEN is not set. Rocket Discord bot will remain offline.');
   }

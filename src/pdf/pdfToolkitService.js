@@ -9,7 +9,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pdfService } from './pdfService.js';
-import { voiceNoteService } from '../whatsapp/voiceNoteService.js';
 
 export class PdfToolkitService {
   constructor() {

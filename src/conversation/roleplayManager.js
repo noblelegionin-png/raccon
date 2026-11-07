@@ -1,4 +1,3 @@
-import { InlineKeyboard } from 'grammy';
 import { config } from '../config.js';
 
 export const SPECIAL_ROLES = {
@@ -228,25 +227,10 @@ export function getRoleDefinition(roleKey) {
 }
 
 /**
- * Build interactive InlineKeyboard for all 10 roles
+ * Build role selection list (Legacy helper)
  */
 export function buildRoleSelectionKeyboard() {
-  const kb = new InlineKeyboard();
-
-  const roleKeys = Object.keys(ROLEPLAY_ROLES);
-  for (let i = 0; i < roleKeys.length; i += 2) {
-    const r1 = ROLEPLAY_ROLES[roleKeys[i]];
-    const r2 = roleKeys[i + 1] ? ROLEPLAY_ROLES[roleKeys[i + 1]] : null;
-
-    kb.text(`${r1.emoji} ${r1.label}`, `set_role_${r1.id}`);
-    if (r2) {
-      kb.text(`${r2.emoji} ${r2.label}`, `set_role_${r2.id}`);
-    }
-    kb.row();
-  }
-
-  kb.text('🔄 Reset to Default (Friend)', 'set_role_friend');
-  return kb;
+  return null;
 }
 
 /**

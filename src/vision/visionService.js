@@ -1,4 +1,3 @@
-import { InputFile } from 'grammy';
 import { config } from '../config.js';
 import { googleDriveAdapter } from '../storage/driveAdapter.js';
 import { getAgentRouting } from '../models/modelRouter.js';
@@ -450,12 +449,14 @@ When the user sends or asks about an image:
       caption += `• Description: _${target.ai_description.slice(0, 150)}..._\n`;
     }
 
-    await ctx.replyWithPhoto(new InputFile(buffer), {
-      caption,
-      parse_mode: 'Markdown',
-      reply_parameters: { message_id: ctx.message.message_id },
-      ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
-    });
+    if (ctx.replyWithPhoto) {
+      await ctx.replyWithPhoto(buffer, {
+        caption,
+        parse_mode: 'Markdown',
+        reply_parameters: { message_id: ctx.message.message_id },
+        ...(ctx.message?.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}),
+      });
+    }
 
     logAudit(ctx.from?.id || 'user', 'IMAGE_RETRIEVED_AND_SENT', `Sent ${target.filename} to chat ${chatId}`);
   }

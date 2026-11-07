@@ -1,17 +1,15 @@
 import { config, validateConfig } from './config.js';
 import { initDatabase, getDb } from './db/index.js';
-import { startRocketBot, stopRocketBot } from './rocketBot/bot.js';
 import { startDiscordBot, stopDiscordBot } from './discord/discordBot.js';
 import { createWebServer } from './web/server.js';
-import { whatsAppService } from './whatsapp/whatsappService.js';
 import { applyLogNoiseFilter } from './utils/noiseFilter.js';
 
-// Suppress high-volume internal logs from third-party libraries (libsignal, prekeys, session noise)
+// Suppress high-volume internal logs from third-party libraries
 applyLogNoiseFilter();
 
 async function main() {
   console.log('====================================================');
-  console.log('⚡ MYRA AI — WHATSAPP AUTONOMOUS PLATFORM (MYRA / NERO)');
+  console.log('🦝 ROCKET AI — DISCORD AUTONOMOUS PLATFORM (NERO LABS)');
   console.log('====================================================');
 
   // 1. Initialize SQLite Database
@@ -29,32 +27,14 @@ async function main() {
     console.log('  -> Update your .env file with real credentials to enable live features.\n');
   }
 
-  // 3. Start Web Server (serves Mini App & REST APIs)
+  // 3. Start Web Server (serves Health Probes, Mini App & Web APIs)
   const app = createWebServer();
   const server = app.listen(config.port, '0.0.0.0', () => {
-    console.log(`[WebServer] Mobile Mini App running at: http://0.0.0.0:${config.port}`);
     console.log(`[WebServer] Health probe: http://localhost:${config.port}/healthz`);
+    console.log(`[WebServer] Web portal running at: http://0.0.0.0:${config.port}`);
   });
 
-  // 4. Start WhatsApp 24/7 Live Bridge
-  if (config.whatsAppEnabled) {
-    console.log('[WhatsApp] Starting WhatsApp 24/7 Live Bridge...');
-    whatsAppService.init().catch((err) => {
-      console.warn('[WhatsApp] Startup warning:', err.message);
-    });
-  }
-
-  // 5. Start Rocket Telegram Bot (Primary & Only Bot)
-  if (config.rocketTelegramEnabled) {
-    if (config.rocketTelegramBotToken) {
-      console.log('[RocketBot] 🦝 Initializing Rocket Telegram bot...');
-      await startRocketBot();
-    } else {
-      console.log('[RocketBot] ⏳ ROCKET_TELEGRAM_BOT_TOKEN is waiting to be configured from BotFather. Bot transport will connect the moment token is provided.');
-    }
-  }
-
-  // 6. Start Rocket Discord Bot
+  // 4. Start Rocket Discord Bot (Dedicated Platform)
   if (config.discordEnabled) {
     if (config.discordBotToken) {
       console.log('[RocketBot] 🎮 Initializing Rocket Discord bot...');
@@ -66,16 +46,10 @@ async function main() {
     }
   }
 
-  // 7. Graceful Shutdown
+  // 5. Graceful Shutdown
   const shutdown = async (signal) => {
     console.log(`\n[System] Received ${signal}. Shutting down gracefully...`);
-    await stopRocketBot();
     await stopDiscordBot();
-    try {
-      if (whatsAppService.sock) {
-        whatsAppService.sock.end();
-      }
-    } catch (e) {}
     server.close(() => {
       console.log('[WebServer] HTTP server closed.');
       try {

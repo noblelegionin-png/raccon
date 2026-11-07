@@ -248,7 +248,11 @@ export async function handleTicketModalSubmit(interaction) {
       new ButtonBuilder()
         .setCustomId(`btn_escalate_ticket_${ticket.id}`)
         .setLabel('👑 Ping Sandy (Boss)')
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`btn_grant_buyer_${ticket.id}_${user.id}`)
+        .setLabel('⭐ Grant Buyer Role')
+        .setStyle(ButtonStyle.Success)
     );
 
     await ticketChannel.send({
@@ -402,5 +406,55 @@ export async function handleTicketButton(interaction) {
     return interaction.reply({
       content: `📌 <@${user.id}> has claimed Ticket #${ticketId}!`,
     });
+  }
+
+  // 4. Grant Buyer Role (Boss Sandy & Staff Only)
+  if (customId.startsWith('btn_grant_buyer_')) {
+    const parts = customId.split('_');
+    const ticketId = parts[3];
+    const targetUserId = parts[4];
+
+    const isOwner = isDiscordOwner(user, guild);
+    const isStaff = isOwner || interaction.member.roles.cache.some(r => r.name.toLowerCase() === 'staff');
+
+    if (!isStaff) {
+      return interaction.reply({
+        content: '⛔ Only **Boss Sandy** or authorized Staff can grant the Buyer role.',
+        ephemeral: true,
+      });
+    }
+
+    try {
+      const targetMember = await guild.members.fetch(targetUserId).catch(() => null);
+      if (!targetMember) {
+        return interaction.reply({ content: '❌ Target member not found in this server.', ephemeral: true });
+      }
+
+      const buyerRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'buyer');
+      const clientRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'client');
+
+      if (buyerRole) await targetMember.roles.add(buyerRole).catch(() => null);
+      if (clientRole) await targetMember.roles.add(clientRole).catch(() => null);
+
+      const grantEmbed = new EmbedBuilder()
+        .setColor(0xf1c40f)
+        .setTitle('⭐ OFFICIAL BUYER VERIFIED!')
+        .setDescription(
+          `👑 **Boss Sandy** has officially verified <@${targetUserId}> as a **N3R0L4BS Buyer**!\n\n` +
+          `🔓 **Unlocked Workstation Channels:**\n` +
+          `• 💻 **Coding:** <#${guild.channels.cache.find(c => c.name === 'coding-chat')?.id || 'coding-chat'}>, <#${guild.channels.cache.find(c => c.name === 'code-runner')?.id || 'code-runner'}>, <#${guild.channels.cache.find(c => c.name === 'bot-showcase')?.id || 'bot-showcase'}>\n` +
+          `• 🌐 **Web:** <#${guild.channels.cache.find(c => c.name === 'web-dev')?.id || 'web-dev'}>, <#${guild.channels.cache.find(c => c.name === 'live-previews')?.id || 'live-previews'}>, <#${guild.channels.cache.find(c => c.name === 'design-lab')?.id || 'design-lab'}>\n` +
+          `• 🎮 **Gaming:** <#${guild.channels.cache.find(c => c.name === 'gaming-hub')?.id || 'gaming-hub'}>, <#${guild.channels.cache.find(c => c.name === 'game-assets')?.id || 'game-assets'}>\n` +
+          `• 🤖 **AI & Tech:** <#${guild.channels.cache.find(c => c.name === 'ai-tools')?.id || 'ai-tools'}>\n\n` +
+          `Welcome aboard! Your workstation access is permanently unlocked.`
+        )
+        .setFooter({ text: 'Rocket AI • VIP Buyer Verification ⭐' })
+        .setTimestamp();
+
+      return interaction.reply({ embeds: [grantEmbed] });
+    } catch (err) {
+      console.error('[Grant Buyer Error]:', err);
+      return interaction.reply({ content: `❌ Error granting role: ${err.message}`, ephemeral: true });
+    }
   }
 }

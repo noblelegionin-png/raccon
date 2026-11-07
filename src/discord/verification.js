@@ -388,6 +388,7 @@ export const PROTECTED_ROLES = [
   'elder',
   'admin',
   'client',
+  'buyer',
   'worker',
 ];
 

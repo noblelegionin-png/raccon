@@ -38,6 +38,7 @@ export const SERVER_CATEGORIES = [
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
       },
       {
         name: 'choose-roles',
@@ -48,6 +49,7 @@ export const SERVER_CATEGORIES = [
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
       },
     ],
   },
@@ -67,7 +69,7 @@ export const SERVER_CATEGORIES = [
         reasoning: 'medium',
         speed: 'fast',
         tokenOptimization: 'standard',
-        isReadOnlyForMembers: true,
+        isOwnerOnly: true,
       },
       {
         name: 'chat',
@@ -78,6 +80,7 @@ export const SERVER_CATEGORIES = [
         reasoning: 'high',
         speed: 'fast',
         tokenOptimization: 'full_power',
+        isRocketAccessOnly: true,
       },
       {
         name: 'announcements',
@@ -133,131 +136,184 @@ export const SERVER_CATEGORIES = [
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 04 — CODING SECTION (Locked to @Coding)
+  // CATEGORY 04 — CODING SECTION (Orders public, Workstation strictly Buyer Only)
   // -------------------------------------------------------------------------
   {
     name: '💻 CODING SECTION',
     targetRoleName: 'Coding',
     channels: [
       {
+        name: 'coding-orders',
+        type: ChannelType.GuildText,
+        topic: '💻 Order custom bots, software & scripts with Sandy. Click Open Ticket below!',
+        purpose: 'Work order ticket launchpad for Coding commissions.',
+        profile: 'help',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+      {
         name: 'coding-chat',
         type: ChannelType.GuildText,
-        topic: '💻 Discussion on software engineering, algorithms, Discord bots & backend.',
-        purpose: 'Technical programming discussions & architecture.',
+        topic: '💻 VIP Client & Buyer engineering room, architecture and code reviews.',
+        purpose: 'Technical programming discussions (Verified Buyers Only).',
         profile: 'chat',
         reasoning: 'medium',
         speed: 'fast',
         tokenOptimization: 'standard',
+        isBuyerOnly: true,
       },
       {
         name: 'code-runner',
         type: ChannelType.GuildText,
-        topic: '⚡ Run & test multi-language code snippets with Rocket.',
-        purpose: 'Code snippet execution & debugging.',
+        topic: '⚡ Run & test multi-language code snippets with Rocket (Buyers Only).',
+        purpose: 'Code snippet execution & debugging (Verified Buyers Only).',
         profile: 'chat',
         reasoning: 'high',
         speed: 'fast',
         tokenOptimization: 'standard',
+        isBuyerOnly: true,
       },
       {
         name: 'bot-showcase',
         type: ChannelType.GuildText,
         topic: '🤖 Showcase of active bots, automation scripts and tools.',
-        purpose: 'Bot and project showcase.',
+        purpose: 'Bot and project showcase (Verified Buyers Only).',
         profile: 'general',
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'minimal',
+        isBuyerOnly: true,
       },
     ],
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 05 — WEB SECTION (Locked to @Web Dev)
+  // CATEGORY 05 — WEB SECTION (Orders public, Workstation strictly Buyer Only)
   // -------------------------------------------------------------------------
   {
     name: '🌐 WEB SECTION',
     targetRoleName: 'Web Dev',
     channels: [
       {
+        name: 'web-orders',
+        type: ChannelType.GuildText,
+        topic: '🌐 Order custom web apps, landing pages & UI/UX with Sandy. Click Open Ticket below!',
+        purpose: 'Work order ticket launchpad for Web Development commissions.',
+        profile: 'help',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+      {
         name: 'web-dev',
         type: ChannelType.GuildText,
-        topic: '🌐 Frontend, full-stack, Next.js, and web application architecture.',
-        purpose: 'Web engineering and design.',
+        topic: '🌐 VIP Client & Buyer web engineering, Next.js apps, and cloud deploy.',
+        purpose: 'Web engineering and design (Verified Buyers Only).',
         profile: 'chat',
         reasoning: 'medium',
         speed: 'fast',
         tokenOptimization: 'standard',
+        isBuyerOnly: true,
       },
       {
         name: 'live-previews',
         type: ChannelType.GuildText,
         topic: '🚀 Live demo staging, client previews, and web deploy inspection.',
-        purpose: 'Live URL testing and site review.',
+        purpose: 'Live URL testing and site review (Verified Buyers Only).',
         profile: 'general',
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'minimal',
+        isBuyerOnly: true,
       },
       {
         name: 'design-lab',
         type: ChannelType.GuildText,
         topic: '🎨 UI/UX mockups, CSS styles, and design systems.',
-        purpose: 'UI design and creative mockups.',
+        purpose: 'UI design and creative mockups (Verified Buyers Only).',
         profile: 'general',
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'minimal',
+        isBuyerOnly: true,
       },
     ],
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 06 — GAMING SECTION (Locked to @Gaming)
+  // CATEGORY 06 — GAMING SECTION (Orders public, Workstation strictly Buyer Only)
   // -------------------------------------------------------------------------
   {
     name: '🎮 GAMING SECTION',
     targetRoleName: 'Gaming',
     channels: [
       {
+        name: 'gaming-orders',
+        type: ChannelType.GuildText,
+        topic: '🎮 Order custom Roblox builds, game configs & server setups with Sandy!',
+        purpose: 'Work order ticket launchpad for Gaming commissions.',
+        profile: 'help',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+      {
         name: 'gaming-hub',
         type: ChannelType.GuildText,
-        topic: '🎮 Squad matchmaking, Roblox, competitive esports & game talk.',
-        purpose: 'Gaming matchmaking and community talk.',
+        topic: '🎮 VIP Gamer & Buyer workstation, squad matchmaking and game talk.',
+        purpose: 'Gaming matchmaking and community talk (Verified Buyers Only).',
         profile: 'chat',
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'standard',
+        isBuyerOnly: true,
       },
       {
         name: 'game-assets',
         type: ChannelType.GuildText,
         topic: '📦 Custom maps, game configs, scripts and 3D assets.',
-        purpose: 'Game asset exchange and configurations.',
+        purpose: 'Game asset exchange and configurations (Verified Buyers Only).',
         profile: 'general',
         reasoning: 'low',
         speed: 'fast',
         tokenOptimization: 'minimal',
+        isBuyerOnly: true,
       },
     ],
   },
 
   // -------------------------------------------------------------------------
-  // CATEGORY 07 — AI & TECH (Locked to @AI & Technology)
+  // CATEGORY 07 — AI & TECH (Orders public, Workstation strictly Buyer Only)
   // -------------------------------------------------------------------------
   {
     name: '🤖 AI & TECH',
     targetRoleName: 'AI & Technology',
     channels: [
       {
+        name: 'ai-orders',
+        type: ChannelType.GuildText,
+        topic: '🤖 Order custom AI agents, neural models & workflows with Sandy!',
+        purpose: 'Work order ticket launchpad for AI commissions.',
+        profile: 'help',
+        reasoning: 'low',
+        speed: 'fast',
+        tokenOptimization: 'minimal',
+        isReadOnlyForMembers: true,
+      },
+      {
         name: 'ai-tools',
         type: ChannelType.GuildText,
         topic: '🤖 AI tools, LLMs, prompting, and neural agent development.',
-        purpose: 'AI and neural technology discussions.',
+        purpose: 'AI and neural technology discussions (Verified Buyers Only).',
         profile: 'chat',
         reasoning: 'high',
         speed: 'fast',
         tokenOptimization: 'full_power',
+        isBuyerOnly: true,
       },
     ],
   },
@@ -277,6 +333,7 @@ export const SERVER_CATEGORIES = [
         reasoning: 'medium',
         speed: 'fast',
         tokenOptimization: 'standard',
+        isReadOnlyForMembers: true,
       },
       {
         name: 'audit-logs',

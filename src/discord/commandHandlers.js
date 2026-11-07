@@ -1514,7 +1514,8 @@ async function handleButtonClick(interaction) {
     if (
       customId.startsWith('btn_close_ticket_') ||
       customId.startsWith('btn_escalate_ticket_') ||
-      customId.startsWith('btn_claim_ticket_')
+      customId.startsWith('btn_claim_ticket_') ||
+      customId.startsWith('btn_grant_buyer_')
     ) {
       return handleTicketButton(interaction);
     }

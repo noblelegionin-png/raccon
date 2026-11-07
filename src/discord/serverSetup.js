@@ -39,6 +39,9 @@ const GOLD_COLOR = 0xf1c40f; // Gold
 const DANGER_COLOR = 0xe74c3c; // Red
 
 export const SERVER_ROLES = [
+  { name: 'Buyer', color: 0xf1c40f, reason: 'Verified N3R0L4BS Buyer role for workstation access' },
+  { name: 'Client', color: 0x3498db, reason: 'Client commissioning projects with Sandy' },
+  { name: 'Rocket Access', color: 0x00e5ff, reason: 'Clearance to talk with and command Rocket AI' },
   { name: 'Verified', color: 0x2ecc71, reason: 'Member verified through Rocket security' },
   { name: 'Brother', color: 0x3498db, reason: 'Designated brother relationship with Sandy' },
   { name: "Sandy's Girlfriend", color: 0xe91e63, reason: "Sandy's girlfriend partner role" },
@@ -95,6 +98,10 @@ export async function executeServerSetup(interaction) {
   const webBaseUrl = (config.rocketMiniAppUrl || config.webAppPublicUrl || 'https://nero-labs-bot-production.up.railway.app').replace(/\/+$/, '');
 
   try {
+    // Fetch all roles & members into cache so permission overwrites resolve without error
+    await guild.roles.fetch().catch(() => null);
+    await guild.members.fetch().catch(() => null);
+
     // 2. Setup Guild Roles
     const createdRoles = {};
     for (const roleDef of SERVER_ROLES) {
@@ -166,6 +173,8 @@ export async function executeServerSetup(interaction) {
       // If category is a locked workstation (e.g. Coding, Web, Gaming, AI), apply locked permissions
       if (catDef.targetRoleName) {
         const targetRole = guild.roles.cache.find((r) => r.name.toLowerCase() === catDef.targetRoleName.toLowerCase());
+        const buyerRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'buyer');
+        const clientRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'client');
         const rocketAccessRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'rocket access');
         const overwrites = [
           {
@@ -182,7 +191,38 @@ export async function executeServerSetup(interaction) {
               PermissionFlagsBits.AttachFiles,
             ],
           },
+          {
+            id: user.id, // Sandy (Owner)
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.EmbedLinks,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.ReadMessageHistory,
+            ],
+          },
         ];
+        if (buyerRole) {
+          overwrites.push({
+            id: buyerRole.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+            ],
+          });
+        }
+        if (clientRole) {
+          overwrites.push({
+            id: clientRole.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+            ],
+          });
+        }
         if (targetRole) {
           overwrites.push({
             id: targetRole.id,
@@ -256,7 +296,7 @@ export async function executeServerSetup(interaction) {
             }
           }
         } else if (chDef.isStaffOnly) {
-          // Staff & Sandy Only (#help-admin)
+          // Staff & Sandy Only (#help-admin, #audit-logs)
           permissionOverwrites.push(
             {
               id: guild.roles.everyone.id,
@@ -299,8 +339,145 @@ export async function executeServerSetup(interaction) {
               ],
             });
           }
+        } else if (chDef.isBuyerOnly) {
+          // STRICT BUYER ONLY WORKSTATION: Non-buyers CANNOT view!
+          const buyerRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'buyer');
+          const clientRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'client');
+          const rocketAccessRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'rocket access');
+          permissionOverwrites.push(
+            {
+              id: guild.roles.everyone.id,
+              deny: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+              ],
+            },
+            {
+              id: guild.client.user.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.ReadMessageHistory,
+              ],
+            },
+            {
+              id: user.id, // Sandy (Owner)
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            }
+          );
+          if (buyerRole) {
+            permissionOverwrites.push({
+              id: buyerRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            });
+          }
+          if (clientRole) {
+            permissionOverwrites.push({
+              id: clientRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            });
+          }
+          if (rocketAccessRole) {
+            permissionOverwrites.push({
+              id: rocketAccessRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+              ],
+            });
+          }
+          if (staffRole) {
+            permissionOverwrites.push({
+              id: staffRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            });
+          }
+        } else if (chDef.isRocketAccessOnly) {
+          // #chat: Everyone can view, but only Sandy, Staff & Rocket Access can send messages!
+          const rocketAccessRole = guild.roles.cache.find((r) => r.name.toLowerCase() === 'rocket access');
+          permissionOverwrites.push(
+            {
+              id: guild.roles.everyone.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.ReadMessageHistory,
+              ],
+              deny: [
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.AddReactions,
+              ],
+            },
+            {
+              id: guild.client.user.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            },
+            {
+              id: user.id, // Sandy
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            }
+          );
+          if (rocketAccessRole) {
+            permissionOverwrites.push({
+              id: rocketAccessRole.id,
+              allow: [
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            });
+          }
+          if (staffRole) {
+            permissionOverwrites.push({
+              id: staffRole.id,
+              allow: [
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            });
+          }
         } else if (chDef.isReadOnlyForMembers) {
-          // Read-only for regular members, write for Rocket and Sandy
+          // Read-only for regular members (Orders & Information channels)
           permissionOverwrites.push(
             {
               id: guild.roles.everyone.id,
@@ -333,16 +510,36 @@ export async function executeServerSetup(interaction) {
             }
           );
         } else {
-          // Standard channel permissions
-          permissionOverwrites.push({
-            id: guild.client.user.id,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.EmbedLinks,
-              PermissionFlagsBits.AttachFiles,
-            ],
-          });
+          // Standard public channels (e.g. #general, #memes, #media-clips)
+          permissionOverwrites.push(
+            {
+              id: guild.roles.everyone.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+              ],
+            },
+            {
+              id: guild.client.user.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            },
+            {
+              id: user.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.AttachFiles,
+              ],
+            }
+          );
         }
 
         if (!channel) {
@@ -480,6 +677,7 @@ async function cleanChannelCompletely(channel) {
  */
 export async function deployChannelInterface(channel, chDef, webBaseUrl, serverLinks, ownerId) {
   try {
+    const { guild } = channel;
     let embed = null;
     let components = [];
 
@@ -685,14 +883,15 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
-      case 'coding-chat': {
+      case 'coding-orders': {
         embed = new EmbedBuilder()
           .setColor(INFO_COLOR)
           .setTitle('💻 CODING COMMISSIONS & WORK ORDERS')
           .setDescription(
             `Welcome to the **Coding Section**! Software engineering, Discord bots, backend APIs, and automation scripts.\n\n` +
-            `👉 **Need a custom build, script, or bug fix?**\n` +
-            `Click **Open Coding Ticket** below to start a private 1-on-1 work order with **Sandy**. You can discuss project requirements, pricing, and timeline directly with Sandy!`
+            `👉 **Need a custom build, script, bot, or bug fix?**\n` +
+            `Click **Open Coding Ticket** below to start a private 1-on-1 work order with **Sandy**. You can discuss project requirements, pricing, and timeline directly with Sandy!\n\n` +
+            `🔒 *Internal coding workstations are unlocked once you are a verified buyer.*`
           )
           .setFooter({ text: 'Sandy Coding Studio • Private Work Order 💻' });
 
@@ -707,14 +906,29 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
-      case 'web-dev': {
+      case 'coding-chat': {
+        embed = new EmbedBuilder()
+          .setColor(INFO_COLOR)
+          .setTitle('💻 VIP BUYER CODING WORKSTATION')
+          .setDescription(
+            `Welcome to the private **Coding Workstation** for verified N3R0L4BS Buyers and Clients!\n\n` +
+            `• Discuss software architecture, codebase issues, and features directly with Sandy.\n` +
+            `• Test snippets in <#${guild.channels.cache.find((c) => c.name === 'code-runner')?.id || 'code-runner'}>\n` +
+            `• Inspect live bot builds in <#${guild.channels.cache.find((c) => c.name === 'bot-showcase')?.id || 'bot-showcase'}>`
+          )
+          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 💻' });
+        break;
+      }
+
+      case 'web-orders': {
         embed = new EmbedBuilder()
           .setColor(0x9b59b6)
           .setTitle('🌐 WEB DEVELOPMENT COMMISSIONS & WORK ORDERS')
           .setDescription(
             `Welcome to the **Web Development Section**! Modern landing pages, full-stack web applications, UI/UX, and cloud deployments.\n\n` +
             `👉 **Need a website or web app built?**\n` +
-            `Click **Open Web Dev Ticket** below to start a private work order with **Sandy**. Discuss features, pricing, and live deployment directly with Sandy!`
+            `Click **Open Web Dev Ticket** below to start a private work order with **Sandy**. Discuss features, pricing, and live deployment directly with Sandy!\n\n` +
+            `🔒 *Internal web workstations are unlocked once you are a verified buyer.*`
           )
           .setFooter({ text: 'Sandy Web Studio • Private Work Order 🌐' });
 
@@ -729,14 +943,29 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
-      case 'gaming-hub': {
+      case 'web-dev': {
+        embed = new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle('🌐 VIP BUYER WEB WORKSTATION')
+          .setDescription(
+            `Welcome to the private **Web Workstation** for verified N3R0L4BS Buyers and Clients!\n\n` +
+            `• Discuss web apps, designs, and staging with Sandy.\n` +
+            `• Check live staging in <#${guild.channels.cache.find((c) => c.name === 'live-previews')?.id || 'live-previews'}>\n` +
+            `• Review UI mockups in <#${guild.channels.cache.find((c) => c.name === 'design-lab')?.id || 'design-lab'}>`
+          )
+          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 🌐' });
+        break;
+      }
+
+      case 'gaming-orders': {
         embed = new EmbedBuilder()
           .setColor(0x2ecc71)
           .setTitle('🎮 GAMING SERVICES, ASSETS & WORK ORDERS')
           .setDescription(
             `Welcome to the **Gaming Section**! Roblox builds, custom scripts, game server setups, configs, and assets.\n\n` +
             `👉 **Need game assets, scripts, or server setups?**\n` +
-            `Click **Open Gaming Ticket** below to start a private work order with **Sandy**!`
+            `Click **Open Gaming Ticket** below to start a private work order with **Sandy**!\n\n` +
+            `🔒 *Internal gaming workstations are unlocked once you are a verified buyer.*`
           )
           .setFooter({ text: 'Sandy Gaming Studio • Private Work Order 🎮' });
 
@@ -751,14 +980,28 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
         break;
       }
 
-      case 'ai-tools': {
+      case 'gaming-hub': {
+        embed = new EmbedBuilder()
+          .setColor(0x2ecc71)
+          .setTitle('🎮 VIP BUYER GAMING WORKSTATION')
+          .setDescription(
+            `Welcome to the private **Gaming Workstation** for verified N3R0L4BS Buyers and Gamers!\n\n` +
+            `• Squad matchmaking, custom server configs, and project collaborations.\n` +
+            `• Download shared configs & assets in <#${guild.channels.cache.find((c) => c.name === 'game-assets')?.id || 'game-assets'}>`
+          )
+          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 🎮' });
+        break;
+      }
+
+      case 'ai-orders': {
         embed = new EmbedBuilder()
           .setColor(0xe67e22)
           .setTitle('🤖 AI & NEURAL AUTOMATION WORK ORDERS')
           .setDescription(
             `Welcome to the **AI & Technology Section**! Autonomous agents, custom AI tools, and workflow automation.\n\n` +
             `👉 **Need an AI bot or smart automation built?**\n` +
-            `Click **Open AI Ticket** below to discuss your project directly with **Sandy**!`
+            `Click **Open AI Ticket** below to discuss your project directly with **Sandy**!\n\n` +
+            `🔒 *Internal AI workstations are unlocked once you are a verified buyer.*`
           )
           .setFooter({ text: 'Sandy AI Labs • Private Work Order 🤖' });
 
@@ -770,6 +1013,18 @@ export async function deployChannelInterface(channel, chDef, webBaseUrl, serverL
               .setStyle(ButtonStyle.Primary)
           ),
         ];
+        break;
+      }
+
+      case 'ai-tools': {
+        embed = new EmbedBuilder()
+          .setColor(0xe67e22)
+          .setTitle('🤖 VIP BUYER AI WORKSTATION')
+          .setDescription(
+            `Welcome to the private **AI Workstation** for verified N3R0L4BS Buyers!\n\n` +
+            `• Test custom AI models, agent architectures, and autonomous workflows with Sandy.`
+          )
+          .setFooter({ text: 'VIP Buyer Workstation • Sandy & Clients 🤖' });
         break;
       }
 

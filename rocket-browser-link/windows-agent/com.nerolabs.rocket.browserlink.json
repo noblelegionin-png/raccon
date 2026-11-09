@@ -1,9 +1,15 @@
-﻿{
+{
   "name": "com.nerolabs.rocket.browserlink",
   "description": "Rocket Browser Link Native Messaging Host for Opera GX",
   "path": "D:\\nero-labs-telegram-bot\\rocket-browser-link\\windows-agent\\RocketBrowserAgent.exe",
   "type": "stdio",
   "allowed_origins": [
-    "chrome-extension://*"
+    "chrome-extension://*",
+    "chrome-extension://cfbphddollpablpobgdfkfjfccobgcbh/",
+    "chrome-extension://biplldlbcmdofkohpdfegipnlfhkgocg/",
+    "chrome-extension://phbbeieeemgccekehoghpbahjcidgmdl/",
+    "chrome-extension://dgnbcpdjfgfepakmjppffbghhbcgoakm/",
+    "chrome-extension://acpcaappfkbbcablpkdbpglgmenmkiil/",
+    "chrome-extension://gfkbjfacfojdgmnoglohdilbmfcebhai/"
   ]
 }

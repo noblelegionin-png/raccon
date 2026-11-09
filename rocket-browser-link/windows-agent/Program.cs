@@ -61,6 +61,23 @@ namespace RocketBrowserAgent
 
         private static void ListenNativeMessagingLoop()
         {
+            bool isNativePipe = false;
+            try
+            {
+                isNativePipe = Console.IsInputRedirected;
+            }
+            catch {}
+
+            if (!isNativePipe)
+            {
+                Logging.Log("Running in Standalone Mode (Native pipe not attached). Keeping Cloud Connection active...");
+                while (_running)
+                {
+                    Thread.Sleep(1000);
+                }
+                return;
+            }
+
             while (_running)
             {
                 string rawMessage = NativeMessaging.ReadMessage();

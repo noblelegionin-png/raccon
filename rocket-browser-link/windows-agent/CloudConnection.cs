@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -31,6 +32,11 @@ namespace RocketBrowserAgent
         public void Start()
         {
             if (_isRunning) return;
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | (SecurityProtocolType)3072;
+            }
+            catch {}
             _isRunning = true;
             _cts = new CancellationTokenSource();
             Task.Run(new Func<Task>(ConnectionLoop));
@@ -52,7 +58,11 @@ namespace RocketBrowserAgent
                 {
                     Logging.Log("Connecting to Rocket Cloud: " + _serverUrl);
                     _ws = new ClientWebSocket();
-                    _ws.Options.SetRequestHeader("User-Agent", "RocketBrowserAgent/1.0.0");
+                    try
+                    {
+                        _ws.Options.SetRequestHeader("X-Rocket-Agent", "RocketBrowserAgent/1.0.0");
+                    }
+                    catch {}
 
                     Uri uri = new Uri(_serverUrl + "?key=" + Uri.EscapeDataString(_accessKey ?? ""));
                     await _ws.ConnectAsync(uri, _cts.Token);

@@ -1,0 +1,8 @@
+{
+  "serverUrl": "wss://nero-labs-bot-production.up.railway.app/ws/browser",
+  "localServerUrl": "ws://127.0.0.1:3000/ws/browser",
+  "accessKey": "rocket_secret_browser_key_2026",
+  "enableCloud": true,
+  "enableLocalAutomation": true,
+  "logLevel": "info"
+}

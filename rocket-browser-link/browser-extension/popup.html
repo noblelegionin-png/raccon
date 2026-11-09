@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rocket Browser Link</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #141320;
+      color: #e0e0e8;
+      padding: 14px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #28243d;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      color: #ff6b35;
+    }
+    .status-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      background: #251b2b;
+      color: #ff5555;
+    }
+    .status-badge.online {
+      background: #132b20;
+      color: #00ff88;
+    }
+    .tab-info {
+      background: #1c1a2e;
+      border: 1px solid #2c2847;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .tab-title {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .tab-url {
+      color: #8c88ab;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      background: #232038;
+      border: 1px solid #383459;
+      color: #f0f0f5;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: #ff6b35;
+      border-color: #ff6b35;
+      color: #ffffff;
+    }
+    .log-box {
+      background: #0d0c15;
+      border: 1px solid #201d33;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #9f9cb8;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <span>🦝</span>
+      <span>Rocket Browser Link</span>
+    </div>
+    <div id="statusBadge" class="status-badge">STANDBY</div>
+  </div>
+
+  <div class="tab-info">
+    <div id="tabTitle" class="tab-title">Loading current tab...</div>
+    <div id="tabUrl" class="tab-url">—</div>
+  </div>
+
+  <div class="actions-grid">
+    <button id="btnCleanTabs" class="btn">🧹 Clean Tabs</button>
+    <button id="btnResetZoom" class="btn">🔍 Zoom (100%)</button>
+    <button id="btnReadPage" class="btn">📄 Read Page</button>
+    <button id="btnCopyPage" class="btn">📋 Copy Info</button>
+  </div>
+
+  <div id="logBox" class="log-box">Ready for Rocket instructions.</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

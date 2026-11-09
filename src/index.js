@@ -3,6 +3,7 @@ import { initDatabase, getDb } from './db/index.js';
 import { startDiscordBot, stopDiscordBot } from './discord/discordBot.js';
 import { createWebServer } from './web/server.js';
 import { applyLogNoiseFilter } from './utils/noiseFilter.js';
+import { browserLinkServer } from './browser/browserLinkServer.js';
 
 // Suppress high-volume internal logs from third-party libraries
 applyLogNoiseFilter();
@@ -33,6 +34,9 @@ async function main() {
     console.log(`[WebServer] Health probe: http://localhost:${config.port}/healthz`);
     console.log(`[WebServer] Web portal running at: http://0.0.0.0:${config.port}`);
   });
+
+  // Attach Rocket Browser Link WebSocket server (/ws/browser)
+  browserLinkServer.attachToServer(server);
 
   // 4. Start Rocket Discord Bot (Dedicated Platform)
   if (config.discordEnabled) {

@@ -1,0 +1,294 @@
+{
+  "version": "1.0.0",
+  "system": "Rocket Browser Link",
+  "actions": {
+    "tab_open": {
+      "id": "tab_open",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {
+        "url": { "type": "string", "required": true, "default": "https://google.com" },
+        "active": { "type": "boolean", "required": false, "default": true }
+      },
+      "description": "Open a new tab with the specified URL."
+    },
+    "tab_close": {
+      "id": "tab_close",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {
+        "tabId": { "type": "number", "required": false },
+        "current": { "type": "boolean", "required": false, "default": true }
+      },
+      "description": "Close a specific tab or the currently active tab."
+    },
+    "tab_switch": {
+      "id": "tab_switch",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {
+        "tabId": { "type": "number", "required": false },
+        "index": { "type": "number", "required": false },
+        "query": { "type": "string", "required": false }
+      },
+      "description": "Switch to a tab by ID, index, or title/URL search query."
+    },
+    "tab_duplicate": {
+      "id": "tab_duplicate",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {
+        "tabId": { "type": "number", "required": false }
+      },
+      "description": "Duplicate the active or specified tab."
+    },
+    "tab_pin": {
+      "id": "tab_pin",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {
+        "tabId": { "type": "number", "required": false },
+        "pinned": { "type": "boolean", "required": false, "default": true }
+      },
+      "description": "Pin or unpin a tab."
+    },
+    "tab_list": {
+      "id": "tab_list",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {},
+      "description": "List all currently open tabs with IDs, titles, and URLs."
+    },
+    "tabs_clean": {
+      "id": "tabs_clean",
+      "risk": "LOW",
+      "category": "tabs",
+      "params": {
+        "closeDuplicates": { "type": "boolean", "required": false, "default": true }
+      },
+      "description": "Clean up open tabs by closing exact duplicates and sorting tabs by domain."
+    },
+    "navigate": {
+      "id": "navigate",
+      "risk": "LOW",
+      "category": "navigation",
+      "params": {
+        "url": { "type": "string", "required": true }
+      },
+      "description": "Navigate the current tab to a URL or search query."
+    },
+    "navigate_back": {
+      "id": "navigate_back",
+      "risk": "LOW",
+      "category": "navigation",
+      "params": {},
+      "description": "Go back to the previous page in history."
+    },
+    "navigate_forward": {
+      "id": "navigate_forward",
+      "risk": "LOW",
+      "category": "navigation",
+      "params": {},
+      "description": "Go forward in browser history."
+    },
+    "reload": {
+      "id": "reload",
+      "risk": "LOW",
+      "category": "navigation",
+      "params": {
+        "bypassCache": { "type": "boolean", "required": false, "default": false }
+      },
+      "description": "Reload the current page."
+    },
+    "stop": {
+      "id": "stop",
+      "risk": "LOW",
+      "category": "navigation",
+      "params": {},
+      "description": "Stop loading the current page."
+    },
+    "zoom_in": {
+      "id": "zoom_in",
+      "risk": "LOW",
+      "category": "zoom",
+      "params": {
+        "step": { "type": "number", "required": false, "default": 0.1 }
+      },
+      "description": "Zoom in the current page."
+    },
+    "zoom_out": {
+      "id": "zoom_out",
+      "risk": "LOW",
+      "category": "zoom",
+      "params": {
+        "step": { "type": "number", "required": false, "default": 0.1 }
+      },
+      "description": "Zoom out the current page."
+    },
+    "zoom_reset": {
+      "id": "zoom_reset",
+      "risk": "LOW",
+      "category": "zoom",
+      "params": {},
+      "description": "Reset zoom level to 100% (1.0)."
+    },
+    "zoom_set": {
+      "id": "zoom_set",
+      "risk": "LOW",
+      "category": "zoom",
+      "params": {
+        "factor": { "type": "number", "required": true }
+      },
+      "description": "Set zoom level to a specific factor (e.g. 1.2 for 120%)."
+    },
+    "page_read": {
+      "id": "page_read",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "selector": { "type": "string", "required": false },
+        "maxLength": { "type": "number", "required": false, "default": 4000 }
+      },
+      "description": "Extract visible text, headings, and key elements from the current page."
+    },
+    "page_click": {
+      "id": "page_click",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "selector": { "type": "string", "required": false },
+        "text": { "type": "string", "required": false },
+        "accessibleName": { "type": "string", "required": false },
+        "index": { "type": "number", "required": false }
+      },
+      "description": "Click an element by CSS selector, visible text, or accessible label."
+    },
+    "page_type": {
+      "id": "page_type",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "selector": { "type": "string", "required": false },
+        "text": { "type": "string", "required": true },
+        "submit": { "type": "boolean", "required": false, "default": false },
+        "clear": { "type": "boolean", "required": false, "default": false }
+      },
+      "description": "Type text into a field (input, textarea, search bar)."
+    },
+    "page_scroll": {
+      "id": "page_scroll",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "direction": { "type": "string", "required": false, "default": "down" },
+        "amount": { "type": "number", "required": false, "default": 600 }
+      },
+      "description": "Scroll the page (up, down, top, bottom, or pixel amount)."
+    },
+    "page_select_copy": {
+      "id": "page_select_copy",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "selector": { "type": "string", "required": false },
+        "text": { "type": "string", "required": false }
+      },
+      "description": "Select text or copy the requested content to the system clipboard."
+    },
+    "page_search": {
+      "id": "page_search",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "query": { "type": "string", "required": true }
+      },
+      "description": "Search for text within the current active webpage."
+    },
+    "page_form_fill": {
+      "id": "page_form_fill",
+      "risk": "LOW",
+      "category": "content",
+      "params": {
+        "fields": { "type": "object", "required": true }
+      },
+      "description": "Fill out multiple form fields on the current page."
+    },
+    "history_search": {
+      "id": "history_search",
+      "risk": "LOW",
+      "category": "history",
+      "params": {
+        "query": { "type": "string", "required": false, "default": "" },
+        "limit": { "type": "number", "required": false, "default": 10 }
+      },
+      "description": "Search browser history for recently visited sites."
+    },
+    "bookmarks_search": {
+      "id": "bookmarks_search",
+      "risk": "LOW",
+      "category": "bookmarks",
+      "params": {
+        "query": { "type": "string", "required": true }
+      },
+      "description": "Search saved bookmarks by title or URL."
+    },
+    "bookmarks_add": {
+      "id": "bookmarks_add",
+      "risk": "LOW",
+      "category": "bookmarks",
+      "params": {
+        "title": { "type": "string", "required": false },
+        "url": { "type": "string", "required": false }
+      },
+      "description": "Add the current page or specified URL to bookmarks."
+    },
+    "downloads_list": {
+      "id": "downloads_list",
+      "risk": "LOW",
+      "category": "downloads",
+      "params": {
+        "limit": { "type": "number", "required": false, "default": 5 }
+      },
+      "description": "List recently downloaded files."
+    },
+    "download_file": {
+      "id": "download_file",
+      "risk": "LOW",
+      "category": "downloads",
+      "params": {
+        "url": { "type": "string", "required": true },
+        "filename": { "type": "string", "required": false }
+      },
+      "description": "Download a file from a URL."
+    },
+    "window_fullscreen": {
+      "id": "window_fullscreen",
+      "risk": "LOW",
+      "category": "window",
+      "params": {
+        "enabled": { "type": "boolean", "required": false }
+      },
+      "description": "Toggle or set full-screen mode on the active window."
+    },
+    "logout_request": {
+      "id": "logout_request",
+      "risk": "HIGH",
+      "category": "security",
+      "params": {
+        "confirmed": { "type": "boolean", "required": false, "default": false }
+      },
+      "description": "Attempt to log out of the current website (requires confirmation)."
+    },
+    "consequential_action": {
+      "id": "consequential_action",
+      "risk": "HIGH",
+      "category": "security",
+      "params": {
+        "actionType": { "type": "string", "required": true },
+        "description": { "type": "string", "required": true },
+        "confirmed": { "type": "boolean", "required": false, "default": false }
+      },
+      "description": "High-risk action (purchase, delete, submit private form, post) requiring explicit confirmation."
+    }
+  }
+}

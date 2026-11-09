@@ -28,6 +28,7 @@ import { checkSmartAntiSpam } from '../antiSpam.js';
 import { getBehaviorProfilePrompt } from '../channelRegistry.js';
 import { getAgentRouting } from '../../models/modelRouter.js';
 import { getConfig } from '../../db/index.js';
+import { browserPlanner } from '../../browser/browserPlanner.js';
 import { rocketLifeEngine } from '../../rocket/lifeEngine.js';
 import { detectSandyAbuse, detectSelfHarmOrSevereThreat, generateDefenseResponse, buildRocketDirective } from '../../rocket/persona.js';
 import { isSandy } from '../../rocket/rbac.js';
@@ -547,7 +548,61 @@ async function handleDirectMessage(message) {
     return; // Complete silence - strictly prohibited from chatting in any non-owner DMs!
   }
 
-  // Check if Boss Sandy gave an administrative command in DMs
+  // 1. Check if Boss Sandy gave a browser control instruction in DMs
+  if (browserPlanner.isBrowserInstruction(content)) {
+    try {
+      await message.channel.sendTyping();
+    } catch {}
+
+    const progressMsg = await message.reply('🦝🐾 *adjusts goggles and taps into Opera GX* Working on it, Boss Sandy! Hold tight...').catch(() => null);
+
+    try {
+      const planResult = await browserPlanner.planAndExecute(content, {
+        chatId: `dm_${author.id}`,
+        confirmed: true, // In personal DMs with Boss Sandy, owner commands carry authorization
+        onStepStart(stepIdx, totalSteps, desc) {
+          if (progressMsg && totalSteps > 1) {
+            progressMsg.edit(`🦝🐾 Step ${stepIdx}/${totalSteps}: *${desc}*...`).catch(() => {});
+          }
+        },
+      });
+
+      const stepSummaries = planResult.results
+        .map((r) => `• **Step ${r.step}:** ${r.description} ✅`)
+        .join('\n');
+
+      let replyText = `🦝🍕 **Mission accomplished in Opera GX, Boss Sandy!** 🐾\n\n${stepSummaries}`;
+
+      // Check if any step had extracted content or results to share
+      const readStep = planResult.results.find((r) => r.action === 'page_read' && r.result?.content);
+      if (readStep) {
+        replyText += `\n\n📄 **Extracted Page Highlights:**\n> ${readStep.result.content.slice(0, 450).replace(/\n+/g, ' ')}`;
+      }
+
+      const copyStep = planResult.results.find((r) => r.action === 'page_select_copy');
+      if (copyStep && copyStep.result?.preview) {
+        replyText += `\n\n📋 **Copied to Clipboard:** \`${copyStep.result.preview}\``;
+      }
+
+      if (progressMsg) {
+        await progressMsg.edit(replyText.slice(0, 2000)).catch(() => message.reply(replyText.slice(0, 2000)));
+      } else {
+        await message.reply(replyText.slice(0, 2000));
+      }
+      return;
+    } catch (browserErr) {
+      console.warn('[Rocket Browser DM Error]:', browserErr.message);
+      const errText = `🦝🐾 *scratches head and checks the antennas* Hit a snag with Opera GX, Boss Sandy:\n⚠️ \`${browserErr.message}\``;
+      if (progressMsg) {
+        await progressMsg.edit(errText).catch(() => message.reply(errText));
+      } else {
+        await message.reply(errText);
+      }
+      return;
+    }
+  }
+
+  // 2. Check if Boss Sandy gave an administrative command in DMs
   const executed = await executeAdminActionFromChat(message, content);
   if (executed) return;
 

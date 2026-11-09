@@ -94,63 +94,95 @@ namespace RocketBrowserAgent
             }
         }
 
+        private static void SendKeyCombo(byte modifier, byte key)
+        {
+            try
+            {
+                keybd_event(modifier, 0, 0, 0);
+                keybd_event(key, 0, 0, 0);
+                Thread.Sleep(30);
+                keybd_event(key, 0, KEYEVENTF_KEYUP, 0);
+                keybd_event(modifier, 0, KEYEVENTF_KEYUP, 0);
+            }
+            catch {}
+        }
+
+        private static void SendSingleKey(byte key)
+        {
+            try
+            {
+                keybd_event(key, 0, 0, 0);
+                Thread.Sleep(30);
+                keybd_event(key, 0, KEYEVENTF_KEYUP, 0);
+            }
+            catch {}
+        }
+
         /// <summary>
-        /// Sends keyboard shortcut directly to focused window.
+        /// Sends keyboard shortcut directly to focused window using native Win32 keybd_event.
         /// </summary>
         public static bool SendBrowserShortcut(string shortcut)
         {
             try
             {
                 FocusBrowserWindow();
+                Thread.Sleep(100);
 
                 switch (shortcut.ToLower())
                 {
                     case "new_tab":
-                        SendKeys.SendWait("^t");
+                        SendKeyCombo(VK_CONTROL, 0x54); // CTRL + T
                         return true;
                     case "close_tab":
-                        SendKeys.SendWait("^w");
+                        SendKeyCombo(VK_CONTROL, 0x57); // CTRL + W
                         return true;
                     case "reopen_tab":
-                        SendKeys.SendWait("^+t");
+                        keybd_event(VK_CONTROL, 0, 0, 0);
+                        keybd_event(VK_SHIFT, 0, 0, 0);
+                        keybd_event(0x54, 0, 0, 0);
+                        Thread.Sleep(30);
+                        keybd_event(0x54, 0, KEYEVENTF_KEYUP, 0);
+                        keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
+                        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
                         return true;
                     case "next_tab":
-                        SendKeys.SendWait("^{TAB}");
-                        return true;
-                    case "prev_tab":
-                        SendKeys.SendWait("^+{TAB}");
+                        SendKeyCombo(VK_CONTROL, VK_TAB);
                         return true;
                     case "zoom_in":
-                        SendKeys.SendWait("^{+}");
+                        SendKeyCombo(VK_CONTROL, 0xBB); // CTRL + '+'
                         return true;
                     case "zoom_out":
-                        SendKeys.SendWait("^-");
+                        SendKeyCombo(VK_CONTROL, 0xBD); // CTRL + '-'
                         return true;
                     case "zoom_reset":
-                        SendKeys.SendWait("^0");
+                        SendKeyCombo(VK_CONTROL, 0x30); // CTRL + '0'
                         return true;
                     case "navigate_back":
                     case "back":
-                        SendKeys.SendWait("%{LEFT}");
+                        SendKeyCombo(VK_MENU, 0x25); // ALT + LEFT
                         return true;
                     case "navigate_forward":
                     case "forward":
-                        SendKeys.SendWait("%{RIGHT}");
+                        SendKeyCombo(VK_MENU, 0x27); // ALT + RIGHT
                         return true;
                     case "reload":
                     case "refresh":
-                        SendKeys.SendWait("{F5}");
+                        SendSingleKey(0x74); // F5
                         return true;
                     case "fullscreen":
-                        SendKeys.SendWait("{F11}");
+                        SendSingleKey(VK_F11);
+                        return true;
+                    case "copy":
+                        SendKeyCombo(VK_CONTROL, 0x43); // CTRL + C
                         return true;
                     case "history":
-                        SendKeys.SendWait("^h");
+                        SendKeyCombo(VK_CONTROL, 0x48); // CTRL + H
                         return true;
                     case "downloads":
-                        SendKeys.SendWait("^j");
+                        SendKeyCombo(VK_CONTROL, 0x4A); // CTRL + J
                         return true;
                 }
+                return true;
             }
             catch (Exception ex)
             {

@@ -11,10 +11,20 @@ namespace RocketBrowserAgent
     {
         private static CloudConnection _cloud;
         private static bool _running = true;
+        private static bool _isLaunchedByBrowser = false;
 
         public static void Main(string[] args)
         {
             Logging.Log("Rocket Browser Agent starting. Args: " + string.Join(" ", args));
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i].StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase))
+                {
+                    _isLaunchedByBrowser = true;
+                    break;
+                }
+            }
 
             if (args.Length > 0 && args[0].Equals("--test", StringComparison.OrdinalIgnoreCase))
             {
@@ -62,16 +72,9 @@ namespace RocketBrowserAgent
 
         private static void ListenNativeMessagingLoop()
         {
-            bool isNativePipe = false;
-            try
+            if (!_isLaunchedByBrowser)
             {
-                isNativePipe = Console.IsInputRedirected;
-            }
-            catch {}
-
-            if (!isNativePipe)
-            {
-                Logging.Log("Running in Standalone Mode (Native pipe not attached). Keeping Cloud Connection active...");
+                Logging.Log("Running in Standalone Mode (not launched by browser). Keeping Cloud Connection active...");
                 while (_running)
                 {
                     Thread.Sleep(1000);
@@ -132,10 +135,7 @@ namespace RocketBrowserAgent
                     return;
                 }
 
-                bool isPipe = false;
-                try { isPipe = Console.IsInputRedirected; } catch {}
-
-                if (!isPipe)
+                if (!_isLaunchedByBrowser)
                 {
                     ExecuteStandaloneBrowserAction(action, correlationId, msg);
                     return;
@@ -218,7 +218,7 @@ namespace RocketBrowserAgent
                 case "page_select_copy":
                     BrowserController.FocusBrowserWindow();
                     Thread.Sleep(50);
-                    SendKeys.SendWait("^c");
+                    BrowserController.SendBrowserShortcut("copy");
                     Thread.Sleep(100);
                     string text = BrowserController.GetClipboardText();
                     result["copied"] = true;

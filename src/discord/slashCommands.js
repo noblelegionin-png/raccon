@@ -518,4 +518,21 @@ export const slashCommands = [
   new SlashCommandBuilder()
     .setName('reasoning')
     .setDescription('⚡ Configure Rocket AI neural reasoning effort (none, low, high, max).'),
+
+  new SlashCommandBuilder()
+    .setName('stream')
+    .setDescription('🔴 Announce a live YouTube stream to the dedicated stream channel.')
+    .addStringOption((opt) =>
+      opt.setName('url').setDescription('YouTube stream URL (e.g. https://youtube.com/watch?v=...)').setRequired(true)
+    )
+    .addStringOption((opt) =>
+      opt.setName('title').setDescription('Optional custom stream broadcast title').setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt.setName('game').setDescription('Optional game / category being streamed').setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('stream-end')
+    .setDescription('🏁 Conclude the active YouTube live stream and unpin announcement.'),
 ];

@@ -586,9 +586,9 @@ export function initDatabase() {
     maintenance_mode: 'false',
     maintenance_announcement_sent: 'false',
     sandy_speed_mode: 'fast',
-    myra_token_budget_baseline: '500',
-    myra_max_tokens_per_request: '500',
-    myra_token_budget_max: '500',
+    myra_token_budget_baseline: '1000',
+    myra_max_tokens_per_request: '1000',
+    myra_token_budget_max: '1000',
     myra_speed_mode: 'turbo',
     myra_autonomous_mode: 'false',
     myra_proactive_enabled: 'true',
@@ -619,6 +619,8 @@ export function initDatabase() {
   try {
     db.prepare("UPDATE app_config SET value = 'gpt-6-luna', updated_at = ? WHERE key = 'active_model_id' AND (value LIKE '%gemini%' OR value LIKE '%deepseek%')").run(now);
     db.prepare("UPDATE app_config SET value = 'gpt-6-luna', updated_at = ? WHERE key LIKE 'agent_model_%' AND (value LIKE '%gemini%' OR value LIKE '%deepseek%')").run(now);
+    // Enforce exact 1000 token budget cap as mandated by Boss Sandy
+    db.prepare("UPDATE app_config SET value = '1000', updated_at = ? WHERE key IN ('myra_token_budget_baseline', 'myra_max_tokens_per_request', 'myra_token_budget_max')").run(now);
   } catch {}
 
   // Ensure owner profile is initialized

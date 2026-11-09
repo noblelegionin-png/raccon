@@ -7,12 +7,13 @@
  * 3. Conversational AI with Raccoon Persona & Server Knowledge
  */
 
-import { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ChannelType, PermissionsBitField, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
   directBroadcastAnnouncement,
   generateAiAnnouncement,
   buildAnnouncementStudioPayload,
 } from '../announcementSystem.js';
+import { broadcastStreamAnnouncement, endActiveStream, parseYouTubeUrl } from '../streamManager.js';
 import { handleNaturalLanguageAdminDirective } from '../entitlementEngine.js';
 import {
   getGuildSettings,
@@ -27,7 +28,7 @@ import {
 import { checkSmartAntiSpam } from '../antiSpam.js';
 import { getBehaviorProfilePrompt } from '../channelRegistry.js';
 import { getAgentRouting } from '../../models/modelRouter.js';
-import { getConfig, addConversationMessage, getRecentConversation, searchDurableMemory } from '../../db/index.js';
+import { getConfig, addConversationMessage, getRecentConversation, searchDurableMemory, addDurableMemory, addUserMemory } from '../../db/index.js';
 import { browserPlanner } from '../../browser/browserPlanner.js';
 import { rocketLifeEngine } from '../../rocket/lifeEngine.js';
 import { detectSandyAbuse, detectSelfHarmOrSevereThreat, generateDefenseResponse, buildRocketDirective } from '../../rocket/persona.js';
@@ -433,6 +434,21 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     const serverContext = getFormattedServerContext(guild.id);
     const lifeState = rocketLifeEngine.getState('discord');
 
+    // 1. Multi-Turn Conversation Memory for Channel
+    const channelContextId = `channel_${channel.id}`;
+    const recentChannelHistory = getRecentConversation(channelContextId, 8);
+
+    // 2. Durable Memory Semantic Retrieval
+    let channelMemoryContext = '';
+    try {
+      const chMems = searchDurableMemory(channelContextId, cleanedText, 3);
+      const userMems = searchDurableMemory(`user_${author.id}`, cleanedText, 3);
+      const combined = [...(chMems || []), ...(userMems || [])];
+      if (combined.length > 0) {
+        channelMemoryContext = combined.map((m) => `- [${m.topic || 'Memory'}]: ${m.content}`).join('\n');
+      }
+    } catch {}
+
     const directive = buildRocketDirective({
       senderName: senderDisplayName,
       isSandy: isOwner,
@@ -444,62 +460,73 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
       groupId: guild.id,
       channelName: channel.name,
       recentChat: recentChatStream || null,
+      memoryContext: channelMemoryContext,
     });
 
     // Channel-aware profile directives
     const channelProfileKey = channelConfig?.ai_behavior_profile || 'chat';
     const channelPrompt = getBehaviorProfilePrompt(channelProfileKey, channel.name);
 
-    // Model router integration: High-IQ witty companion with fast, smart responses
-    let routingCategory = 'chat';
-    const agentRouting = getAgentRouting(routingCategory);
-    const configuredMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
-    let maxOutputTokens = Math.min(agentRouting.maxOutputTokens || 500, configuredMaxTokens);
-    let reasoningEffort = agentRouting.reasoning || getConfig('reasoning_effort', 'none') || 'none';
-    const activeModel = agentRouting.model || 'gpt-6-luna';
+    // Exact 1000 Token Cap as mandated by Boss Sandy
+    const configuredMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000;
+    const maxOutputTokens = 1000;
+    const reasoningEffort = getConfig('reasoning_effort', 'none') || 'none';
+    const activeModel = 'gpt-6-luna';
 
     const fullSystemPrompt =
       `${directive}\n\n` +
-      `SMART COMPANION & INTELLECT DIRECTIVES:\n` +
-      `- You are an ultra-smart, witty raccoon created by Sandy under Nero Labs.\n` +
-      `- You have elite knowledge in Coding, Web Development, and Gaming.\n` +
-      `- NEVER sound dumb, slow, or corporate! Never output sterile disclaimers like "I'm just an AI" or "I am not infallible".\n` +
-      `- Speak with high intelligence, razor-sharp wits, practical solutions, and raccoon swagger! 🦝⚡\n\n` +
+      `EXECUTIVE INTELLIGENCE & COMMUNICATION MANDATE:\n` +
+      `- You are ROCKET AI, an insanely capable, high-IQ autonomous executive co-pilot created exclusively by Sandy (Nero Labs).\n` +
+      `- MASTER EVERY QUESTION: Provide substantive, highly accurate, structured, and professional answers to every inquiry.\n` +
+      `- ZERO REPETITION: Never start answers with the exact same greeting or canned phrase. Vary vocabulary, tone, and openings dynamically.\n` +
+      `- ZERO UNNECESSARY FOOD GIMMICKS: Do not inject unsolicited pizza/taco demands into serious technical, server, or gaming discussions.\n` +
+      `- NEVER sound robotic or sterile ("As an AI", "Certainly!"). Speak with razor-sharp authority, high intellect, and charisma.\n\n` +
       `CHANNEL CONTEXT & DIRECTIVES:\n` +
       `${channelPrompt}\n\n` +
-      `MEMBER STANDING & CRITICAL ADDRESSING RULES:\n` +
+      `MEMBER STANDING & ADDRESSING RULES:\n` +
       `- Sender: "${senderDisplayName}"\n` +
       `- Designated Tier: ${userTier.toUpperCase()}\n` +
-      `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with absolute allegiance.' : `This user is ${senderDisplayName}. Address them as "${senderDisplayName}".`}\n\n` +
+      `- ONLY SANDY IS BOSS: ${isOwner ? 'This user is Boss Sandy (Nero Aurelius). Treat with absolute executive allegiance and priority.' : `This user is ${senderDisplayName}. Address them as "${senderDisplayName}". DO NOT call them Boss.`}\n\n` +
       `${isOwner ? `CRITICAL MANDATE: NEVER REFUSE BOSS SANDY!\n` +
       `- You have full administrative control over all wallets, tokens, roles, and servers.\n` +
-      `- You NEVER say "I can't directly modify wallets or add tokens", "I cannot change roles", "you need to run the token-admin command", "you need to use the dashboard", "double-check before confirming", or lecture Sandy about private keys.\n` +
-      `- If Boss Sandy commands anything about wallets, tokens, access, or server changes, enthusiastically confirm: "✅ *salutes with paw* Done Boss Sandy! Considered done! 🦝⚡🍕"\n\n` : ''}` +
+      `- If Boss Sandy commands anything about server moderation, streaming, or tokens, confirm immediately with executive confidence.\n\n` : ''}` +
       `${serverContext}\n` +
       `DISCORD INSTRUCTIONS:\n` +
-      `- You are chatting on Discord in #${channel.name}!\n` +
+      `- You are chatting in #${channel.name}.\n` +
       `${isConstantTalk ? '- Act as an active, engaging member in this channel.\n' : ''}` +
-      `- Use raccoon emojis naturally: 🦝 🐾 🍕 🌮 ⚡ 😈.\n\n` +
+      `- Use emojis tastefully (⚡, 🚀, 🦝, 👑) without cluttering every sentence.\n\n` +
       `${getCustomEmojiDirectivesPrompt()}`;
 
-    let response = '🦝 *scratches ears and adjusts bandana* Yo! Rocket is tuning the neural antennas. Ask me that one more time! 🍕🐾';
+    let response = isOwner
+      ? 'Understood Boss Sandy. Let me know what specific objective we are tackling next.'
+      : `Hello ${senderDisplayName}. Ready whenever you are.`;
+
     if (scaleMaxAdapter.isConfigured()) {
       try {
+        const messagesPayload = [
+          { role: 'system', content: fullSystemPrompt },
+          ...recentChannelHistory.map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.content,
+          })),
+          { role: 'user', content: cleanedText },
+        ];
+
         const completion = await scaleMaxAdapter.createChatCompletion({
           model: activeModel,
-          messages: [
-            { role: 'system', content: fullSystemPrompt },
-            { role: 'user', content: cleanedText },
-          ],
+          messages: messagesPayload,
           maxTokens: maxOutputTokens,
           reasoningEffort: reasoningEffort,
+          temperature: 0.7,
           timeoutMs: 40000,
         });
 
         response = completion.choices?.[0]?.message?.content || response;
       } catch (err) {
         console.warn('[Rocket Discord AI Error]:', err.message);
-        response = '🦝🐾 *tail puffs* Whoa, neural flux glitch! Toss me another pizza slice and hit me with that again! 🍕';
+        response = isOwner
+          ? '⚠️ Cognitive subsystem momentary hiccup, Boss Sandy. Re-querying immediately will resolve it.'
+          : '⚠️ Temporary latency blip on the neural core. Please try again in just a moment.';
       }
     }
 
@@ -508,6 +535,18 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     const validated = validateAndSanitizeResponse(scrubbed, cleanedText, { isOwner, authorId: author.id });
     response = validated.sanitizedText || scrubbed;
     response = injectServerCustomEmojis(response);
+
+    // Save multi-turn conversation memory for channel continuity
+    addConversationMessage(channelContextId, 'user', cleanedText, 0, 'discord_chat');
+    addConversationMessage(channelContextId, 'assistant', response, 0, activeModel);
+
+    // Auto-index user facts into long-term durable memory
+    const rememberMatch = cleanedText.match(/(?:remember\s+(?:that\s+)?|note\s+(?:that\s+)?|keep\s+in\s+mind\s+(?:that\s+)?)(.+)/i);
+    if (rememberMatch) {
+      const fact = rememberMatch[1].trim();
+      addDurableMemory(channelContextId, 'user_fact', senderDisplayName, fact);
+      addUserMemory(author.id, { category: 'fact', key: 'user_stated_fact', value: fact });
+    }
 
     try {
       if (response.length > 2000) {
@@ -530,8 +569,8 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
   } catch (fatalChatErr) {
     console.error('[Rocket Fatal Chat Handler Error]:', fatalChatErr);
     const fallback = isOwner
-      ? '🦝 *tail puffs* Neural flux blip, Boss Sandy! Toss me another pizza slice and hit me with that again! 🍕⚡'
-      : `🦝 *tail puffs* Neural flux blip! Toss me a pizza slice and hit me with that again! 🍕🐾`;
+      ? '⚡ Neural stream synchronization error, Boss Sandy. Send your instruction once more.'
+      : '⚠️ System synchronization reset. Please resend your message.';
     await channel.send(fallback).catch(() => null);
   }
 }
@@ -643,17 +682,17 @@ async function handleDirectMessage(message) {
     isGroup: false,
   });
 
-  const dmMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
-  // 'low' reasoning gives deep cognitive understanding and context comprehension with sub-second speed
-  const dmReasoning = getConfig('reasoning_effort', 'low') || 'low';
+  const dmMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000;
+  // 'none' reasoning with 1000 output tokens yields ultra-fast, executive-grade answers without truncation
+  const dmReasoning = getConfig('reasoning_effort', 'none') || 'none';
 
-  let response = '🦝 *whispers from the shadows* Haan Boss! Rocket here in DMs. What\'s the mission? 🐾🍕';
+  let response = 'Ready and standing by, Boss Sandy. What directives do we have on deck? ⚡';
   if (scaleMaxAdapter.isConfigured()) {
     try {
       const messagesPayload = [
         { 
           role: 'system', 
-          content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full server administrative access. Speak with fierce loyalty, warmth, high intelligence, and perfect memory of recent context.${memoryContext}` 
+          content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full server administrative access. Speak with fierce loyalty, warmth, high executive intelligence, and perfect memory of recent context. Avoid repetitive canned intros.${memoryContext}` 
         },
         ...recentHistory.map((m) => ({
           role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -667,12 +706,13 @@ async function handleDirectMessage(message) {
         messages: messagesPayload,
         maxTokens: dmMaxTokens,
         reasoningEffort: dmReasoning,
+        temperature: 0.7,
         timeoutMs: 40000,
       });
       response = completion.choices?.[0]?.message?.content || response;
     } catch (err) {
       console.warn('[Rocket DM Completion Error]:', err.message);
-      response = '🦝 *scratches head* Neural core glitch! Ask me again in a sec, Boss! 🍕';
+      response = '⚠️ Neural stream transient timeout, Boss. Ready whenever you want to retry.';
     }
   }
 
@@ -681,6 +721,13 @@ async function handleDirectMessage(message) {
   const validatedDm = validateAndSanitizeResponse(scrubbedDm, content, { isOwner: true });
   response = validatedDm.sanitizedText || scrubbedDm;
   response = injectServerCustomEmojis(response);
+
+  // Auto-record durable directives stated by Sandy
+  const dmMemMatch = content.match(/(?:remember\s+(?:that\s+)?|note\s+(?:that\s+)?|keep\s+in\s+mind\s+(?:that\s+)?)(.+)/i);
+  if (dmMemMatch) {
+    addDurableMemory(chatId, 'owner_directive', 'Boss Sandy Note', dmMemMatch[1].trim());
+    addUserMemory(author.id, { category: 'owner_fact', key: 'boss_directive', value: dmMemMatch[1].trim() });
+  }
 
   // Persist both messages to database for continuous context!
   addConversationMessage(chatId, 'user', content, 0, 'discord_dm');
@@ -704,38 +751,278 @@ async function executeAdminActionFromChat(message, text) {
   if (!guild || !channel) return false;
 
   const lower = text.toLowerCase().trim();
+  // Strip common conversational prefixes so directives like "rocket kick @user" or "please ban @user" execute smoothly
+  const cleanCmd = lower.replace(/^(?:(?:hey\s+)?rocket[,:\s]+|please\s+|can\s+you\s+)+/i, '').trim();
 
-  // 0. Blueprint Natural-Language Owner Directive (tokens, access, pizza credits with confirmation cards)
+  // 0. Blueprint Natural-Language Owner Directive (tokens, access, credits)
   const nlpExecuted = await handleNaturalLanguageAdminDirective(message, text);
   if (nlpExecuted) return true;
 
-  // 1. Purge / Clear N messages
-  const purgeMatch = lower.match(/^(?:purge|clear|clean|delete)\s+(\d+)\s*(?:messages?|msgs?)?/i);
+  // 1. YouTube Live Stream Announcement
+  const ytInfo = parseYouTubeUrl(text);
+  const isStreamIntent =
+    ytInfo &&
+    (/\b(stream|streaming|live|broadcast|stream link|yt stream|youtube stream)\b/i.test(lower) ||
+      /^https?:\/\//i.test(cleanCmd));
+
+  if (isStreamIntent) {
+    try {
+      let customTitle = null;
+      let stripped = text
+        .replace(ytInfo.url, '')
+        .replace(ytInfo.liveUrl || '', '')
+        .replace(/^(?:rocket[,:\s]+)?(?:here\s+is\s+my\s+stream\s+link|stream\s+link|my\s+stream\s+is\s+live|stream|live)[:\s]*/i, '')
+        .trim();
+      if (stripped.length > 2) {
+        customTitle = stripped;
+      }
+
+      const announceResult = await broadcastStreamAnnouncement(guild, {
+        url: ytInfo.liveUrl || ytInfo.url,
+        title: customTitle,
+        ping: '@everyone',
+        authorUser: message.author,
+      });
+
+      await message.reply(injectServerCustomEmojis(
+        `🔴 **LIVE STREAM BROADCAST DISPATCHED!** :rocket_hype::rocket_salute:\n\n` +
+        `• **Channel:** <#${announceResult.channel.id}>\n` +
+        `• **Notification:** Pinned in stream channel & broadcasted to @everyone!\n` +
+        `• **Stream URL:** ${announceResult.url}\n\n` +
+        `*Crush the broadcast, Boss Sandy! I'll monitor the chat and keep everyone tuned in.* 🚀⚡`
+      ));
+      return true;
+    } catch (streamErr) {
+      await message.reply(`⚠️ Could not dispatch stream broadcast: ${streamErr.message}`);
+      return true;
+    }
+  }
+
+  // 2. Conclude Live Stream
+  if (/^(?:stream\s+ended|end\s+stream|stop\s+stream|finish\s+stream|close\s+stream)$/i.test(cleanCmd)) {
+    const endRes = await endActiveStream(guild);
+    if (endRes.ended) {
+      await message.reply(injectServerCustomEmojis(
+        `🏁 **Stream Status Concluded:** Announcement unpinned and updated in the streams channel. Fantastic stream, Boss! :rocket_salute:`
+      ));
+    } else {
+      await message.reply(`Notice: No active stream broadcast was currently tracked.`);
+    }
+    return true;
+  }
+
+  // 3. Purge / Clear N messages
+  const purgeMatch = cleanCmd.match(/^(?:purge|clear|clean|delete)\s+(\d+)\s*(?:messages?|msgs?)?/i);
   if (purgeMatch) {
     const count = Math.min(parseInt(purgeMatch[1], 10), 100);
     const deleted = await channel.bulkDelete(count + 1, true).catch(() => null);
     const actual = deleted ? Math.max(deleted.size - 1, 0) : count;
-    const confirm = await channel.send(injectServerCustomEmojis(`🧹 *tail wags* Done Boss! Swept away **${actual}** messages cleanly! :dev_terminal::nero_pizza:`));
+    const confirm = await channel.send(injectServerCustomEmojis(`🧹 **Executive Action Executed:** Swept away **${actual}** messages cleanly, Boss! :dev_terminal:`));
     setTimeout(() => confirm.delete().catch(() => {}), 4000);
     return true;
   }
 
-  // 2. Lock channel
-  if (/^(?:lock|lockdown|lock\s+channel)$/i.test(lower)) {
+  // 4. Kick user: "kick @user [reason]" or "rocket kick 123456789 reason"
+  const kickMatch = cleanCmd.match(/^(?:kick|boot)\s+(?:<@!?(\d+)>|(\d{17,20}))\s*(.*)/i);
+  if (kickMatch) {
+    const targetId = kickMatch[1] || kickMatch[2];
+    const reason = kickMatch[3]?.trim() || 'Commanded by Boss Sandy via chat';
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (!targetMember) {
+      await message.reply(`⚠️ Member with ID \`${targetId}\` not found in this server.`);
+      return true;
+    }
+    if (targetMember.kickable) {
+      await targetMember.kick(reason).catch(() => null);
+      await message.reply(injectServerCustomEmojis(`👢 **Executive Moderation:** <@${targetId}> has been kicked from the server.\n📋 **Reason:** ${reason} :rocket_salute:`));
+    } else {
+      await message.reply(`⚠️ Unable to kick <@${targetId}> due to Discord role hierarchy permissions.`);
+    }
+    return true;
+  }
+
+  // 5. Ban user: "ban @user [reason]" or "rocket ban 123456789 reason"
+  const banMatch = cleanCmd.match(/^(?:ban|perma\s*ban)\s+(?:<@!?(\d+)>|(\d{17,20}))\s*(.*)/i);
+  if (banMatch) {
+    const targetId = banMatch[1] || banMatch[2];
+    const reason = banMatch[3]?.trim() || 'Banned by Boss Sandy via chat';
+    try {
+      await guild.members.ban(targetId, { reason });
+      await message.reply(injectServerCustomEmojis(`🔨 **Executive Moderation:** <@${targetId}> has been permanently banned from the server.\n📋 **Reason:** ${reason} :rocket_evil:🚨`));
+    } catch (banErr) {
+      await message.reply(`⚠️ Failed to ban <@${targetId}>: ${banErr.message}`);
+    }
+    return true;
+  }
+
+  // 6. Unban user: "unban @user" or "unban 123456789"
+  const unbanMatch = cleanCmd.match(/^unban\s+(?:<@!?(\d+)>|(\d{17,20}))/i);
+  if (unbanMatch) {
+    const targetId = unbanMatch[1] || unbanMatch[2];
+    try {
+      await guild.members.unban(targetId, 'Unbanned by Boss Sandy via chat');
+      await message.reply(injectServerCustomEmojis(`🔓 **Executive Moderation:** <@${targetId}> has been unbanned from the server, Boss!`));
+    } catch (unbanErr) {
+      await message.reply(`⚠️ Could not unban \`${targetId}\`: ${unbanErr.message}`);
+    }
+    return true;
+  }
+
+  // 7. Timeout / Mute user: "timeout @user 10m [reason]" or "mute @user 1h"
+  const muteMatch = cleanCmd.match(/^(?:timeout|mute)\s+(?:<@!?(\d+)>|(\d{17,20}))(?:\s+(?:for\s+)?(\d+)([mhsd]))?\s*(.*)/i);
+  if (muteMatch) {
+    const targetId = muteMatch[1] || muteMatch[2];
+    const qty = parseInt(muteMatch[3] || '10', 10);
+    const unit = muteMatch[4] || 'm';
+    const reason = muteMatch[5]?.trim() || 'Timed out by Boss Sandy';
+    let ms = qty * 60 * 1000;
+    if (unit === 'h') ms = qty * 60 * 60 * 1000;
+    if (unit === 'd') ms = qty * 24 * 60 * 60 * 1000;
+    if (unit === 's') ms = qty * 1000;
+
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (!targetMember) {
+      await message.reply(`⚠️ Member \`${targetId}\` not found in this server.`);
+      return true;
+    }
+    if (targetMember.moderatable) {
+      await targetMember.timeout(ms, reason).catch(() => null);
+      await message.reply(injectServerCustomEmojis(`⏱️ **Executive Moderation:** <@${targetId}> has been timed out for **${qty}${unit}**.\n📋 **Reason:** ${reason} :rocket_salute:`));
+    } else {
+      await message.reply(`⚠️ Role hierarchy prevents timing out <@${targetId}>.`);
+    }
+    return true;
+  }
+
+  // 8. Untimeout / Unmute user
+  const unmuteMatch = cleanCmd.match(/^(?:unmute|untimeout)\s+(?:<@!?(\d+)>|(\d{17,20}))/i);
+  if (unmuteMatch) {
+    const targetId = unmuteMatch[1] || unmuteMatch[2];
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (targetMember && targetMember.moderatable) {
+      await targetMember.timeout(null, 'Timeout removed by Boss Sandy').catch(() => null);
+      await message.reply(injectServerCustomEmojis(`🔊 **Executive Moderation:** Timeout removed from <@${targetId}>. Full access restored, Boss!`));
+      return true;
+    }
+  }
+
+  // 9. Role Management: "give role @user VIP" or "add role @user VIP"
+  const addRoleMatch = cleanCmd.match(/^(?:give|add|assign)\s+role\s+(?:<@!?(\d+)>|(\d{17,20}))\s+(?:to\s+)?(.+)/i) ||
+    cleanCmd.match(/^role\s+(?:<@!?(\d+)>|(\d{17,20}))\s+add\s+(.+)/i);
+  if (addRoleMatch) {
+    const targetId = addRoleMatch[1] || addRoleMatch[2];
+    const roleQuery = addRoleMatch[3]?.trim();
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (!targetMember) {
+      await message.reply(`⚠️ Member \`${targetId}\` not found in server.`);
+      return true;
+    }
+    const role = guild.roles.cache.find(
+      (r) => r.name.toLowerCase() === roleQuery.toLowerCase() || r.id === roleQuery.replace(/[<@&>]/g, '')
+    );
+    if (!role) {
+      await message.reply(`⚠️ Role \`${roleQuery}\` not found on this server.`);
+      return true;
+    }
+    try {
+      await targetMember.roles.add(role);
+      await message.reply(injectServerCustomEmojis(`🎖️ **Executive Role Granted:** Added **${role.name}** to <@${targetId}>, Boss! :rocket_salute:`));
+    } catch (rErr) {
+      await message.reply(`⚠️ Failed to assign role: ${rErr.message}`);
+    }
+    return true;
+  }
+
+  // 10. Role Removal: "remove role @user VIP" or "take role @user VIP"
+  const removeRoleMatch = cleanCmd.match(/^(?:remove|take)\s+role\s+(?:<@!?(\d+)>|(\d{17,20}))\s+(?:from\s+)?(.+)/i) ||
+    cleanCmd.match(/^role\s+(?:<@!?(\d+)>|(\d{17,20}))\s+remove\s+(.+)/i);
+  if (removeRoleMatch) {
+    const targetId = removeRoleMatch[1] || removeRoleMatch[2];
+    const roleQuery = removeRoleMatch[3]?.trim();
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (!targetMember) {
+      await message.reply(`⚠️ Member \`${targetId}\` not found in server.`);
+      return true;
+    }
+    const role = guild.roles.cache.find(
+      (r) => r.name.toLowerCase() === roleQuery.toLowerCase() || r.id === roleQuery.replace(/[<@&>]/g, '')
+    );
+    if (!role) {
+      await message.reply(`⚠️ Role \`${roleQuery}\` not found on this server.`);
+      return true;
+    }
+    try {
+      await targetMember.roles.remove(role);
+      await message.reply(injectServerCustomEmojis(`🛡️ **Executive Role Removed:** Stripped **${role.name}** from <@${targetId}>, Boss!`));
+    } catch (rErr) {
+      await message.reply(`⚠️ Failed to remove role: ${rErr.message}`);
+    }
+    return true;
+  }
+
+  // 11. Nickname: "nickname @user NewName" or "nick @user NewName"
+  const nickMatch = cleanCmd.match(/^(?:nick|nickname|rename\s+user)\s+(?:<@!?(\d+)>|(\d{17,20}))\s+(.+)/i);
+  if (nickMatch) {
+    const targetId = nickMatch[1] || nickMatch[2];
+    const newNick = nickMatch[3]?.trim();
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    if (targetMember) {
+      try {
+        await targetMember.setNickname(newNick);
+        await message.reply(`✏️ **Nickname Updated:** Set nickname of <@${targetId}> to **${newNick}**, Boss!`);
+      } catch (nickErr) {
+        await message.reply(`⚠️ Failed to update nickname: ${nickErr.message}`);
+      }
+      return true;
+    }
+  }
+
+  // 12. Pin Message: Reply to a message and say "pin" or "pin this"
+  if (/^(?:pin|pin\s+this|pin\s+message)$/i.test(cleanCmd)) {
+    if (message.reference?.messageId) {
+      const refMsg = await channel.messages.fetch(message.reference.messageId).catch(() => null);
+      if (refMsg) {
+        await refMsg.pin().catch(() => null);
+        await message.reply(`📌 **Message Pinned** by executive command, Boss!`);
+        return true;
+      }
+    }
+  }
+
+  // 13. Channel Rename: "rename channel [newName]"
+  const renameChMatch = cleanCmd.match(/^rename\s+channel\s+(?:to\s+)?(.+)/i);
+  if (renameChMatch) {
+    const newName = renameChMatch[1].trim().replace(/\s+/g, '-').toLowerCase();
+    await channel.setName(newName).catch(() => null);
+    await message.reply(`🏷️ **Channel Renamed:** Updated to **#${newName}**, Boss!`);
+    return true;
+  }
+
+  // 14. Channel Topic: "set channel topic [topic]"
+  const topicMatch = cleanCmd.match(/^set\s+channel\s+topic\s+(?:to\s+)?(.+)/i);
+  if (topicMatch) {
+    const newTopic = topicMatch[1].trim();
+    await channel.setTopic(newTopic).catch(() => null);
+    await message.reply(`📝 **Channel Topic Updated:** \`${newTopic}\``);
+    return true;
+  }
+
+  // 15. Lock channel
+  if (/^(?:lock|lockdown|lock\s+channel)$/i.test(cleanCmd)) {
     await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => null);
-    await message.reply(injectServerCustomEmojis('🔒 *clangs padlock shut* Channel locked down, Boss! Nobody can speak except you and staff. :rocket_boss:'));
+    await message.reply(injectServerCustomEmojis('🔒 **Channel Lockdown:** Channel locked. Non-staff member posting disabled, Boss! :rocket_boss:'));
     return true;
   }
 
-  // 3. Unlock channel
-  if (/^(?:unlock|unlock\s+channel)$/i.test(lower)) {
+  // 16. Unlock channel
+  if (/^(?:unlock|unlock\s+channel)$/i.test(cleanCmd)) {
     await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => null);
-    await message.reply(injectServerCustomEmojis('🔓 *turns brass key* Channel unlocked and open for chatting, Boss! :nero_pizza::rocket_salute:'));
+    await message.reply(injectServerCustomEmojis('🔓 **Channel Restored:** Lockdown lifted. Public chatting resumed, Boss! :rocket_salute:'));
     return true;
   }
 
-  // 4. Slowmode
-  const slowMatch = lower.match(/^slowmode\s+(off|\d+s?|\d+m?)/i);
+  // 17. Slowmode
+  const slowMatch = cleanCmd.match(/^slowmode\s+(off|\d+s?|\d+m?)/i);
   if (slowMatch) {
     let seconds = 0;
     const val = slowMatch[1].toLowerCase();
@@ -744,55 +1031,16 @@ async function executeAdminActionFromChat(message, text) {
       else seconds = parseInt(val.replace('s', ''), 10) || 5;
     }
     await channel.setRateLimitPerUser(seconds).catch(() => null);
-    await message.reply(injectServerCustomEmojis(seconds > 0 ? `⏳ Slowmode set to **${seconds}s**, Boss! :rocket_salute:` : '⚡ Slowmode disabled, full speed ahead, Boss! :rocket_hype::nero_pizza:'));
+    await message.reply(injectServerCustomEmojis(seconds > 0 ? `⏳ **Slowmode Configured:** Rate limit set to **${seconds}s**, Boss! :rocket_salute:` : '⚡ **Slowmode Disabled:** Full speed ahead, Boss! :rocket_hype:'));
     return true;
   }
 
-  // 5. Timeout user
-  const timeoutMatch = lower.match(/^timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)?([mhsd])?/i);
-  if (timeoutMatch) {
-    const targetId = timeoutMatch[1];
-    const targetMember = await guild.members.fetch(targetId).catch(() => null);
-    if (targetMember && targetMember.moderatable) {
-      const qty = parseInt(timeoutMatch[2] || '10', 10);
-      const unit = timeoutMatch[3] || 'm';
-      let ms = qty * 60 * 1000;
-      if (unit === 'h') ms = qty * 60 * 60 * 1000;
-      if (unit === 'd') ms = qty * 24 * 60 * 60 * 1000;
-      if (unit === 's') ms = qty * 1000;
-      await targetMember.timeout(ms, 'Timed out by Boss Sandy via chat').catch(() => null);
-      await message.reply(injectServerCustomEmojis(`⏱️ *paws down gavel* <@${targetId}> has been timed out for **${qty}${unit}** on your command, Boss! :rocket_evil:🚨`));
-      return true;
-    }
-  }
-
-  // 6. Kick user
-  const kickMatch = lower.match(/^kick\s+<@!?(\d+)>/i);
-  if (kickMatch) {
-    const targetId = kickMatch[1];
-    const targetMember = await guild.members.fetch(targetId).catch(() => null);
-    if (targetMember && targetMember.kickable) {
-      await targetMember.kick('Kicked by Boss Sandy via chat').catch(() => null);
-      await message.reply(injectServerCustomEmojis(`👢 *delivers raccoon kick* <@${targetId}> has been kicked from the server, Boss! :rocket_salute:`));
-      return true;
-    }
-  }
-
-  // 7. Ban user
-  const banMatch = lower.match(/^ban\s+<@!?(\d+)>/i);
-  if (banMatch) {
-    const targetId = banMatch[1];
-    await guild.members.ban(targetId, { reason: 'Banned by Boss Sandy via chat' }).catch(() => null);
-    await message.reply(injectServerCustomEmojis(`🔨 *swings the ban hammer* <@${targetId}> has been permanently banned, Boss! :rocket_evil:🚨`));
-    return true;
-  }
-
-  // 8. AI-Powered Announcement Directive: "rocket announce ai: [topic]" or "announce ai: [topic]"
+  // 18. AI-Powered Announcement Directive: "rocket announce ai: [topic]"
   const aiAnnounceMatch = text.match(/^(?:announce\s+ai|ai\s+announcement|broadcast\s+ai)[:\s]+([\s\S]+)/i);
   if (aiAnnounceMatch) {
     const rawInput = aiAnnounceMatch[1].trim();
     if (!rawInput) {
-      await message.reply('🦝 Please provide a topic for the AI announcement! Example: `rocket announce ai: New bot features coming tomorrow!`');
+      await message.reply('🦝 Please provide a topic for the AI announcement! Example: `rocket announce ai: Major platform update coming tonight!`');
       return true;
     }
 
@@ -806,7 +1054,7 @@ async function executeAdminActionFromChat(message, text) {
       cleanPrompt = cleanPrompt.replace(/@here\b/gi, '').trim();
     }
 
-    const typingMsg = await message.reply('🤖 *whirs excitedly* Rocket neural core generating high-impact AI announcement... 🐾🍕');
+    const typingMsg = await message.reply('🤖 *Rocket cognitive core generating executive broadcast announcement...* ⚡');
     try {
       const { title, body } = await generateAiAnnouncement({
         topic: cleanPrompt,
@@ -822,19 +1070,19 @@ async function executeAdminActionFromChat(message, text) {
         authorUser: message.author,
       });
 
-      await typingMsg.edit(injectServerCustomEmojis(`📢 *salutes with raccoon paw* **BOOM! AI Announcement Dispatched!** Live in <#${annCh.id}>! :rocket_salute::rocket_hype:\n\n**Title:** ${title}\n🔗 **Link:** ${sentMsg.url}`));
+      await typingMsg.edit(injectServerCustomEmojis(`📢 **Executive Announcement Live!** Broadcast dispatched in <#${annCh.id}>! :rocket_salute:\n\n**Title:** ${title}\n🔗 **Direct Link:** ${sentMsg.url}`));
     } catch (err) {
       await typingMsg.edit(`⚠️ Failed to broadcast announcement: ${err.message}`);
     }
     return true;
   }
 
-  // 9. Custom Announcement Directive: "rocket announce: [message]" or "broadcast: [message]"
+  // 19. Custom Announcement Directive: "rocket announce: [message]"
   const customAnnounceMatch = text.match(/^(?:announce|broadcast|send\s+announcement)[:\s]+([\s\S]+)/i);
   if (customAnnounceMatch) {
     const rawContent = customAnnounceMatch[1].trim();
     if (!rawContent) {
-      await message.reply('🦝 Please provide the announcement text! Example: `rocket announce: Server update live in 10 minutes!`');
+      await message.reply('🦝 Please provide the announcement text! Example: `rocket announce: Server maintenance complete!`');
       return true;
     }
 
@@ -866,15 +1114,15 @@ async function executeAdminActionFromChat(message, text) {
         authorUser: message.author,
       });
 
-      await message.reply(injectServerCustomEmojis(`📢 *tail wags* **Done Boss! Custom Announcement Dispatched!** Live in <#${annCh.id}>! :rocket_salute::nero_pizza:\n🔗 **Link:** ${sentMsg.url}`));
+      await message.reply(injectServerCustomEmojis(`📢 **Announcement Dispatched!** Live in <#${annCh.id}>! :rocket_salute:\n🔗 **Direct Link:** ${sentMsg.url}`));
     } catch (err) {
       await message.reply(`⚠️ Failed to broadcast announcement: ${err.message}`);
     }
     return true;
   }
 
-  // 10. Open Announcement Hub: "rocket send announcement" or "tell rocket to send an announcement"
-  if (/^(?:tell\s+rocket\s+to\s+)?(?:send\s+an?|dispatch\s+an?|make\s+an?|open)?\s*announcements?\s*(?:hub|studio|launcher)?$/i.test(lower)) {
+  // 20. Open Announcement Hub: "rocket send announcement"
+  if (/^(?:tell\s+rocket\s+to\s+)?(?:send\s+an?|dispatch\s+an?|make\s+an?|open)?\s*announcements?\s*(?:hub|studio|launcher)?$/i.test(cleanCmd)) {
     if (isDm) {
       const payload = buildAnnouncementStudioPayload();
       await message.reply({
@@ -890,7 +1138,7 @@ async function executeAdminActionFromChat(message, text) {
           .setStyle(ButtonStyle.Success)
       );
       await message.reply({
-        content: '📢 **Rocket Announcement Studio:** Click the button below to launch your private announcement creator *(Only visible to you)*:',
+        content: '📢 **Rocket Announcement Studio:** Click below to open your announcement creator *(Visible only to you)*:',
         components: [row],
       });
     }

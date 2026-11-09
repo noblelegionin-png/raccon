@@ -221,7 +221,7 @@ rocketRouter.post('/chat', async (req, res) => {
           body: JSON.stringify({
             model: activeModel || 'gpt-6-luna',
             messages,
-            max_tokens: Math.min(500, parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500),
+            max_tokens: Math.min(1000, parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000),
             temperature: 0.75,
           }),
         });

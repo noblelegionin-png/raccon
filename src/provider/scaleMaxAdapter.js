@@ -264,7 +264,7 @@ export class ScaleMaxAdapter {
 
         const outboundMessages = [privacyMandate, ...(messages || [])];
 
-        const configuredMax = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
+        const configuredMax = parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000;
         const requestedTokens = maxTokens || max_tokens || configuredMax;
         const effectiveMaxTokens = (maxTokens && maxTokens > 1000 && (!chatId || chatId === 'unknown'))
           ? requestedTokens

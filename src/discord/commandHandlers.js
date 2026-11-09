@@ -20,6 +20,7 @@ import {
   AttachmentBuilder,
 } from 'discord.js';
 import { config } from '../config.js';
+import { broadcastStreamAnnouncement, endActiveStream } from './streamManager.js';
 import { executeServerSetup } from './serverSetup.js';
 import {
   getGuildSettings,
@@ -1299,7 +1300,7 @@ async function handleSlashCommand(interaction) {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: question },
               ],
-              maxTokens: Math.min(500, parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500),
+              maxTokens: Math.min(1000, parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000),
               timeoutMs: 30000,
             });
             answer = completion.choices?.[0]?.message?.content || answer;
@@ -1508,6 +1509,51 @@ async function handleSlashCommand(interaction) {
 
       case 'reasoning': {
         return interaction.reply(buildReasoningSelector(user));
+      }
+
+      case 'stream': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) {
+          return interaction.reply({
+            content: '⛔ **Access Denied:** Only Supreme Boss (**Sandy**) can broadcast live streams to this server!',
+            ephemeral: true,
+          });
+        }
+        await interaction.deferReply({ ephemeral: false });
+        const url = interaction.options.getString('url');
+        const title = interaction.options.getString('title');
+        const game = interaction.options.getString('game');
+        try {
+          const res = await broadcastStreamAnnouncement(guild, {
+            url,
+            title,
+            game,
+            ping: '@everyone',
+            authorUser: user,
+          });
+          return interaction.editReply(
+            `🔴 **Live Stream Announced!** Broadcast dispatched and pinned in <#${res.channel.id}>! ⚡\n🔗 ${res.url}`
+          );
+        } catch (sErr) {
+          return interaction.editReply(`⚠️ Failed to announce stream: ${sErr.message}`);
+        }
+      }
+
+      case 'stream-end': {
+        const isOwner = isDiscordOwner(user, guild);
+        if (!isOwner) {
+          return interaction.reply({
+            content: '⛔ **Access Denied:** Only Boss Sandy can conclude live stream broadcasts.',
+            ephemeral: true,
+          });
+        }
+        await interaction.deferReply({ ephemeral: false });
+        const res = await endActiveStream(guild);
+        if (res.ended) {
+          return interaction.editReply('🏁 **Stream Concluded:** Broadcast unpinned and updated in the streams channel.');
+        } else {
+          return interaction.editReply('Notice: No active stream announcement was currently recorded.');
+        }
       }
 
       case 'announce': {

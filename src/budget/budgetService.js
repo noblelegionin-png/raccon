@@ -38,9 +38,9 @@ export class BudgetService {
       dailyLimitUsd: parseFloat(getConfig('myra_daily_budget_usd', '5.00')),
       monthlyLimitUsd: parseFloat(getConfig('myra_monthly_budget_usd', '50.00')),
       reservePct: parseFloat(getConfig('myra_reserve_budget_pct', '15.0')), // 15% reserve buffer
-      maxTokensPerRequest: parseInt(getConfig('myra_max_tokens_per_request', '500'), 10),
-      tokenBudgetBaseline: parseInt(getConfig('myra_token_budget_baseline', '500'), 10),
-      tokenBudgetMax: parseInt(getConfig('myra_token_budget_max', '500'), 10),
+      maxTokensPerRequest: parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10),
+      tokenBudgetBaseline: parseInt(getConfig('myra_token_budget_baseline', '1000'), 10),
+      tokenBudgetMax: parseInt(getConfig('myra_token_budget_max', '1000'), 10),
       maxConcurrentJobs: parseInt(getConfig('myra_max_concurrent_jobs', '3'), 10),
     };
   }

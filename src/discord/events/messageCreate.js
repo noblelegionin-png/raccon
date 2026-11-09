@@ -27,6 +27,7 @@ import {
 import { checkSmartAntiSpam } from '../antiSpam.js';
 import { getBehaviorProfilePrompt } from '../channelRegistry.js';
 import { getAgentRouting } from '../../models/modelRouter.js';
+import { getConfig } from '../../db/index.js';
 import { rocketLifeEngine } from '../../rocket/lifeEngine.js';
 import { detectSandyAbuse, detectSelfHarmOrSevereThreat, generateDefenseResponse, buildRocketDirective } from '../../rocket/persona.js';
 import { isSandy } from '../../rocket/rbac.js';
@@ -450,10 +451,10 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
 
     // Model router integration: High-IQ witty companion with fast, smart responses
     let routingCategory = 'chat';
-    let maxOutputTokens = 1200;
-    let reasoningEffort = 'low';
-
     const agentRouting = getAgentRouting(routingCategory);
+    const configuredMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
+    let maxOutputTokens = Math.min(agentRouting.maxOutputTokens || 500, configuredMaxTokens);
+    let reasoningEffort = agentRouting.reasoning || getConfig('reasoning_effort', 'none') || 'none';
     const activeModel = agentRouting.model || 'gpt-6-luna';
 
     const fullSystemPrompt =
@@ -562,17 +563,20 @@ async function handleDirectMessage(message) {
     isGroup: false,
   });
 
+  const dmMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
+  const dmReasoning = getConfig('reasoning_effort', 'none') || 'none';
+
   let response = '🦝 *whispers from the shadows* Haan Boss! Rocket here in DMs. What\'s the mission? 🐾🍕';
   if (scaleMaxAdapter.isConfigured()) {
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: 'gpt-6-luna',
         messages: [
-          { role: 'system', content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full reasoning power and full server administrative access. Speak with fierce loyalty, warmth, and high intelligence.` },
+          { role: 'system', content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full server administrative access. Speak with fierce loyalty, warmth, and high intelligence.` },
           { role: 'user', content },
         ],
-        maxTokens: 2500,
-        reasoningEffort: 'high',
+        maxTokens: dmMaxTokens,
+        reasoningEffort: dmReasoning,
         timeoutMs: 40000,
       });
       response = completion.choices?.[0]?.message?.content || response;

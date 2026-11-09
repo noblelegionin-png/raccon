@@ -24,6 +24,7 @@ import {
   EmbedBuilder,
 } from 'discord.js';
 import { config } from '../config.js';
+import { getConfig } from '../db/index.js';
 
 const BRAND_COLOR = 0xff6b35; // Fiery Raccoon Orange
 const BOSS_COLOR = 0x9b59b6;  // Royal Boss Purple
@@ -45,7 +46,7 @@ export function buildMasterDashboardEmbed(guild, settings = {}) {
     .setDescription(
       `Welcome to **Rocket AI Full Power Hub**! This dashboard gives you **100% command-free server control** with **200+ direct interactive button and menu features**.\n\n` +
       `**Active Server Engine Status:**\n` +
-      `• **AI Neural Engine:** ⚡ **Full Power Active** (2,500 Token Budget • High Reasoning)\n` +
+      `• **AI Neural Engine:** ⚡ **Active** (${getConfig('myra_max_tokens_per_request', '500')} Token Budget • ${getConfig('reasoning_effort', 'none').toUpperCase()} Reasoning)\n` +
       `• **Chat Talking Mode:** ${chatMode === 'constant' ? '🟢 **Constant Talk**' : '⚪ **Mention-Only**'}\n` +
       `• **6-Hour Channel Purge:** ${isAutoPurgeActive ? '🟢 **Active (Sweeping every 15m)**' : '🔴 **Disabled**'}\n` +
       `• **Boss Protection:** 🛡️ **Maximum Severity** (Instant 1h Timeout on Disrespect)\n` +
@@ -360,7 +361,7 @@ export function buildAiBrainDeck() {
     .setDescription(
       `Fine-tune Rocket's conversational intelligence, personas, and response mode in real-time:\n\n` +
       `• **10 Personas:** Bandit Raccoon, Cyber Sentinel, Gamer Bro, Philosopher, Professor, Comedian, Bodyguard...\n` +
-      `• **Reasoning & Tokens:** Configure High/Medium/Low reasoning & 500-2,500 token budget\n` +
+      `• **Reasoning & Tokens:** Configure High/Medium/Low reasoning & 500-2,500 token budget (Default: 500 Max Budget)\n` +
       `• **Fuel Engine:** Feed Rocket snacks (Pizza, Tacos, Steak, Energy Drinks) to boost energy`
     );
 

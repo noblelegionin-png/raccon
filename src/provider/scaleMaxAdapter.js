@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { recordTokenUsage } from '../db/index.js';
+import { recordTokenUsage, getConfig } from '../db/index.js';
 import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
 
 /**
@@ -264,11 +264,17 @@ export class ScaleMaxAdapter {
 
         const outboundMessages = [privacyMandate, ...(messages || [])];
 
+        const configuredMax = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
+        const requestedTokens = maxTokens || max_tokens || configuredMax;
+        const effectiveMaxTokens = (maxTokens && maxTokens > 1000 && (!chatId || chatId === 'unknown'))
+          ? requestedTokens
+          : Math.min(requestedTokens, configuredMax);
+
         const payload = {
           model: targetModel,
           messages: outboundMessages,
           temperature: typeof temperature === 'number' ? temperature : 0.5,
-          max_tokens: maxTokens || max_tokens || 500,
+          max_tokens: effectiveMaxTokens,
         };
 
         if (Array.isArray(tools) && tools.length > 0) {

@@ -76,6 +76,8 @@ import { isSandy } from '../rocket/rbac.js';
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { buildRocketDirective } from '../rocket/persona.js';
 import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
+import { getConfig, setConfig } from '../db/index.js';
+import { budgetService } from '../budget/budgetService.js';
 import {
   buildMasterDashboardEmbed,
   buildMasterDashboardComponents,
@@ -391,17 +393,26 @@ async function handleSelectMenu(interaction) {
         updateGuildSettings(guild.id, { chat_mode: 'constant' });
         return interaction.reply({ content: '🟢 **Chat Mode Set:** Constant Talk (Rocket chats actively in #chat) 🍕🔥', ephemeral: true });
       case 'ai_sel_reasoning_high':
+        setConfig('reasoning_effort', 'high');
+        setConfig('agent_reasoning_chat', 'high');
         return interaction.reply({ content: '🧠 **Reasoning Depth:** Set to **HIGH** (Maximum cognitive depth enabled) ⚡', ephemeral: true });
       case 'ai_sel_reasoning_medium':
+        setConfig('reasoning_effort', 'medium');
+        setConfig('agent_reasoning_chat', 'medium');
         return interaction.reply({ content: '🧠 **Reasoning Depth:** Set to **MEDIUM** (Balanced speed and intelligence) 🐾', ephemeral: true });
       case 'ai_sel_reasoning_low':
+        setConfig('reasoning_effort', 'low');
+        setConfig('agent_reasoning_chat', 'low');
         return interaction.reply({ content: '⚡ **Reasoning Depth:** Set to **LOW** (Fastest conversational response) 🚀', ephemeral: true });
       case 'ai_sel_tokens_2500':
+        budgetService.setTokenBudget(500, 2500);
         return interaction.reply({ content: '🔋 **Token Budget:** Set to **2,500 Tokens** (Full Power Unrestricted Output) 💥', ephemeral: true });
       case 'ai_sel_tokens_1000':
+        budgetService.setTokenBudget(500, 1000);
         return interaction.reply({ content: '🔋 **Token Budget:** Set to **1,000 Tokens** (Standard output length) 🍕', ephemeral: true });
       case 'ai_sel_tokens_500':
-        return interaction.reply({ content: '🔋 **Token Budget:** Set to **500 Tokens** (Short & punchy replies) 🐾', ephemeral: true });
+        budgetService.setTokenBudget(500, 500);
+        return interaction.reply({ content: '🔋 **Token Budget:** Set to **500 Tokens Maximum** (Short & punchy replies) 🐾', ephemeral: true });
       case 'ai_sel_clear_context':
         return interaction.reply({ content: '🧼 **Context Flushed:** Rocket cleared sliding window history for fresh discussions! 🧠✨', ephemeral: true });
       case 'ai_sel_test_ping':
@@ -1288,7 +1299,7 @@ async function handleSlashCommand(interaction) {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: question },
               ],
-              maxTokens: 600,
+              maxTokens: Math.min(500, parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500),
               timeoutMs: 30000,
             });
             answer = completion.choices?.[0]?.message?.content || answer;

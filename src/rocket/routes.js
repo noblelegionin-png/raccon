@@ -18,6 +18,7 @@ import {
 import { scaleMaxAdapter } from '../provider/scaleMaxAdapter.js';
 import { getActiveModelId } from '../models/catalogue.js';
 import { scrubRestrictedBrandNames } from '../conversation/responseValidator.js';
+import { getConfig } from '../db/index.js';
 
 export const rocketRouter = express.Router();
 
@@ -220,7 +221,7 @@ rocketRouter.post('/chat', async (req, res) => {
           body: JSON.stringify({
             model: activeModel || 'gpt-6-luna',
             messages,
-            max_tokens: 600,
+            max_tokens: Math.min(500, parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500),
             temperature: 0.75,
           }),
         });

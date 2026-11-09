@@ -265,7 +265,7 @@ export function createWebServer() {
     try {
       const { action, params } = req.body || {};
       if (!action) return res.status(400).json({ error: 'Missing action' });
-      const result = await browserLinkServer.executeAction(action, params || {});
+      const result = await browserLinkServer.dispatchAction(action, params || {});
       res.json({ ok: true, action, result });
     } catch (err) {
       res.status(500).json({ ok: false, action: req.body?.action, error: err.message });

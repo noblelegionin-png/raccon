@@ -201,6 +201,13 @@ export class BrowserLinkServer {
   }
 
   /**
+   * Alias for dispatchAction
+   */
+  async executeAction(actionId, rawParams = {}, options = {}) {
+    return this.dispatchAction(actionId, rawParams, options);
+  }
+
+  /**
    * Get live status telemetry
    */
   getStatus() {

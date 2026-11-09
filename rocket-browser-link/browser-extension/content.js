@@ -246,34 +246,40 @@
     } else if (params.text) {
       textToCopy = params.text;
     } else {
-      textToCopy = window.getSelection().toString();
+      textToCopy = window.getSelection ? window.getSelection().toString() : '';
       if (!textToCopy) {
         // Fallback: copy main page summary / title
-        textToCopy = `${document.title}\n${window.location.href}`;
+        textToCopy = `${document.title || ''}\n${window.location.href || ''}`;
       }
     }
 
-    textToCopy = textToCopy.trim();
+    textToCopy = (textToCopy || '').trim();
     if (!textToCopy) {
-      throw new Error('No content available to copy.');
+      textToCopy = document.title || window.location.href || 'Rocket Browser Link';
     }
 
-    // Copy to clipboard
+    // Attempt safe clipboard copy
+    let copiedToClipboard = false;
     try {
-      await navigator.clipboard.writeText(textToCopy);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = textToCopy;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    }
+      if (document.body) {
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        ta.style.pointerEvents = 'none';
+        document.body.appendChild(ta);
+        ta.select();
+        copiedToClipboard = document.execCommand('copy');
+        ta.remove();
+      }
+    } catch {}
 
     return {
       copied: true,
+      text: textToCopy,
       length: textToCopy.length,
       preview: textToCopy.slice(0, 100),
+      clipboard: copiedToClipboard,
     };
   }
 

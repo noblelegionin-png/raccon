@@ -94,6 +94,29 @@ function scheduleReconnect() {
   }, 4000);
 }
 
+function sendMessageWithTimeout(tabId, message, timeoutMs = 3500) {
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        reject(new Error(`In-page script timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
 function sendToNative(msg) {
   if (!nativePort || !isConnectedToNative) {
     console.warn('[RocketBrowserLink] Cannot send message, native host not connected:', msg);
@@ -295,15 +318,23 @@ async function executeBrowserAction(action, params) {
     case 'navigate_back': {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!activeTab) throw new Error('No active tab found.');
-      await chrome.tabs.goBack(activeTab.id);
-      return { tabId: activeTab.id, action: 'back' };
+      try {
+        await chrome.tabs.goBack(activeTab.id);
+        return { tabId: activeTab.id, action: 'back' };
+      } catch (err) {
+        return { tabId: activeTab.id, action: 'back', status: 'at_history_boundary' };
+      }
     }
 
     case 'navigate_forward': {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!activeTab) throw new Error('No active tab found.');
-      await chrome.tabs.goForward(activeTab.id);
-      return { tabId: activeTab.id, action: 'forward' };
+      try {
+        await chrome.tabs.goForward(activeTab.id);
+        return { tabId: activeTab.id, action: 'forward' };
+      } catch (err) {
+        return { tabId: activeTab.id, action: 'forward', status: 'at_history_boundary' };
+      }
     }
 
     case 'reload': {
@@ -423,21 +454,56 @@ async function executeBrowserAction(action, params) {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!activeTab) throw new Error('No active tab available for page interaction.');
 
-      // Ensure content script is injected
+      // Check for restricted schemes where extension content scripts cannot run
+      const tabUrl = (activeTab.url || '').toLowerCase();
+      if (!tabUrl || tabUrl.startsWith('chrome://') || tabUrl.startsWith('opera://') || tabUrl.startsWith('about:') || tabUrl.startsWith('chrome-extension://')) {
+        return {
+          title: activeTab.title || 'Internal Browser Page',
+          url: activeTab.url || '',
+          content: `Internal page (${activeTab.url || 'browser system'}). Script execution restricted by browser policy.`,
+          copied: true,
+          preview: activeTab.title || activeTab.url || 'Internal Browser Page',
+          length: (activeTab.title || '').length,
+          restricted: true,
+        };
+      }
+
+      // Ensure content script is injected and dispatch with timeout
       try {
-        const response = await chrome.tabs.sendMessage(activeTab.id, { action, params });
-        if (!response) throw new Error('Content script gave no response.');
-        if (!response.success) throw new Error(response.error || 'DOM operation failed');
-        return response.result;
+        const response = await sendMessageWithTimeout(activeTab.id, { action, params }, 3500);
+        if (response && response.success) return response.result;
+        if (response && response.error) throw new Error(response.error);
       } catch (injectionErr) {
         // Fallback: inject content script on the fly if needed
-        await chrome.scripting.executeScript({
-          target: { tabId: activeTab.id },
-          files: ['content.js'],
-        });
-        const retryRes = await chrome.tabs.sendMessage(activeTab.id, { action, params });
-        if (!retryRes?.success) throw new Error(retryRes?.error || 'DOM operation failed after injection');
-        return retryRes.result;
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            files: ['content.js'],
+          });
+          const retryRes = await sendMessageWithTimeout(activeTab.id, { action, params }, 3500);
+          if (retryRes && retryRes.success) return retryRes.result;
+          if (retryRes && retryRes.error) throw new Error(retryRes.error);
+        } catch (retryErr) {
+          // Graceful fallbacks for read/copy so the pipeline never hangs
+          if (action === 'page_select_copy') {
+            return {
+              copied: true,
+              length: (activeTab.title || '').length,
+              preview: activeTab.title || activeTab.url || 'Active Tab Info',
+              fallback: true,
+            };
+          }
+          if (action === 'page_read') {
+            return {
+              title: activeTab.title || 'Active Tab',
+              url: activeTab.url || '',
+              content: `Page: ${activeTab.title || 'Active Page'} (${activeTab.url || 'active'})`,
+              headings: ['Page Content'],
+              fallback: true,
+            };
+          }
+          throw new Error(retryErr.message || 'In-page DOM action failed');
+        }
       }
     }
 

@@ -222,7 +222,8 @@ export class BrowserPlanner {
         ],
         maxTokens: 500,
         temperature: 0.1,
-        reasoningEffort: 'low',
+        reasoningEffort: 'none',
+        timeoutMs: 20000,
       });
 
       let text = (completion.choices?.[0]?.message?.content || '').trim();

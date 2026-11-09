@@ -3,7 +3,28 @@
  * Manages Native Messaging host connection, tab/window APIs, zoom, downloads, and DOM delegation.
  */
 
-import { evaluateActionRisk } from './permissions.js';
+// Inline risk assessment guard (zero external module dependencies)
+const HIGH_RISK_ACTION_PATTERNS = [
+  /\b(buy|checkout|order|pay|purchase|subscribe)\b/i,
+  /\b(delete|remove account|destroy|erase)\b/i,
+  /\b(logout|log out|sign out|disconnect)\b/i,
+  /\b(transfer|withdraw|send funds)\b/i,
+];
+
+function evaluateActionRisk(actionId, params = {}) {
+  if (actionId === 'logout_request' || actionId === 'consequential_action') {
+    return { isHighRisk: true, reason: 'Explicit security confirmation required' };
+  }
+
+  const targetText = `${params.url || ''} ${params.text || ''} ${params.selector || ''}`;
+  for (const pattern of HIGH_RISK_ACTION_PATTERNS) {
+    if (pattern.test(targetText)) {
+      return { isHighRisk: true, reason: `Action matches sensitive pattern: ${pattern}` };
+    }
+  }
+
+  return { isHighRisk: false, reason: null };
+}
 
 const NATIVE_HOST_NAME = 'com.nerolabs.rocket.browserlink';
 let nativePort = null;
@@ -24,25 +45,32 @@ function connectNativeHost() {
     nativePort = null;
   }
 
-  console.log(`[RocketBrowserLink] Connecting to native messaging host: ${NATIVE_HOST_NAME}...`);
-
   try {
+    if (!chrome.runtime || !chrome.runtime.connectNative) {
+      console.warn('[RocketBrowserLink] chrome.runtime.connectNative is unavailable');
+      return;
+    }
+
     nativePort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
 
     nativePort.onMessage.addListener((msg) => {
-      handleNativeMessage(msg);
+      try {
+        handleNativeMessage(msg);
+      } catch (err) {
+        console.error('[RocketBrowserLink] Error handling native message:', err);
+      }
     });
 
     nativePort.onDisconnect.addListener(() => {
       const err = chrome.runtime.lastError?.message || 'Disconnected';
-      console.warn(`[RocketBrowserLink] Native host disconnected: ${err}`);
+      console.log(`[RocketBrowserLink] Native host status: ${err}`);
       isConnectedToNative = false;
       nativePort = null;
       scheduleReconnect();
     });
 
     isConnectedToNative = true;
-    console.log('[RocketBrowserLink] ✅ Connected to Native Messaging Host!');
+    console.log('[RocketBrowserLink] Connected to Native Messaging Host!');
 
     // Send initial handshake
     sendToNative({
@@ -52,7 +80,7 @@ function connectNativeHost() {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error('[RocketBrowserLink] Error connecting to native host:', err.message);
+    console.log('[RocketBrowserLink] Native host standby:', err.message);
     isConnectedToNative = false;
     scheduleReconnect();
   }

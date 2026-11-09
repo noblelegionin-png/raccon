@@ -174,6 +174,31 @@ export function initDiscordDb() {
 
     CREATE INDEX IF NOT EXISTS idx_discord_spam_user ON discord_spam_incidents(guild_id, user_id);
 
+    -- Abuse Incident & Weekly Apology Auditing (Rocket, Sandy, Admins)
+    CREATE TABLE IF NOT EXISTS discord_abuse_incidents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_tag TEXT,
+      target TEXT NOT NULL, -- 'sandy', 'rocket', 'admins'
+      message_content TEXT,
+      timeout_minutes INTEGER DEFAULT 30,
+      status TEXT DEFAULT 'active', -- 'active', 'forgiven', 'expired'
+      created_at TEXT NOT NULL,
+      unmuted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_discord_abuse_user ON discord_abuse_incidents(guild_id, user_id);
+
+    -- 1 Apology Per Week Tracking
+    CREATE TABLE IF NOT EXISTS discord_abuse_apologies (
+      user_id TEXT NOT NULL,
+      guild_id TEXT NOT NULL,
+      last_apologized_at INTEGER NOT NULL,
+      total_apologies INTEGER DEFAULT 0,
+      PRIMARY KEY (user_id, guild_id)
+    );
+
     -- Member Activity Analytics & WWE-Style Ranking
     CREATE TABLE IF NOT EXISTS discord_member_activity (
       guild_id TEXT NOT NULL,
@@ -1092,6 +1117,94 @@ export function getUserActiveSpamIncident(guildId, userId) {
     WHERE guild_id = ? AND user_id = ? AND status = 'active' AND timeout_until > ?
     ORDER BY id DESC LIMIT 1
   `).get(String(guildId), String(userId), now);
+}
+
+// ---------------------------------------------------------------------------
+// Abuse Incident & Weekly Apology Auditing (Rocket, Sandy, Admins)
+// ---------------------------------------------------------------------------
+
+export function createAbuseIncident(guildId, userId, userTag, target, messageContent, timeoutMinutes = 30) {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date();
+  const info = db.prepare(`
+    INSERT INTO discord_abuse_incidents (guild_id, user_id, user_tag, target, message_content, timeout_minutes, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+  `).run(
+    String(guildId),
+    String(userId),
+    userTag || 'Unknown Member',
+    String(target || 'rocket'),
+    String(messageContent || '').slice(0, 500),
+    Number(timeoutMinutes),
+    now.toISOString()
+  );
+
+  return {
+    id: Number(info.lastInsertRowid),
+    guild_id: String(guildId),
+    user_id: String(userId),
+    user_tag: userTag,
+    target,
+    message_content: messageContent,
+    timeout_minutes: timeoutMinutes,
+    status: 'active',
+    created_at: now.toISOString(),
+  };
+}
+
+export function getAbuseIncident(incidentId) {
+  initDiscordDb();
+  const db = getDb();
+  return db.prepare('SELECT * FROM discord_abuse_incidents WHERE id = ?').get(Number(incidentId));
+}
+
+export function resolveAbuseIncident(incidentId, status = 'forgiven') {
+  initDiscordDb();
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE discord_abuse_incidents SET status = ?, unmuted_at = ? WHERE id = ?
+  `).run(status, now, Number(incidentId));
+  return getAbuseIncident(incidentId);
+}
+
+export function canUserApologizeThisWeek(userId, guildId) {
+  initDiscordDb();
+  const db = getDb();
+  const record = db.prepare(`
+    SELECT * FROM discord_abuse_apologies WHERE user_id = ? AND guild_id = ?
+  `).get(String(userId), String(guildId));
+
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  if (!record || !record.last_apologized_at) {
+    return { eligible: true, remainingMs: 0, lastApologizedAt: null, totalApologies: 0 };
+  }
+
+  const elapsed = Date.now() - Number(record.last_apologized_at);
+  if (elapsed >= ONE_WEEK_MS) {
+    return { eligible: true, remainingMs: 0, lastApologizedAt: Number(record.last_apologized_at), totalApologies: record.total_apologies };
+  }
+
+  return {
+    eligible: false,
+    remainingMs: ONE_WEEK_MS - elapsed,
+    lastApologizedAt: Number(record.last_apologized_at),
+    totalApologies: record.total_apologies,
+  };
+}
+
+export function recordUserWeeklyApology(userId, guildId) {
+  initDiscordDb();
+  const db = getDb();
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO discord_abuse_apologies (user_id, guild_id, last_apologized_at, total_apologies)
+    VALUES (?, ?, ?, 1)
+    ON CONFLICT(user_id, guild_id) DO UPDATE SET
+      last_apologized_at = ?,
+      total_apologies = total_apologies + 1
+  `).run(String(userId), String(guildId), now, now);
 }
 
 // ---------------------------------------------------------------------------

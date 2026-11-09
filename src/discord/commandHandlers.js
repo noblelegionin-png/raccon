@@ -54,6 +54,7 @@ import {
 } from './discordDb.js';
 import { renderStatsCardPng } from './statsCard.js';
 import { handleAntiSpamButton } from './antiSpam.js';
+import { handleAbuseButton } from './abuseGuard.js';
 import {
   handleStartVerification,
   handleVerifyModalSubmit,
@@ -1647,6 +1648,11 @@ async function handleButtonClick(interaction) {
     // Anti-Spam DM Buttons
     if (customId.startsWith('btn_spam_unmute_') || customId.startsWith('btn_spam_keep_')) {
       return handleAntiSpamButton(interaction);
+    }
+
+    // Abuse / Toxicity DM Apology Buttons (Weekly Apology Redemption)
+    if (customId.startsWith('btn_abuse_apology_') || customId.startsWith('btn_abuse_keep_')) {
+      return handleAbuseButton(interaction);
     }
 
     // Member Verification Flow Buttons

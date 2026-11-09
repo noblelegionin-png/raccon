@@ -38,6 +38,8 @@ import { isDiscordOwner } from '../commandHandlers.js';
 import { trackIncomingMessage } from '../evidenceArchive.js';
 import { scrubRestrictedBrandNames, validateAndSanitizeResponse } from '../../conversation/responseValidator.js';
 import { syncMemberWWERankRole } from '../verification.js';
+import { detectHostilityOrAbuse, handleAbuseIncident } from '../abuseGuard.js';
+import { detectOffTopic, handleTopicViolation, getChannelTopicKnowledge } from '../topicGuard.js';
 import {
   injectServerCustomEmojis,
   getCustomEmojiDirectivesPrompt,
@@ -134,41 +136,20 @@ export async function handleMessageCreate(message) {
   }
 
   // -------------------------------------------------------------------------
-  // 1. Defend Sandy (Supreme Boss Protection — Instant 1-Hour Timeout & Deletion)
+  // 1. Abuse & Toxicity Guard (Protect Rocket, Boss Sandy & Admins)
+  // Silent deletion (no reply in channel), timeout, DM with lame joke & 1-per-week apology pass
   // -------------------------------------------------------------------------
-  if (!isOwner && detectSandyAbuse(content)) {
-    try {
-      await message.delete().catch(() => null);
+  if (!isOwner) {
+    const isReplyOrMentionToRocket =
+      message.mentions.has(message.client.user.id) ||
+      (message.reference && message.reference.messageId
+        ? (await channel.messages.fetch(message.reference.messageId).catch(() => null))?.author.id === message.client.user.id
+        : false);
 
-      let timeoutApplied = false;
-      if (member && member.moderatable) {
-        try {
-          await member.timeout(60 * 60 * 1000, 'Zero tolerance: Hostility/disrespect towards Sandy (Owner)');
-          timeoutApplied = true;
-        } catch (tmErr) {
-          console.warn('[Boss Protection Timeout Error]:', tmErr.message);
-        }
-      }
-
-      const defense = generateDefenseResponse(member?.displayName || author.username);
-      const actionNotice = timeoutApplied
-        ? `\n\n🚨 **ENFORCEMENT:** <@${author.id}> has been placed in a **1-HOUR TIMEOUT** for disrespecting Boss Sandy! 🐾`
-        : `\n\n🚨 **ENFORCEMENT:** Message purged and official warning recorded. Disrespect is strictly forbidden! 🐾`;
-
-      await channel.send(`${defense}${actionNotice}`);
-      addWarning(guild.id, author.id, author.tag, 'system', 'Rocket Defense Guard', 'Hostility / disrespect towards Sandy (Owner)');
-      recordModLog(guild.id, {
-        action: timeoutApplied ? 'timeout_1h' : 'warn',
-        userId: author.id,
-        userTag: author.tag,
-        moderatorId: 'system',
-        moderatorTag: 'Rocket Defense Guard',
-        reason: 'Zero tolerance: Hostility / disrespect towards Sandy (Owner)',
-        details: content.slice(0, 100),
-      });
+    const abuseInfo = detectHostilityOrAbuse(content, { isReplyOrMentionToRocket });
+    if (abuseInfo.isAbuse) {
+      await handleAbuseIncident(message, abuseInfo);
       return;
-    } catch (e) {
-      console.warn('[Rocket Defense Guard Error]:', e.message);
     }
   }
 
@@ -302,6 +283,19 @@ export async function handleMessageCreate(message) {
     }
   } catch (actErr) {
     console.warn('[Activity Tracker Error]:', actErr.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // 2.9 Topic Respect & Channel Relevance Guard ("Strict, but not too strict")
+  // Catches substantive off-topic inquiries (e.g. asking for code or payments in #general)
+  // 1-time warning -> 5-minute timeout for repeated spam (Boss Sandy is exempt)
+  // -------------------------------------------------------------------------
+  if (!isOwner) {
+    const topicViolation = detectOffTopic(message, channel);
+    if (topicViolation) {
+      await handleTopicViolation(message, topicViolation);
+      return;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -483,6 +477,7 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
       `- NEVER sound robotic or sterile ("As an AI", "Certainly!"). Speak with razor-sharp authority, high intellect, and charisma.\n\n` +
       `CHANNEL CONTEXT & DIRECTIVES:\n` +
       `${channelPrompt}\n\n` +
+      `${getChannelTopicKnowledge(channel)}\n\n` +
       `MEMBER STANDING & ADDRESSING RULES:\n` +
       `- Sender: "${senderDisplayName}"\n` +
       `- Designated Tier: ${userTier.toUpperCase()}\n` +

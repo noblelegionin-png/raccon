@@ -18,30 +18,37 @@ export class BrowserPlanner {
     const clean = text.trim().toLowerCase();
 
     // 1. Direct single-word or short action matches
-    if (/^(youtube|yt|twitter|x\.com|x|github|reddit|twitch|discord|netflix|google|amazon|wikipedia|chatgpt|spotify)$/i.test(clean)) return true;
-    if (/^(back|forward|reload|refresh|stop|clean|clean tabs|zoom in|zoom out|zoom reset|reset zoom|copy|logout|fullscreen|downloads|history|bookmarks|tabs|close tab|close|new tab|duplicate)$/i.test(clean)) return true;
+    if (/^(youtube|yt|twitter|x\.com|x|github|reddit|twitch|discord|netflix|google|amazon|wikipedia|chatgpt|spotify|instagram|facebook)$/i.test(clean)) return true;
+    if (/^(back|forward|reload|refresh|stop|clean|clean tabs|zoom in|zoom out|zoom reset|reset zoom|copy|logout|fullscreen|downloads|history|bookmarks|tabs|close tab|close|new tab|duplicate|pause|resume|unpause|mute|unmute)$/i.test(clean)) return true;
 
-    // 2. URLs, domain names, localhost, web addresses
+    // 2. Playback / media actions (Music, YouTube, Video, Song, Streaming)
+    if (/^(?:play|watch|listen(?:\s+to)?|stream|hear)\b/i.test(clean)) return true;
+    if (/\b(?:youtube|yt|video|song|music|track|playlist)\b/i.test(clean) && /\b(?:play|open|search|start|watch|listen|pause|resume|next|previous)\b/i.test(clean)) return true;
+
+    // 3. Ordinal clicks / selections (e.g. "open the third result", "click 1st video", "choose second one", "3rd result", "first link")
+    if (/^(?:(?:open|click|play|choose|select|go to|view)\s+(?:the\s+)?)?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|\d+)(?:st|nd|rd|th)?(?:\s+(?:result|video|link|item|one|tab))?$/i.test(clean)) return true;
+
+    // 4. URLs, domain names, localhost, web addresses
     if (/(?:https?:\/\/|www\.)\S+/i.test(clean)) return true;
     if (/\b[a-z0-9-]+\.(?:com|org|net|io|dev|app|co|in|edu|gov|ai)\b/i.test(clean)) return true;
     if (/\b(?:localhost|127\.0\.0\.1)(?::\d+)?\b/i.test(clean)) return true;
 
-    // 3. Multi-turn follow-ups (if recent conversation or browser state shows active browsing session)
+    // 5. Multi-turn follow-ups (if recent conversation or browser state shows active browsing session)
     const hasRecentBrowserContext = Boolean(options.hasRecentBrowserContext || options.recentBrowserAction);
     if (hasRecentBrowserContext) {
-      if (/^(click|tap|press|select|open|choose|scroll|zoom|copy|summarize|read|search|find|next|previous|third|first|second|last|it|that|this)\b/i.test(clean)) {
+      if (/^(click|tap|press|select|open|choose|scroll|zoom|copy|summarize|read|search|find|next|previous|third|first|second|last|it|that|this|pause|resume|play|more)\b/i.test(clean)) {
         return true;
       }
     }
 
-    // 4. Explicit browser and PC action commands
-    const browserKeywords = /\b(browser|opera|opera gx|tab|tabs|window|windows|webpage|web page|website|site|url|link|zoom|download|downloads|scroll|search for|google|youtube|click|type|fill|form|logout|sign out|history|bookmark|bookmarks|clipboard|screen|page)\b/i;
-    const actionVerbs = /\b(open|close|navigate|goto|go to|visit|switch|duplicate|pin|clean|zoom|read|extract|copy|compare|research|remember|download|click|search|type|find|look up|check out|summarize|scroll|inspect)\b/i;
+    // 6. Explicit browser and PC action commands
+    const browserKeywords = /\b(browser|opera|opera gx|tab|tabs|window|windows|webpage|web page|website|site|url|link|zoom|download|downloads|scroll|search for|google|youtube|click|type|fill|form|logout|sign out|history|bookmark|bookmarks|clipboard|screen|page|video|song|audio|stream)\b/i;
+    const actionVerbs = /\b(open|close|navigate|goto|go to|visit|switch|duplicate|pin|clean|zoom|read|extract|copy|compare|research|remember|download|click|search|type|find|look up|check out|summarize|scroll|inspect|play|watch|pause|resume|stream)\b/i;
 
     if (browserKeywords.test(clean) && actionVerbs.test(clean)) return true;
 
-    // 5. Direct command phrases
-    if (/^(?:open|navigate to|go to|goto|visit|search for|look up|research|download|compare|zoom|scroll)\s+/i.test(clean)) return true;
+    // 7. Direct command phrases
+    if (/^(?:open|navigate(?:\s+to)?|go\s+to|goto|visit|search(?:\s+for)?|google|look\s+up|research|download|compare|zoom|scroll|click(?:\s+on)?|type|play|watch)\s+/i.test(clean)) return true;
 
     return false;
   }
@@ -101,9 +108,11 @@ export class BrowserPlanner {
         }
       }
 
-      // Brief delay between sequential steps to allow DOM/navigation settling
+      // Allow extra settling delay when opening tabs or navigating before interacting with the DOM
       if (i < plan.length - 1) {
-        await new Promise((r) => setTimeout(r, 600));
+        const nextStep = plan[i + 1];
+        const delay = (step.action === 'tab_open' || step.action === 'navigate') && nextStep?.action?.startsWith('page_') ? 1200 : 600;
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
 
@@ -127,6 +136,7 @@ export class BrowserPlanner {
     if (clean === 'reddit') return [{ action: 'tab_open', params: { url: 'https://reddit.com' } }];
     if (clean === 'twitter' || clean === 'x') return [{ action: 'tab_open', params: { url: 'https://x.com' } }];
     if (clean === 'discord') return [{ action: 'tab_open', params: { url: 'https://discord.com' } }];
+    if (clean === 'spotify') return [{ action: 'tab_open', params: { url: 'https://open.spotify.com' } }];
 
     // Navigation
     if (clean === 'back') return [{ action: 'navigate_back', params: {} }];
@@ -145,6 +155,55 @@ export class BrowserPlanner {
     if (clean === 'close' || clean === 'close tab') return [{ action: 'tab_close', params: {} }];
     if (clean === 'duplicate' || clean === 'duplicate tab') return [{ action: 'tab_duplicate', params: {} }];
 
+    // Media Controls
+    if (/^(?:pause|pause\s+video|pause\s+music|stop\s+music|stop\s+playback)$/i.test(clean)) {
+      return [{ action: 'page_click', params: { selector: 'button.ytp-play-button, video, #movie_player, .video-stream' } }];
+    }
+    if (/^(?:resume|unpause|continue|play\s+video|start\s+playback)$/i.test(clean)) {
+      return [{ action: 'page_click', params: { selector: 'button.ytp-play-button, video, #movie_player, .video-stream' } }];
+    }
+    if (/^(?:mute|unmute)$/i.test(clean)) {
+      return [{ action: 'page_click', params: { selector: 'button.ytp-mute-button' } }];
+    }
+
+    // YouTube / Song Playback (e.g., "Play rock roll song", "Play any Indian music love song in youtube", "watch lofi hip hop")
+    const playMatch = (text || '').trim().match(/^(?:play|watch|listen(?:\s+to)?|stream)\s+(.+)$/i);
+    if (playMatch) {
+      let query = playMatch[1].trim();
+      query = query.replace(/\s+(?:in|on)\s+(?:youtube|yt)$/i, '').trim();
+      return [
+        { action: 'tab_open', params: { url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}` } },
+        { action: 'page_click', params: { selector: 'ytd-video-renderer a#video-title, #contents ytd-video-renderer a#thumbnail, a#video-title, a[href*="watch?v="]' } },
+      ];
+    }
+
+    // Ordinal selection: "open the third result", "click 1st video", "open 2nd result", "play 3rd video", "third result"
+    const ordinalMatch = clean.match(/^(?:(?:open|click|play|choose|select|go\s+to|view)\s+(?:the\s+)?)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|\d+)(?:st|nd|rd|th)?(?:\s+(?:result|video|link|item|one))?$/i);
+    if (ordinalMatch) {
+      const wordMap = {
+        first: 1, '1st': 1,
+        second: 2, '2nd': 2,
+        third: 3, '3rd': 3,
+        fourth: 4, '4th': 4,
+        fifth: 5, '5th': 5,
+        sixth: 6, '6th': 6,
+        seventh: 7, '7th': 7,
+        eighth: 8, '8th': 8,
+        ninth: 9, '9th': 9,
+        tenth: 10, '10th': 10,
+      };
+      const token = ordinalMatch[1].toLowerCase();
+      const n = wordMap[token] || parseInt(token, 10) || 1;
+      return [
+        {
+          action: 'page_click',
+          params: {
+            selector: `ytd-video-renderer:nth-of-type(${n}) a#video-title, #contents > ytd-video-renderer:nth-of-type(${n}) a#thumbnail, div.g:nth-of-type(${n}) a, a:has(h3):nth-of-type(${n}), a[href*="watch?v="]:nth-of-type(${n})`,
+          },
+        },
+      ];
+    }
+
     // Content
     if (clean === 'copy') return [{ action: 'page_select_copy', params: {} }];
     if (clean === 'read' || clean === 'read page' || clean === 'summarize') return [{ action: 'page_read', params: {} }];
@@ -153,8 +212,15 @@ export class BrowserPlanner {
     if (clean === 'history') return [{ action: 'history_search', params: { limit: 10 } }];
     if (clean === 'logout') return [{ action: 'logout_request', params: {} }];
 
+    // "Search for <query>" or "Google <query>"
+    const searchMatch = (text || '').trim().match(/^(?:search(?:\s+for)?|google|look\s+up)\s+(.+)$/i);
+    if (searchMatch) {
+      const q = searchMatch[1].trim();
+      return [{ action: 'tab_open', params: { url: `https://www.google.com/search?q=${encodeURIComponent(q)}` } }];
+    }
+
     // "Research <topic>"
-    const researchMatch = clean.match(/^research\s+(.+)$/i);
+    const researchMatch = (text || '').trim().match(/^research\s+(.+)$/i);
     if (researchMatch) {
       const topic = researchMatch[1].trim();
       return [
@@ -210,6 +276,8 @@ export class BrowserPlanner {
       `-> [{"action": "zoom_in", "params": {"step": 0.1}}, {"action": "page_select_copy", "params": {"selector": "#description, .description, p"}}]\n` +
       `Example 4: "scroll down"\n` +
       `-> [{"action": "page_scroll", "params": {"direction": "down", "amount": 500}}]\n` +
+      `Example 5: "play rock roll song"\n` +
+      `-> [{"action": "tab_open", "params": {"url": "https://www.youtube.com/results?search_query=rock+roll+song"}}, {"action": "page_click", "params": {"selector": "ytd-video-renderer a#video-title, a#video-title"}}]\n` +
       `${contextString}\n` +
       `Strict rules: NO conversational text, NO markdown code fences, ONLY the raw JSON array. Keep to 1-5 steps max. Understand context from previous turns and the current browser state!`;
 
@@ -220,18 +288,25 @@ export class BrowserPlanner {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        maxTokens: 500,
+        maxTokens: 1000,
         temperature: 0.1,
         reasoningEffort: 'none',
-        timeoutMs: 20000,
+        timeoutMs: 25000,
       });
 
       let text = (completion.choices?.[0]?.message?.content || '').trim();
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      // Robust JSON array regex extraction
+      const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
 
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      // Single object fallback
+      const objMatch = text.match(/\{\s*"action"\s*:\s*"[^"]+"[\s\S]*?\}/);
+      if (objMatch) {
+        const singleObj = JSON.parse(objMatch[0]);
+        if (singleObj && singleObj.action) return [singleObj];
       }
     } catch (err) {
       console.warn('[BrowserPlanner] Luna planning fallback:', err.message);

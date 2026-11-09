@@ -299,6 +299,16 @@ export async function handleMessageCreate(message) {
   }
 
   // -------------------------------------------------------------------------
+  // 2.8 Boss Sandy Executive Directives in Any Server Channel
+  // (e.g. "kick @user", "ban @user", "purge 20", stream link, "timeout @user 10m")
+  // Rocket immediately obeys Sandy anywhere in the server!
+  // -------------------------------------------------------------------------
+  if (isOwner) {
+    const executed = await executeAdminActionFromChat(message, content);
+    if (executed) return;
+  }
+
+  // -------------------------------------------------------------------------
   // 3. Channel-Aware Conversational AI (Strict Channels, 2 Modes & Mute)
   // -------------------------------------------------------------------------
 
@@ -589,7 +599,16 @@ async function handleDirectMessage(message) {
 
   // Check if recent turns had browser operations to detect follow-up browser requests
   const recentBrowserAction = recentHistory.some((m) => 
-    m.role === 'assistant' && (m.content.includes('Opera GX') || m.content.includes('Step ') || m.content.includes('browser'))
+    (m.content && (
+      m.content.includes('Opera GX') ||
+      m.content.includes('Step ') ||
+      m.content.includes('browser') ||
+      m.content.includes('youtube') ||
+      m.content.includes('tab') ||
+      m.content.includes('play') ||
+      m.content.includes('song') ||
+      m.content.includes('video')
+    ))
   );
 
   // 1. Check if Boss Sandy gave a browser control instruction in DMs (with full contextual awareness!)

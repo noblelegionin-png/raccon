@@ -99,6 +99,19 @@ namespace RocketBrowserAgent
                     var msg = Json.DeserializeObject(rawMessage);
                     if (msg == null) continue;
 
+                    // If browser sent handshake, send ACK back to browser!
+                    if (msg.ContainsKey("type") && msg["type"] != null && msg["type"].ToString() == "handshake")
+                    {
+                        var ack = new Dictionary<string, object>
+                        {
+                            { "type", "handshake_ack" },
+                            { "status", "connected" },
+                            { "agentVersion", "1.0.0" }
+                        };
+                        NativeMessaging.WriteMessage(ack);
+                        Logging.Log("Sent handshake_ack to browser.");
+                    }
+
                     // Forward browser response / events to Cloud
                     if (_cloud != null && _cloud.IsConnected)
                     {

@@ -13,6 +13,8 @@ export class BrowserLinkServer {
     this.wss = null;
     this.activeSocket = null;
     this.pendingCommands = new Map(); // correlationId -> { resolve, reject, timer, action }
+    this.activeSockets = new Set();
+    this.activeSocket = null;
     this.lastKnownState = {
       currentUrl: null,
       currentTitle: null,
@@ -67,12 +69,13 @@ export class BrowserLinkServer {
    * Handle incoming connection from Rocket Windows Agent
    */
   handleConnection(ws, req) {
+    this.activeSockets.add(ws);
     this.activeSocket = ws;
     this.agentInfo.connected = true;
     this.agentInfo.connectedAt = new Date().toISOString();
     this.agentInfo.clientIp = req.socket.remoteAddress;
 
-    console.log(`[BrowserLinkServer] 🦝 Windows Agent connected from ${this.agentInfo.clientIp}`);
+    console.log(`[BrowserLinkServer] 🦝 Windows Agent connected from ${this.agentInfo.clientIp} (Active connections: ${this.activeSockets.size})`);
 
     ws.on('message', (raw) => {
       try {
@@ -85,15 +88,26 @@ export class BrowserLinkServer {
 
     ws.on('close', (code, reason) => {
       console.log(`[BrowserLinkServer] Windows Agent disconnected (Code: ${code}, Reason: ${reason})`);
-      this.activeSocket = null;
-      this.agentInfo.connected = false;
+      this.activeSockets.delete(ws);
 
-      // Reject all pending commands
-      for (const [id, pending] of this.pendingCommands.entries()) {
-        clearTimeout(pending.timer);
-        pending.reject(new Error('Windows Agent disconnected before command could complete.'));
+      // Fall back to any remaining active socket in the pool
+      if (this.activeSocket === ws) {
+        const remaining = Array.from(this.activeSockets).filter(s => s.readyState === WebSocket.OPEN);
+        this.activeSocket = remaining.length > 0 ? remaining[remaining.length - 1] : null;
       }
-      this.pendingCommands.clear();
+
+      // Only mark fully disconnected if no other agent is active
+      if (!this.getActiveSocket()) {
+        this.activeSocket = null;
+        this.agentInfo.connected = false;
+
+        // Reject all pending commands
+        for (const [id, pending] of this.pendingCommands.entries()) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error('Windows Agent disconnected before command could complete.'));
+        }
+        this.pendingCommands.clear();
+      }
     });
 
     ws.on('error', (err) => {
@@ -161,17 +175,34 @@ export class BrowserLinkServer {
   }
 
   /**
+   * Get an active connected socket from the pool
+   */
+  getActiveSocket() {
+    if (this.activeSocket && this.activeSocket.readyState === WebSocket.OPEN) {
+      return this.activeSocket;
+    }
+    for (const ws of this.activeSockets) {
+      if (ws.readyState === WebSocket.OPEN) {
+        this.activeSocket = ws;
+        return ws;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Check if Windows Agent is actively connected
    */
   isAgentConnected() {
-    return Boolean(this.activeSocket && this.activeSocket.readyState === WebSocket.OPEN);
+    return Boolean(this.getActiveSocket());
   }
 
   /**
    * Dispatch a browser action to the connected Windows Agent
    */
   async dispatchAction(actionId, rawParams = {}, options = {}) {
-    if (!this.isAgentConnected()) {
+    const targetSocket = this.getActiveSocket();
+    if (!targetSocket) {
       throw new Error('Opera GX / Windows Agent is currently OFFLINE. Ensure Rocket Browser Link is active on your Windows PC.');
     }
 
@@ -203,7 +234,7 @@ export class BrowserLinkServer {
       this.pendingCommands.set(correlationId, { resolve, reject, timer, action: actionId });
 
       try {
-        this.activeSocket.send(JSON.stringify(payload));
+        targetSocket.send(JSON.stringify(payload));
       } catch (err) {
         clearTimeout(timer);
         this.pendingCommands.delete(correlationId);

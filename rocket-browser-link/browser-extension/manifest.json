@@ -3,6 +3,7 @@
   "name": "Rocket Browser Link",
   "version": "1.0.0",
   "description": "Autonomous browser control, tab organization, and deep web navigation for Rocket AI.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtiElbdTTBnB3NrpX5tJQpPHOindK7Qchie0AGA/QVg6cXqnTAfzoD6VMho/jdrOwt/y2fnzMaovUH4p93nLSf15iMbpvvcVUy+p4HvnesPk0PXVRZ8QNHR9nRZJr4kZGGe5HUDTFZGkIuZbszR6s3ZbcZ+ZCkzxrJGFIWkN9+R40af7qNOWARUJaT78DLvvEihOFoDaBfFs/F8hyG0NiRUOZDJjaNWUqq+nTu4TalmHe8GO2Uee817uwFylOOM23xtdP5Mo3AGElkogOaAUAl+1aR15i119Zyc3rn+gHVA4RGwT6m/xZk+/jlTna7MCGgZAtpA+DoJ/MjduFyUBUTwIDAQAB",
   "permissions": [
     "tabs",
     "activeTab",

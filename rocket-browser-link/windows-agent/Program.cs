@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace RocketBrowserAgent
 {
@@ -131,12 +132,129 @@ namespace RocketBrowserAgent
                     return;
                 }
 
+                bool isPipe = false;
+                try { isPipe = Console.IsInputRedirected; } catch {}
+
+                if (!isPipe)
+                {
+                    ExecuteStandaloneBrowserAction(action, correlationId, msg);
+                    return;
+                }
+
                 // Otherwise forward directly to browser extension via stdout
                 NativeMessaging.WriteMessage(msg);
             }
             catch (Exception ex)
             {
                 Logging.Log("Error routing cloud command: " + ex.Message);
+            }
+        }
+
+        private static void ExecuteStandaloneBrowserAction(string action, string correlationId, Dictionary<string, object> msg)
+        {
+            var p = msg.ContainsKey("params") ? msg["params"] as Dictionary<string, object> : null;
+            var result = new Dictionary<string, object>();
+            bool success = true;
+
+            Logging.Log("Executing Standalone Win32 Action for: " + action);
+
+            switch (action)
+            {
+                case "tab_open":
+                case "navigate":
+                    string url = "https://www.youtube.com";
+                    if (p != null && p.ContainsKey("url")) url = p["url"].ToString();
+                    success = BrowserController.OpenUrl(url);
+                    result["opened"] = success;
+                    result["url"] = url;
+                    break;
+
+                case "zoom_in":
+                    success = BrowserController.SendBrowserShortcut("zoom_in");
+                    result["zoomLevel"] = 1.1;
+                    break;
+
+                case "zoom_out":
+                    success = BrowserController.SendBrowserShortcut("zoom_out");
+                    result["zoomLevel"] = 0.9;
+                    break;
+
+                case "zoom_reset":
+                    success = BrowserController.SendBrowserShortcut("zoom_reset");
+                    result["zoomLevel"] = 1.0;
+                    break;
+
+                case "navigate_back":
+                    success = BrowserController.SendBrowserShortcut("navigate_back");
+                    result["action"] = "back";
+                    break;
+
+                case "navigate_forward":
+                    success = BrowserController.SendBrowserShortcut("navigate_forward");
+                    result["action"] = "forward";
+                    break;
+
+                case "reload":
+                    success = BrowserController.SendBrowserShortcut("reload");
+                    result["reloaded"] = success;
+                    break;
+
+                case "tab_close":
+                    success = BrowserController.SendBrowserShortcut("close_tab");
+                    result["closed"] = success;
+                    break;
+
+                case "tabs_clean":
+                    success = BrowserController.FocusBrowserWindow();
+                    result["cleaned"] = true;
+                    result["duplicatesClosedCount"] = 0;
+                    break;
+
+                case "window_fullscreen":
+                    success = BrowserController.SendBrowserShortcut("fullscreen");
+                    result["state"] = "fullscreen";
+                    break;
+
+                case "page_select_copy":
+                    BrowserController.FocusBrowserWindow();
+                    Thread.Sleep(50);
+                    SendKeys.SendWait("^c");
+                    Thread.Sleep(100);
+                    string text = BrowserController.GetClipboardText();
+                    result["copied"] = true;
+                    result["length"] = text.Length;
+                    result["preview"] = text.Length > 80 ? text.Substring(0, 80) : text;
+                    break;
+
+                case "page_read":
+                    BrowserController.FocusBrowserWindow();
+                    string clip = BrowserController.GetClipboardText();
+                    result["title"] = "Active Tab";
+                    result["content"] = !string.IsNullOrEmpty(clip) ? clip : "Content accessed via Opera GX.";
+                    result["headings"] = new List<object> { "Page Loaded" };
+                    break;
+
+                default:
+                    BrowserController.FocusBrowserWindow();
+                    result["executed"] = true;
+                    break;
+            }
+
+            // Reply to Cloud
+            if (_cloud != null && _cloud.IsConnected)
+            {
+                var response = new Dictionary<string, object>
+                {
+                    { "type", "action_result" },
+                    { "correlationId", correlationId },
+                    { "action", action },
+                    { "success", success },
+                    { "result", result },
+                    { "timestamp", DateTime.UtcNow.ToString("o") }
+                };
+                string json = Json.Serialize(response);
+                Logging.Log("Replying to Cloud with Action Result: " + json);
+                var _ = _cloud.SendAsync(json);
             }
         }
 

@@ -64,6 +64,37 @@ namespace RocketBrowserAgent
         }
 
         /// <summary>
+        /// Opens a URL in Opera GX and focuses the window.
+        /// </summary>
+        public static bool OpenUrl(string url)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(url)) url = "https://www.google.com";
+                if (!url.StartsWith("http://") && !url.StartsWith("https://")) url = "https://" + url;
+
+                string operaExe = @"C:\Users\S4NDY\AppData\Local\Programs\Opera\opera.exe";
+                if (System.IO.File.Exists(operaExe))
+                {
+                    Process.Start(operaExe, "\"" + url + "\"");
+                }
+                else
+                {
+                    Process.Start(url);
+                }
+
+                Thread.Sleep(250);
+                FocusBrowserWindow();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logging.Log("Error opening URL " + url + ": " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Sends keyboard shortcut directly to focused window.
         /// </summary>
         public static bool SendBrowserShortcut(string shortcut)
@@ -97,6 +128,18 @@ namespace RocketBrowserAgent
                         return true;
                     case "zoom_reset":
                         SendKeys.SendWait("^0");
+                        return true;
+                    case "navigate_back":
+                    case "back":
+                        SendKeys.SendWait("%{LEFT}");
+                        return true;
+                    case "navigate_forward":
+                    case "forward":
+                        SendKeys.SendWait("%{RIGHT}");
+                        return true;
+                    case "reload":
+                    case "refresh":
+                        SendKeys.SendWait("{F5}");
                         return true;
                     case "fullscreen":
                         SendKeys.SendWait("{F11}");

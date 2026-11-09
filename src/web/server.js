@@ -4,6 +4,7 @@ import compression from 'compression';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
+import { browserLinkServer } from '../browser/browserLinkServer.js';
 import { rocketRouter } from '../rocket/routes.js';
 import { rock3tRouter } from '../rock3t/routes.js';
 import {
@@ -249,6 +250,26 @@ export function createWebServer() {
   // Health probe
   app.get('/healthz', (req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() });
+  });
+
+  // 🦝 Browser Link Status & Action Execution API (Authenticated)
+  app.get('/api/browser/status', (req, res) => {
+    const key = req.headers['x-rocket-key'] || req.query.key;
+    if (key !== 'rocket_secret_browser_key_2026') return res.status(401).json({ error: 'Unauthorized' });
+    res.json({ ok: true, status: browserLinkServer.getStatus() });
+  });
+
+  app.post('/api/browser/execute', async (req, res) => {
+    const key = req.headers['x-rocket-key'] || req.query.key;
+    if (key !== 'rocket_secret_browser_key_2026') return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      const { action, params } = req.body || {};
+      if (!action) return res.status(400).json({ error: 'Missing action' });
+      const result = await browserLinkServer.executeAction(action, params || {});
+      res.json({ ok: true, action, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, action: req.body?.action, error: err.message });
+    }
   });
 
   // Auth verification endpoint (for Mini App UI on boot)

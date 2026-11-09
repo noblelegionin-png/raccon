@@ -13,6 +13,12 @@ export class BrowserLinkServer {
     this.wss = null;
     this.activeSocket = null;
     this.pendingCommands = new Map(); // correlationId -> { resolve, reject, timer, action }
+    this.lastKnownState = {
+      currentUrl: null,
+      currentTitle: null,
+      lastAction: null,
+      updatedAt: null,
+    };
     this.agentInfo = {
       connected: false,
       agentName: null,
@@ -123,12 +129,18 @@ export class BrowserLinkServer {
     }
 
     if (msg.type === 'action_result') {
-      const { correlationId, success, result, error } = msg;
+      const { correlationId, success, result, error, action } = msg;
       const pending = this.pendingCommands.get(correlationId);
       if (pending) {
         clearTimeout(pending.timer);
         this.pendingCommands.delete(correlationId);
         if (success) {
+          if (result && typeof result === 'object') {
+            if (result.url) this.lastKnownState.currentUrl = result.url;
+            if (result.title) this.lastKnownState.currentTitle = result.title;
+            this.lastKnownState.lastAction = action || pending.action;
+            this.lastKnownState.updatedAt = new Date().toISOString();
+          }
           pending.resolve(result);
         } else {
           pending.reject(new Error(error || 'Action execution failed in browser.'));
@@ -215,7 +227,27 @@ export class BrowserLinkServer {
       connected: this.isAgentConnected(),
       agentInfo: this.agentInfo,
       pendingCommandsCount: this.pendingCommands.size,
+      lastKnownState: this.lastKnownState,
     };
+  }
+
+  /**
+   * Get last known browser page context
+   */
+  getLastKnownState() {
+    return { ...this.lastKnownState };
+  }
+
+  /**
+   * Record updated browser page context
+   */
+  recordState(action, result) {
+    if (result && typeof result === 'object') {
+      if (result.url) this.lastKnownState.currentUrl = result.url;
+      if (result.title) this.lastKnownState.currentTitle = result.title;
+      this.lastKnownState.lastAction = action;
+      this.lastKnownState.updatedAt = new Date().toISOString();
+    }
   }
 }
 

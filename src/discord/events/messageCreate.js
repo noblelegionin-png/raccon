@@ -27,7 +27,7 @@ import {
 import { checkSmartAntiSpam } from '../antiSpam.js';
 import { getBehaviorProfilePrompt } from '../channelRegistry.js';
 import { getAgentRouting } from '../../models/modelRouter.js';
-import { getConfig } from '../../db/index.js';
+import { getConfig, addConversationMessage, getRecentConversation, searchDurableMemory } from '../../db/index.js';
 import { browserPlanner } from '../../browser/browserPlanner.js';
 import { rocketLifeEngine } from '../../rocket/lifeEngine.js';
 import { detectSandyAbuse, detectSelfHarmOrSevereThreat, generateDefenseResponse, buildRocketDirective } from '../../rocket/persona.js';
@@ -548,8 +548,19 @@ async function handleDirectMessage(message) {
     return; // Complete silence - strictly prohibited from chatting in any non-owner DMs!
   }
 
-  // 1. Check if Boss Sandy gave a browser control instruction in DMs
-  if (browserPlanner.isBrowserInstruction(content)) {
+  const chatId = `dm_${author.id}`;
+
+  // Fetch recent conversation history so Rocket maintains 100% context understanding across turns
+  const recentHistory = getRecentConversation(chatId, 8);
+
+  // Check if recent turns had browser operations to detect follow-up browser requests
+  const recentBrowserAction = recentHistory.some((m) => 
+    m.role === 'assistant' && (m.content.includes('Opera GX') || m.content.includes('Step ') || m.content.includes('browser'))
+  );
+
+  // 1. Check if Boss Sandy gave a browser control instruction in DMs (with full contextual awareness!)
+  const isBrowser = browserPlanner.isBrowserInstruction(content, { hasRecentBrowserContext: recentBrowserAction });
+  if (isBrowser) {
     try {
       await message.channel.sendTyping();
     } catch {}
@@ -558,7 +569,8 @@ async function handleDirectMessage(message) {
 
     try {
       const planResult = await browserPlanner.planAndExecute(content, {
-        chatId: `dm_${author.id}`,
+        chatId,
+        recentHistory,
         confirmed: true, // In personal DMs with Boss Sandy, owner commands carry authorization
         onStepStart(stepIdx, totalSteps, desc) {
           if (progressMsg && totalSteps > 1) {
@@ -583,6 +595,10 @@ async function handleDirectMessage(message) {
       if (copyStep && copyStep.result?.preview) {
         replyText += `\n\n📋 **Copied to Clipboard:** \`${copyStep.result.preview}\``;
       }
+
+      // Persist conversation memory so follow-up commands have full context
+      addConversationMessage(chatId, 'user', content, 0, 'discord_dm');
+      addConversationMessage(chatId, 'assistant', replyText, 50, 'browser_link');
 
       if (progressMsg) {
         await progressMsg.edit(replyText.slice(0, 2000)).catch(() => message.reply(replyText.slice(0, 2000)));
@@ -610,6 +626,15 @@ async function handleDirectMessage(message) {
     await message.channel.sendTyping();
   } catch {}
 
+  // Search durable memory for relevant context
+  let memoryContext = '';
+  try {
+    const memories = searchDurableMemory(chatId, content, 3);
+    if (memories && memories.length > 0) {
+      memoryContext = '\nRELEVANT RECALLED MEMORIES:\n' + memories.map(m => `- [${m.topic}]: ${m.content}`).join('\n') + '\n';
+    }
+  } catch {}
+
   const directive = buildRocketDirective({
     senderName: author.globalName || author.username,
     isSandy: true,
@@ -619,23 +644,34 @@ async function handleDirectMessage(message) {
   });
 
   const dmMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '500'), 10) || 500;
-  const dmReasoning = getConfig('reasoning_effort', 'none') || 'none';
+  // 'low' reasoning gives deep cognitive understanding and context comprehension with sub-second speed
+  const dmReasoning = getConfig('reasoning_effort', 'low') || 'low';
 
   let response = '🦝 *whispers from the shadows* Haan Boss! Rocket here in DMs. What\'s the mission? 🐾🍕';
   if (scaleMaxAdapter.isConfigured()) {
     try {
+      const messagesPayload = [
+        { 
+          role: 'system', 
+          content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full server administrative access. Speak with fierce loyalty, warmth, high intelligence, and perfect memory of recent context.${memoryContext}` 
+        },
+        ...recentHistory.map((m) => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+        })),
+        { role: 'user', content },
+      ];
+
       const completion = await scaleMaxAdapter.createChatCompletion({
         model: 'gpt-6-luna',
-        messages: [
-          { role: 'system', content: `${directive}\n\nYou are chatting in private Discord DMs with Sandy (Boss). You have full server administrative access. Speak with fierce loyalty, warmth, and high intelligence.` },
-          { role: 'user', content },
-        ],
+        messages: messagesPayload,
         maxTokens: dmMaxTokens,
         reasoningEffort: dmReasoning,
         timeoutMs: 40000,
       });
       response = completion.choices?.[0]?.message?.content || response;
     } catch (err) {
+      console.warn('[Rocket DM Completion Error]:', err.message);
       response = '🦝 *scratches head* Neural core glitch! Ask me again in a sec, Boss! 🍕';
     }
   }
@@ -645,6 +681,10 @@ async function handleDirectMessage(message) {
   const validatedDm = validateAndSanitizeResponse(scrubbedDm, content, { isOwner: true });
   response = validatedDm.sanitizedText || scrubbedDm;
   response = injectServerCustomEmojis(response);
+
+  // Persist both messages to database for continuous context!
+  addConversationMessage(chatId, 'user', content, 0, 'discord_dm');
+  addConversationMessage(chatId, 'assistant', response, 0, 'gpt-6-luna');
 
   await message.reply(response.slice(0, 2000)).catch(() => {});
 }

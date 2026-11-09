@@ -13,19 +13,37 @@ export class BrowserPlanner {
   /**
    * Determine if an incoming user prompt is meant for browser control
    */
-  isBrowserInstruction(text) {
+  isBrowserInstruction(text, options = {}) {
     if (!text || typeof text !== 'string') return false;
     const clean = text.trim().toLowerCase();
 
-    // Direct single-word or short action matches
-    if (/^(youtube|yt|twitter|x\.com|github|reddit|twitch|discord|netflix)$/i.test(clean)) return true;
-    if (/^(back|forward|reload|refresh|stop|clean|clean tabs|zoom in|zoom out|zoom reset|copy|logout|fullscreen|downloads|history|bookmarks)$/i.test(clean)) return true;
+    // 1. Direct single-word or short action matches
+    if (/^(youtube|yt|twitter|x\.com|x|github|reddit|twitch|discord|netflix|google|amazon|wikipedia|chatgpt|spotify)$/i.test(clean)) return true;
+    if (/^(back|forward|reload|refresh|stop|clean|clean tabs|zoom in|zoom out|zoom reset|reset zoom|copy|logout|fullscreen|downloads|history|bookmarks|tabs|close tab|close|new tab|duplicate)$/i.test(clean)) return true;
 
-    // Conversational trigger verbs & browser targets
-    const browserKeywords = /\b(browser|opera|tab|tabs|webpage|website|url|link|zoom|download|scroll|search for|google|youtube|click|type|fill|form|logout|sign out)\b/i;
-    const actionVerbs = /\b(open|close|navigate|switch|duplicate|pin|clean|zoom|read|extract|copy|compare|research|remember|download|click|search|type|find)\b/i;
+    // 2. URLs, domain names, localhost, web addresses
+    if (/(?:https?:\/\/|www\.)\S+/i.test(clean)) return true;
+    if (/\b[a-z0-9-]+\.(?:com|org|net|io|dev|app|co|in|edu|gov|ai)\b/i.test(clean)) return true;
+    if (/\b(?:localhost|127\.0\.0\.1)(?::\d+)?\b/i.test(clean)) return true;
 
-    return browserKeywords.test(clean) && actionVerbs.test(clean);
+    // 3. Multi-turn follow-ups (if recent conversation or browser state shows active browsing session)
+    const hasRecentBrowserContext = Boolean(options.hasRecentBrowserContext || options.recentBrowserAction);
+    if (hasRecentBrowserContext) {
+      if (/^(click|tap|press|select|open|choose|scroll|zoom|copy|summarize|read|search|find|next|previous|third|first|second|last|it|that|this)\b/i.test(clean)) {
+        return true;
+      }
+    }
+
+    // 4. Explicit browser and PC action commands
+    const browserKeywords = /\b(browser|opera|opera gx|tab|tabs|window|windows|webpage|web page|website|site|url|link|zoom|download|downloads|scroll|search for|google|youtube|click|type|fill|form|logout|sign out|history|bookmark|bookmarks|clipboard|screen|page)\b/i;
+    const actionVerbs = /\b(open|close|navigate|goto|go to|visit|switch|duplicate|pin|clean|zoom|read|extract|copy|compare|research|remember|download|click|search|type|find|look up|check out|summarize|scroll|inspect)\b/i;
+
+    if (browserKeywords.test(clean) && actionVerbs.test(clean)) return true;
+
+    // 5. Direct command phrases
+    if (/^(?:open|navigate to|go to|goto|visit|search for|look up|research|download|compare|zoom|scroll)\s+/i.test(clean)) return true;
+
+    return false;
   }
 
   /**
@@ -39,9 +57,9 @@ export class BrowserPlanner {
     const fastPlan = this.parseFastPath(raw);
     let plan = fastPlan;
 
-    // Step 2: If complex or multi-step, use Luna (GPT-6 Luna) to generate structured plan
+    // Step 2: If complex or multi-step, use Luna (GPT-6 Luna) to generate structured plan with full context
     if (!plan) {
-      plan = await this.generatePlanWithLuna(raw);
+      plan = await this.generatePlanWithLuna(raw, options);
     }
 
     if (!plan || plan.length === 0) {
@@ -63,6 +81,9 @@ export class BrowserPlanner {
       const result = await browserLinkServer.dispatchAction(validated.action, validated.params, {
         confirmed: options.confirmed || false,
       });
+
+      // Keep server page state up to date for next conversational steps
+      browserLinkServer.recordState(validated.action, result);
 
       executionResults.push({
         step: i + 1,
@@ -155,22 +176,42 @@ export class BrowserPlanner {
 
   /**
    * Complex conversational planning using Luna (ScaleMax GPT-6 Luna)
-   * Strictly capped to 500 tokens budget
+   * With full multi-turn conversational memory and live browser state awareness.
    */
-  async generatePlanWithLuna(userPrompt) {
+  async generatePlanWithLuna(userPrompt, options = {}) {
     if (!scaleMaxAdapter.isConfigured()) {
       // Fallback simple search navigation
       return [{ action: 'navigate', params: { url: userPrompt } }];
     }
 
     const availableActions = Object.keys(ACTION_REGISTRY).join(', ');
+    const browserState = options.browserState || browserLinkServer.getLastKnownState();
+    const recentHistory = options.recentHistory || [];
+
+    let contextString = '';
+    if (browserState && (browserState.currentUrl || browserState.currentTitle)) {
+      contextString += `\nCURRENT BROWSER STATE:\n- Active URL: ${browserState.currentUrl || 'unknown'}\n- Page Title: ${browserState.currentTitle || 'unknown'}\n- Last Action: ${browserState.lastAction || 'none'}\n`;
+    }
+
+    if (recentHistory.length > 0) {
+      contextString += `\nRECENT CONVERSATION HISTORY:\n` +
+        recentHistory.slice(-5).map(m => `- ${m.role === 'user' ? 'User' : 'Rocket'}: ${m.content}`).join('\n') + '\n';
+    }
+
     const systemPrompt =
       `You are the Rocket Browser Action Planner. Convert user browser/PC instructions into an executable JSON action sequence.\n` +
       `Allowed actions: ${availableActions}.\n` +
       `Output ONLY a valid JSON array of objects: [{"action": "...", "params": {...}}].\n` +
-      `Example: "Open YouTube and search for Minecraft shaders"\n` +
+      `Example 1: "Open YouTube and search for Minecraft shaders"\n` +
       `-> [{"action": "tab_open", "params": {"url": "https://youtube.com"}}, {"action": "page_type", "params": {"text": "Minecraft shaders", "submit": true}}]\n` +
-      `Strict rules: NO conversational text, NO markdown code fences, ONLY the raw JSON array. Keep to 1-5 steps max.`;
+      `Example 2: "open the third result"\n` +
+      `-> [{"action": "page_click", "params": {"selector": "ytd-video-renderer:nth-of-type(3) a#video-title, #contents ytd-video-renderer:nth-of-type(3) a#thumbnail, a:has(h3):nth-of-type(3), a:nth-of-type(3)"}}]\n` +
+      `Example 3: "zoom in and copy description"\n` +
+      `-> [{"action": "zoom_in", "params": {"step": 0.1}}, {"action": "page_select_copy", "params": {"selector": "#description, .description, p"}}]\n` +
+      `Example 4: "scroll down"\n` +
+      `-> [{"action": "page_scroll", "params": {"direction": "down", "amount": 500}}]\n` +
+      `${contextString}\n` +
+      `Strict rules: NO conversational text, NO markdown code fences, ONLY the raw JSON array. Keep to 1-5 steps max. Understand context from previous turns and the current browser state!`;
 
     try {
       const completion = await scaleMaxAdapter.createChatCompletion({
@@ -181,6 +222,7 @@ export class BrowserPlanner {
         ],
         maxTokens: 500,
         temperature: 0.1,
+        reasoningEffort: 'low',
       });
 
       let text = (completion.choices?.[0]?.message?.content || '').trim();

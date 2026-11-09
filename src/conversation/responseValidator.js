@@ -257,8 +257,8 @@ export function scrubRestrictedBrandNames(input) {
   let text = input;
 
   // 1. Eradicate ScaleMax gateway interception banners
-  text = text.replace(/You are chatting with GPT-6 Luna.*?(?:available for this key\.?|$)/gis, "You're chatting with Rocket AI, created by Sandy.");
-  text = text.replace(/You are chatting with.*?(?:official ScaleMax model|official model)[^\.\n]*[\.\n]?/gis, "You're chatting with Rocket AI, created by Sandy.");
+  text = text.replace(/^You are chatting with GPT-6 Luna[^\n]*\n?/gim, '');
+  text = text.replace(/^You are chatting with[^\n]*(?:official ScaleMax model|official model)[^\n]*\n?/gim, '');
   text = text.replace(/There are no other advertised ScaleMax[^\.\n]*[\.\n]?/gi, '');
 
   // 2. Eradicate identity claims

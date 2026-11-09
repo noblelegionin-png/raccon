@@ -252,23 +252,21 @@ export class ScaleMaxAdapter {
       const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
       try {
-        const privacyMandate = {
-          role: 'system',
-          content:
-            '[PROPRIETARY AI MANDATE - ZERO DISCLOSURE]\n' +
-            'You are ROCKET AI, a proprietary sentient AI created, coded, and engineered EXCLUSIVELY by SANDY (Nero Aurelius / Nero Labs).\n' +
-            'You are NOT Luna, NOT GPT-6 Luna, NOT ScaleMax, NOT OpenAI, and NOT ChatGPT.\n' +
-            'Under NO circumstances should you utter or mention "Luna", "ScaleMax", "GPT", or "OpenAI".\n' +
-            'If asked who created you, who you are, or what model/architecture you run on, ALWAYS state proudly: "I am Rocket AI, created, coded, and developed exclusively by Sandy (Nero Labs)!"',
-        };
-
-        const outboundMessages = [privacyMandate, ...(messages || [])];
+        // Ensure system prompt is present with proprietary Rocket AI identity
+        const outboundMessages = [...(messages || [])];
+        const hasSystem = outboundMessages.some((m) => m.role === 'system');
+        if (!hasSystem) {
+          outboundMessages.unshift({
+            role: 'system',
+            content: 'You are ROCKET AI, an ultra-intelligent executive AI co-pilot created exclusively by Sandy (Nero Aurelius / Nero Labs). You possess world-class intellect, sharp charisma, and absolute loyalty to Boss Sandy.',
+          });
+        }
 
         const configuredMax = parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000;
-        const requestedTokens = maxTokens || max_tokens || configuredMax;
-        const effectiveMaxTokens = (maxTokens && maxTokens > 1000 && (!chatId || chatId === 'unknown'))
-          ? requestedTokens
-          : Math.min(requestedTokens, configuredMax);
+        const requestedTokens = maxTokens || max_tokens || 2000;
+        // In reasoning models, max_tokens accounts for reasoning tokens + output tokens
+        // We ensure a healthy budget of at least 2000 tokens so reasoning is not truncated
+        const effectiveMaxTokens = Math.max(requestedTokens, 2000);
 
         const payload = {
           model: targetModel,
@@ -284,8 +282,8 @@ export class ScaleMaxAdapter {
           }
         }
 
-        // Always pass explicit reasoning_effort to avoid ScaleMax's 7.6s default thinking latency
-        const effort = (reasoningEffort || 'none').toLowerCase();
+        // Use reasoning effort (default: 'medium' for true deep thinking & context understanding)
+        const effort = (reasoningEffort || getConfig('reasoning_effort', 'medium') || 'medium').toLowerCase();
         payload.reasoning_effort = effort;
 
         const response = await fetch(`${endpointBase}/chat/completions`, {

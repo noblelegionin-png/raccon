@@ -400,14 +400,18 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     (r) => r.name.toLowerCase() === 'rocket access' || r.name.toLowerCase() === 'rocket'
   ));
 
-  // Clean prompt text
-  let cleanedText = content.replace(/<@!?\d+>/g, '').trim();
-  cleanedText = cleanedText.replace(/^(rocket|rocky|hey rocket|yo rocket)[,\s:]*/i, '').trim();
+  // Only strip the BOT's OWN mention from the prompt so target user mentions (<@123456789>) are preserved!
+  const botId = message.client.user?.id;
+  let cleanedText = content;
+  if (botId) {
+    cleanedText = cleanedText.replace(new RegExp(`<@!?${botId}>`, 'g'), '').trim();
+  }
+  cleanedText = cleanedText.replace(/^(?:(?:hey\s+|yo\s+)?rocket[,:\s]+)+/i, '').trim();
 
   if (!cleanedText && !isConstantTalk) {
     const greeting = isOwner
-      ? '🦝 *peeks out from behind a pizza box* Haan Boss Sandy! You rang? What do you need? 🍕🐾'
-      : `🦝 *peeks out from behind a pizza box* Hey ${senderDisplayName}! You rang? What do you need? 🍕🐾`;
+      ? 'Ready and at your command, Boss Sandy. What are your directives? ⚡'
+      : `Greetings ${senderDisplayName}. How can I assist you today? 🦝`;
     return message.reply(greeting);
   }
 
@@ -471,10 +475,9 @@ async function handleRocketChat(message, { isOwner, isConstantTalk = false, chan
     const channelProfileKey = channelConfig?.ai_behavior_profile || 'chat';
     const channelPrompt = getBehaviorProfilePrompt(channelProfileKey, channel.name);
 
-    // Exact 1000 Token Cap as mandated by Boss Sandy
-    const configuredMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000;
-    const maxOutputTokens = 1000;
-    const reasoningEffort = getConfig('reasoning_effort', 'none') || 'none';
+    // Executive Output Budget & Deep Reasoning Engine
+    const maxOutputTokens = 2500; // Allows up to 1000 completion tokens alongside internal reasoning tokens
+    const reasoningEffort = getConfig('reasoning_effort', 'medium') || 'medium';
     const activeModel = 'gpt-6-luna';
 
     const fullSystemPrompt =
@@ -696,9 +699,8 @@ async function handleDirectMessage(message) {
     isGroup: false,
   });
 
-  const dmMaxTokens = parseInt(getConfig('myra_max_tokens_per_request', '1000'), 10) || 1000;
-  // 'none' reasoning with 1000 output tokens yields ultra-fast, executive-grade answers without truncation
-  const dmReasoning = getConfig('reasoning_effort', 'none') || 'none';
+  const dmMaxTokens = 2500; // Allows up to 1000 completion tokens alongside internal reasoning tokens
+  const dmReasoning = getConfig('reasoning_effort', 'medium') || 'medium';
 
   let response = 'Ready and standing by, Boss Sandy. What directives do we have on deck? ⚡';
   if (scaleMaxAdapter.isConfigured()) {
@@ -764,9 +766,13 @@ async function executeAdminActionFromChat(message, text) {
   }
   if (!guild || !channel) return false;
 
-  const lower = text.toLowerCase().trim();
+  const botId = message.client.user?.id;
+  let cleanCmd = text.toLowerCase().trim();
+  if (botId) {
+    cleanCmd = cleanCmd.replace(new RegExp(`^<@!?${botId}>\\s*`, 'i'), '').trim();
+  }
   // Strip common conversational prefixes so directives like "rocket kick @user" or "please ban @user" execute smoothly
-  const cleanCmd = lower.replace(/^(?:(?:hey\s+)?rocket[,:\s]+|please\s+|can\s+you\s+)+/i, '').trim();
+  cleanCmd = cleanCmd.replace(/^(?:(?:hey\s+|yo\s+)?rocket[,:\s]+|please\s+|can\s+you\s+)+/i, '').trim();
 
   // 0. Blueprint Natural-Language Owner Directive (tokens, access, credits)
   const nlpExecuted = await handleNaturalLanguageAdminDirective(message, text);

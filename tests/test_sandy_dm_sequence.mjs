@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { browserPlanner } from './src/browser/browserPlanner.js';
+import { browserPlanner } from '../src/browser/browserPlanner.js';
 
 console.log('🧪 Simulating Sandy Direct Discord DM Test Sequence...\n');
 

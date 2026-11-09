@@ -1,7 +1,7 @@
 import assert from 'node:assert';
-import { browserPlanner } from './src/browser/browserPlanner.js';
-import { detectOffTopic } from './src/discord/topicGuard.js';
-import { detectHostilityOrAbuse } from './src/discord/abuseGuard.js';
+import { browserPlanner } from '../src/browser/browserPlanner.js';
+import { detectOffTopic } from '../src/discord/topicGuard.js';
+import { detectHostilityOrAbuse } from '../src/discord/abuseGuard.js';
 
 console.log('🧪 Starting Rocket Browser & Context Comprehensive Test Suite...\n');
 
